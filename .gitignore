@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.vercel/
+.astro/
+.env
+.env.*
+!.env.example
+.DS_Store
+.lighthouseci/
+test-results/
+playwright-report/
+reports/

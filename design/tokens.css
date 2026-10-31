@@ -1,0 +1,152 @@
+/* ==========================================================================
+   Soft Clay — design tokens (light + dark)
+   Source of truth for colour, type, radius, depth and motion.
+   Theme resolution: [data-theme="light|dark"] on <html> wins;
+   otherwise follow the OS (prefers-color-scheme).
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* ---- Ground & surfaces ---- */
+  --bg:              #f6efe7;  /* page ground (warm clay paper) */
+  --surface:         #ffffff;  /* cards, chips, buttons */
+  --surface-sunk:    #fbe3d6;  /* hero halo, contact band, answer bubble */
+  --surface-alt:     #f2e6dd;  /* skeleton lines, inputs */
+  --line:            #ecdcd1;  /* hairlines + neutral "ledge" under white clay */
+
+  /* ---- Ink ---- */
+  --ink:             #2b2230;  /* primary text (13.9:1 on --bg) */
+  --ink-muted:       #5a4a54;  /* body copy secondary (7.6:1) */
+  --ink-subtle:      #6b5a63;  /* labels, meta (6.0:1) */
+  --ink-accent:      #8a6fe0;  /* large display text only (≥24px) */
+
+  /* ---- Clay pastels (fills) + deep tones (shading / ledges) ---- */
+  --peach:  #ffb89a;  --peach-hi:  #fff1ea;  --peach-deep:  #e2805e;  --peach-ledge:  #e39a7c;
+  --lilac:  #c9b8ff;  --lilac-hi:  #f3eeff;  --lilac-deep:  #9a83e8;  --lilac-ledge:  #d9cdfa;
+  --mint:   #a8e6cf;  --mint-hi:   #effff7;  --mint-deep:   #5fb995;  --mint-ledge:   #bfe8d7;
+  --butter: #ffd76e;  --butter-hi: #fff7d6;  --butter-deep: #e0ad2c;  --butter-ledge: #f5dc94;
+  --on-pastel: #2b2230;     /* text on any pastel fill */
+
+  /* ---- Inverse band (Journey, footer) ---- */
+  --inverse-bg:      #2b2230;
+  --inverse-surface: #3a2f40;
+  --inverse-ink:     #ffffff;
+  --inverse-muted:   #e3d9e8;
+
+  /* ---- Buttons ---- */
+  --btn-primary-bg:     #2b2230;
+  --btn-primary-fg:     #ffffff;
+  --btn-primary-ledge:  #6b5a63;
+  --btn-secondary-bg:   #ffffff;
+  --btn-secondary-fg:   #2b2230;
+  --btn-secondary-ledge:#ecdcd1;
+
+  /* ---- Clay lighting (used by the .clay-* recipes) ---- */
+  --clay-shade:      0.35;            /* inner shadow strength */
+  --clay-drop:       rgba(120,70,60,.18);
+  --clay-rim:        0 0 0 rgba(0,0,0,0);   /* no rim light in daylight */
+  --header-glass:    rgba(246,239,231,.88);
+
+  /* ---- Type ---- */
+  --font-display: "Bricolage Grotesque", "Bricolage Fallback", system-ui, sans-serif;
+  --font-body:    "DM Sans", "DM Sans Fallback", system-ui, sans-serif;
+  --fs-hero:   clamp(44px, 6.2vw, 88px);   /* 800, lh .98, ls -.035em */
+  --fs-h2:     clamp(36px, 4.6vw, 64px);   /* 800, lh 1,   ls -.03em  */
+  --fs-h3:     24px;                       /* 800 */
+  --fs-lead:   19px;                       /* 400, lh 1.55 */
+  --fs-body:   16px;                       /* 400, lh 1.55 */
+  --fs-label:  14px;                       /* 700, uppercase, ls .12em */
+  --fs-meta:   13px;
+
+  /* ---- Shape ---- */
+  --r-sm: 14px;  --r-md: 18px;  --r-lg: 22px;  --r-xl: 28px;  --r-pill: 999px;
+  --ledge-sm: 0 4px 0;   /* + colour → the clay "lip" under buttons/chips */
+  --ledge-md: 0 6px 0;
+  --ledge-lg: 0 12px 0 -4px;
+
+  /* ---- Space (4-pt) ---- */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px;
+  --s-8: 32px; --s-10: 40px; --s-12: 48px; --s-14: 56px; --s-16: 64px; --s-24: 96px;
+  --container: 1200px;
+  --gutter: 24px;
+  --tap: 44px;    /* minimum touch target */
+
+  /* ---- Motion ---- */
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);  /* clay overshoot — hovers, presses, landings */
+  --ease-out:    cubic-bezier(.2, .8, .2, 1);      /* entrances without bounce */
+  --ease-inout:  cubic-bezier(.65, 0, .35, 1);     /* scroll-scrubbed travel */
+  --dur-1: 160ms;   /* colour, opacity */
+  --dur-2: 350ms;   /* press, chip */
+  --dur-3: 500ms;   /* squish, card lift */
+  --dur-4: 900ms;   /* hero load-in */
+  --float-1: 6s; --float-2: 7s; --float-3: 5s;   /* idle float loops */
+}
+
+/* ---------- Dark: "Clay at night" ----------
+   Same pastels (they read as lit clay on dark), deeper ground,
+   stronger inner shading + a faint lilac rim light. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:           #16121a;
+  --surface:      #221c28;
+  --surface-sunk: #2a2030;
+  --surface-alt:  #30283a;
+  --line:         #3a3042;
+
+  --ink:          #f6efe7;   /* 16.5:1 on --bg */
+  --ink-muted:    #cbbfc7;   /* 11:1 */
+  --ink-subtle:   #a99ca5;   /* 7.2:1 */
+  --ink-accent:   #b9a6ff;
+
+  --peach-ledge:  #8f5a47;  --lilac-ledge: #4b3f73;
+  --mint-ledge:   #2f6b55;  --butter-ledge:#7a6127;
+
+  --inverse-bg:      #0f0c12;
+  --inverse-surface: #1d1722;
+  --inverse-ink:     #f6efe7;
+  --inverse-muted:   #cbbfc7;
+
+  --btn-primary-bg:     #f6efe7;
+  --btn-primary-fg:     #2b2230;
+  --btn-primary-ledge:  #a99ca5;
+  --btn-secondary-bg:   #221c28;
+  --btn-secondary-fg:   #f6efe7;
+  --btn-secondary-ledge:#0c090e;
+
+  --clay-shade:   0.5;
+  --clay-drop:    rgba(0,0,0,.45);
+  --clay-rim:     0 0 40px rgba(201,184,255,.14);
+  --header-glass: rgba(22,18,26,.82);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg:#16121a; --surface:#221c28; --surface-sunk:#2a2030; --surface-alt:#30283a; --line:#3a3042;
+    --ink:#f6efe7; --ink-muted:#cbbfc7; --ink-subtle:#a99ca5; --ink-accent:#b9a6ff;
+    --peach-ledge:#8f5a47; --lilac-ledge:#4b3f73; --mint-ledge:#2f6b55; --butter-ledge:#7a6127;
+    --inverse-bg:#0f0c12; --inverse-surface:#1d1722; --inverse-ink:#f6efe7; --inverse-muted:#cbbfc7;
+    --btn-primary-bg:#f6efe7; --btn-primary-fg:#2b2230; --btn-primary-ledge:#a99ca5;
+    --btn-secondary-bg:#221c28; --btn-secondary-fg:#f6efe7; --btn-secondary-ledge:#0c090e;
+    --clay-shade:.5; --clay-drop:rgba(0,0,0,.45); --clay-rim:0 0 40px rgba(201,184,255,.14);
+    --header-glass:rgba(22,18,26,.82);
+  }
+}
+
+/* ---------- Clay recipes (CSS-only 3D) ---------- */
+.clay-sphere {
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, var(--hi) 0%, var(--fill) 45%, var(--deep) 100%);
+  box-shadow:
+    inset -0.14em -0.18em 0.3em rgb(0 0 0 / calc(var(--clay-shade) * .9)),
+    0 0.4em 0.5em var(--clay-drop),
+    var(--clay-rim);
+}
+.clay--peach  { --hi: var(--peach-hi);  --fill: var(--peach);  --deep: var(--peach-deep); }
+.clay--lilac  { --hi: var(--lilac-hi);  --fill: var(--lilac);  --deep: var(--lilac-deep); }
+.clay--mint   { --hi: var(--mint-hi);   --fill: var(--mint);   --deep: var(--mint-deep); }
+.clay--butter { --hi: var(--butter-hi); --fill: var(--butter); --deep: var(--butter-deep); }
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-1: 0ms; --dur-2: 0ms; --dur-3: 0ms; --dur-4: 0ms; }
+}
