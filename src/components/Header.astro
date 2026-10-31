@@ -1,5 +1,5 @@
 ---
-import ClayObject from './ClayObject.astro';
+import Avatar from './Avatar.astro';
 import ThemeToggle from './ThemeToggle.astro';
 
 interface Props {
@@ -21,7 +21,7 @@ const links = [
 <header class="site-header">
   <nav class="container nav" aria-label="Main">
     <a class="brand" href={home ? '#top' : '/'}>
-      <ClayObject tone="peach" size={30} />
+      <Avatar size={32} eager />
       <span class="brand__name">{brand}</span>
     </a>
     <div class="nav__track">

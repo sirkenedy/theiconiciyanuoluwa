@@ -17,6 +17,7 @@ export function initHero() {
     return { el, layer, clay, depth: Number(el.dataset.depth ?? 0.6), spring };
   });
 
+  initPortraitDock(stage);
   const puffs = createPuffs(stage);
   initParallax(hero, stage, bodies);
   bodies.forEach((b) => initGrab(b, stage, puffs));
@@ -134,6 +135,7 @@ function createPuffs(stage: HTMLElement) {
   return Array.from({ length: 5 }, () => {
     const p = document.createElement('span');
     p.className = 'puff';
+    p.setAttribute('aria-hidden', 'true');
     stage.append(p);
     return p;
   });
@@ -154,4 +156,31 @@ function initGlance(bodies: Body[]) {
     });
     card.addEventListener('pointerleave', () => (body.clay.style.rotate = ''));
   });
+}
+
+/**
+ * Target for the scroll-driven `exP` exit (src/styles/motion.css): where the portrait must land so it shrinks into the
+ * nav avatar. The animation ends at `exit 90%`, i.e. when the figure's top is 90% of its height above the view
+ * timeline's start edge (the scroll-padding line under the sticky header).
+ */
+function initPortraitDock(stage: HTMLElement) {
+  const figure = stage.querySelector<HTMLElement>('[data-portrait]');
+  const avatar = document.querySelector<HTMLElement>('.brand .avatar');
+  if (!figure || !avatar || !CSS.supports('animation-timeline: view()')) return;
+
+  const measure = () => {
+    // offsetLeft/offsetTop ignore transforms, so this is the untransformed box even mid-animation.
+    let left = 0;
+    for (let el: HTMLElement | null = figure; el; el = el.offsetParent as HTMLElement | null) left += el.offsetLeft;
+    const w = figure.offsetWidth;
+    const h = figure.offsetHeight;
+    const inset = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
+    const a = avatar.getBoundingClientRect();
+    const scale = a.width / w;
+    figure.style.setProperty('--dock-s', scale.toFixed(4));
+    figure.style.setProperty('--dock-x', `${(a.left + a.width / 2 - left - (w * scale) / 2).toFixed(1)}px`);
+    figure.style.setProperty('--dock-y', `${(a.top - (inset - 0.9 * h)).toFixed(1)}px`);
+  };
+  measure();
+  new ResizeObserver(measure).observe(document.documentElement);
 }

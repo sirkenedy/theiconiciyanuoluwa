@@ -12,6 +12,7 @@
 - headline: Product Manager · Project Manager
 - location: Ontario, Canada · open to remote, hybrid or on-site
 - availability: Available to start with a 2-week notice period
+- open_to: Product & Project Manager roles
 - email: anotaiyanuoluwa@gmail.com
 - linkedin: https://www.linkedin.com/in/iyanuoluwaanota/
 - instagram: https://www.instagram.com/theiconiciyanuoluwa

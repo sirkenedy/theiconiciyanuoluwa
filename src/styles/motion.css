@@ -58,6 +58,8 @@
       .exC { animation: exC linear both; animation-timeline: view(); animation-range: exit 0% exit 100%; }
       .exD { animation: exD linear both; animation-timeline: view(); animation-range: exit 0% exit 100%; }
       .exT { animation: exT linear both; animation-timeline: view(); animation-range: exit 0% exit 100%; }
+      /* The hero portrait shrinks into the nav avatar; src/islands/hero.ts measures the --dock-* target. */
+      .exP { animation: exP linear both; animation-timeline: view(); animation-range: exit 0% exit 90%; transform-origin: 0 0; }
 
       .land-l { animation: landL linear both; animation-timeline: view(); animation-range: entry 0% cover 32%; }
       .land-r { animation: landR linear both; animation-timeline: view(); animation-range: entry 0% cover 32%; }
@@ -145,6 +147,7 @@
 @keyframes exC { to { transform: translate(-160px, 240px) rotate(30deg); opacity: 0.2; } }
 @keyframes exD { to { transform: translate(220px, 260px) scale(1.5); opacity: 0.2; } }
 @keyframes exT { to { transform: translateY(-140px); opacity: 0; } }
+@keyframes exP { 80% { opacity: 1; } to { transform: translate(var(--dock-x, -38vw), var(--dock-y, -420px)) scale(var(--dock-s, 0.12)); opacity: 0; } }
 @keyframes landL { 0% { opacity: 0; transform: translate(-55vw, -280px) rotate(-280deg) scale(0.4); } 72% { opacity: 1; transform: translate(0, 8px) rotate(0deg) scale(1.22, 0.78); } 86% { transform: translate(0, -8px) scale(0.94, 1.06); } 100% { opacity: 1; transform: none; } }
 @keyframes landR { 0% { opacity: 0; transform: translate(55vw, -320px) rotate(300deg) scale(0.4); } 72% { opacity: 1; transform: translate(0, 8px) rotate(0deg) scale(1.22, 0.78); } 86% { transform: translate(0, -8px) scale(0.94, 1.06); } 100% { opacity: 1; transform: none; } }
 @keyframes landU { 0% { opacity: 0; transform: translate(0, 360px) scale(0.3); } 60% { opacity: 1; transform: translate(0, -60px) scale(0.9, 1.1); } 80% { transform: translate(0, 6px) scale(1.2, 0.8); } 100% { opacity: 1; transform: none; } }

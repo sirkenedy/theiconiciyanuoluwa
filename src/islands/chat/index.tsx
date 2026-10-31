@@ -5,6 +5,8 @@ import { ask, askLocal, getState, setAnnouncer, setState, stop, subscribe, twinD
 
 export { ask };
 
+export const openPanel = () => setState({ open: true });
+
 /** FAQ chips answer instantly from build-time data, with a short typed reveal and no API call. */
 export function askChip(index: number) {
   const faq = twinData.faq[index];
@@ -32,6 +34,8 @@ export function start() {
   const dock = document.createElement('div');
   document.body.append(dock);
   render(<Dock />, dock);
+  // The static phone button (works before this island loads) hands over to the live launcher in the same spot.
+  document.querySelector('[data-twin-fab]')?.closest('.twin-dock')?.remove();
 
   subscribe((s) => {
     if (orb) orb.dataset.state = s.orb;
@@ -40,20 +44,12 @@ export function start() {
     if (s.inlineActive && log.scrollHeight > log.clientHeight) log.scrollTop = log.scrollHeight;
   });
 
-  // Visitor typing: the orb leans in and its eyes follow the caret.
-  const look = () => {
-    if (!orb) return;
-    const ratio = input.value.length ? (input.selectionStart ?? input.value.length) / Math.max(24, input.value.length) : 0.5;
-    orb.style.setProperty('--look', `${((ratio - 0.5) * 6).toFixed(1)}px`);
-  };
+  // Visitor typing: the avatar leans in.
   input.addEventListener('input', () => {
     if (!getState().busy) setState({ orb: input.value ? 'typing' : 'idle' });
-    look();
   });
-  input.addEventListener('keyup', look);
   input.addEventListener('blur', () => {
     if (getState().orb === 'typing') setState({ orb: 'idle' });
-    orb?.style.removeProperty('--look');
   });
   card.querySelector('[data-twin-stop]')?.addEventListener('click', stop);
 

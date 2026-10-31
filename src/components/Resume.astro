@@ -1,5 +1,5 @@
 ---
-import ClayObject from './ClayObject.astro';
+import Avatar from './Avatar.astro';
 import Icon from './Icon.astro';
 import SectionLanding from './SectionLanding.astro';
 import Text from './Text.astro';
@@ -36,7 +36,7 @@ const LINKEDIN_FALLBACK = '[LinkedIn URL]'; // content-check: fallback
     <div class="tilt paper-tilt" data-tilt data-plane-paper>
     <div class="paper flip flip-card">
       <div class="paper__head">
-        <ClayObject tone="peach" size={48} shade="24px" />
+        <Avatar size={52} />
         <div class="paper__who">
           <span class="paper__name">{identity.name}</span>
           <span class="paper__role"><Text value={identity.headline} fallback="headline" /></span>

@@ -41,16 +41,16 @@ test.describe('hero clay', () => {
   test('grab and throw: dragged object follows, then springs home', async ({ page }) => {
     await page.goto('/');
     await settle(page);
-    const from = await centreOf(page, '.obj--sphere');
+    const from = await centreOf(page, '.obj--bubble');
     await page.mouse.move(from.x, from.y);
     await page.mouse.down();
     await page.mouse.move(from.x - 140, from.y + 60, { steps: 6 });
-    const held = await translateOf(page, '.obj--sphere > div');
+    const held = await translateOf(page, '.obj--bubble > div');
     expect(held.x).toBeLessThan(-100);
     await page.mouse.up();
     await page.mouse.move(5, 5);
     await page.waitForTimeout(2500);
-    const home = await translateOf(page, '.obj--sphere > div');
+    const home = await translateOf(page, '.obj--bubble > div');
     expect(Math.hypot(home.x, home.y)).toBeLessThan(1);
   });
 

@@ -1,5 +1,5 @@
 ---
-import ClayObject from './ClayObject.astro';
+import Avatar from './Avatar.astro';
 import { isPlaceholder } from '../lib/resume-parse.ts';
 
 interface Props {
@@ -21,7 +21,7 @@ const year = new Date().getFullYear();
 <footer class="site-footer">
   <div class="container footer">
     <div class="footer__brand">
-      <ClayObject tone="peach" size={34} />
+      <Avatar size={36} />
       <div class="footer__text">
         <span class="footer__name">{name}</span>
         <span class="footer__tag">© {year} · Shaped in clay, powered by curiosity.</span>

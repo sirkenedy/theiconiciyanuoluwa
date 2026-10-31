@@ -45,15 +45,46 @@ const Glyph = ({ d }: { d: string }) => (
   </svg>
 );
 
+// The dock reuses the hero avatar's build-time optimised <picture>, so the island ships no image URLs of its own.
+const avatarHtml = document.querySelector('.twin .twin-orb__img')?.closest('picture')?.outerHTML ?? '';
+const SPARKLE = 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z';
+
 export function Orb({ state, size }: { state: OrbState; size: number }) {
   return (
     <span class="twin-orb" data-state={state} style={`--orb:${size}px`} aria-hidden="true">
-      <span class="twin-orb__body clay-sphere clay--lilac" />
-      <span class="twin-orb__eyes">
-        <span />
-        <span />
+      <span class="twin-orb__body" dangerouslySetInnerHTML={{ __html: avatarHtml }} />
+      <span class="twin-orb__badge">
+        <svg viewBox="0 0 24 24" width="100%" height="100%">
+          <path d={SPARKLE} fill="currentColor" />
+        </svg>
       </span>
     </span>
+  );
+}
+
+const PHONE = '(max-width: 760px)';
+function usePhone() {
+  const [phone, setPhone] = useState(() => matchMedia(PHONE).matches);
+  useEffect(() => {
+    const mq = matchMedia(PHONE);
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
+
+/** Empty panel (phones open it straight from the floating button): the FAQ chips as starters, answered without a model call. */
+function Starters() {
+  return (
+    <div class="twin-starters">
+      <p class="twin-starters__hint">Ask about my work, or start here:</p>
+      {twinData.faq.map((f) => (
+        <button key={f.q} type="button" class="twin-starter" onClick={() => askLocal(f.q, f.a)}>
+          {f.q}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -210,10 +241,11 @@ function Composer({ inputRef }: { inputRef: { current: HTMLInputElement | null }
   );
 }
 
-/** Floating orb + non-modal panel, shown once there is a conversation and the hero card is out of view. */
+/** Floating orb + non-modal panel: always on phones, elsewhere once there is a conversation and the hero card is out of view. */
 export function Dock() {
   const s = useStore();
-  const docked = s.messages.length > 0 && (!s.cardVisible || !s.inlineActive);
+  const phone = usePhone();
+  const docked = phone || (s.messages.length > 0 && (!s.cardVisible || !s.inlineActive));
   const [shown, setShown] = useState(docked);
   const launcher = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -224,7 +256,7 @@ export function Dock() {
   const avatarDelta = () => {
     const from = document.querySelector('.twin [data-twin-orb]')?.getBoundingClientRect();
     const to = launcher.current?.getBoundingClientRect();
-    if (!from || !to) return null;
+    if (!from?.width || !to?.width) return null;
     return `translate(${from.left + from.width / 2 - (to.left + to.width / 2)}px, ${from.top + from.height / 2 - (to.top + to.height / 2)}px) scale(${from.width / to.width})`;
   };
 
@@ -297,7 +329,7 @@ export function Dock() {
 
   if (!shown) return null;
   return (
-    <div class="twin-dock">
+    <div class={`twin-dock${s.open ? ' is-open' : ''}`}>
       {s.open && (
         <div
           ref={panel}
@@ -317,7 +349,7 @@ export function Dock() {
             </button>
           </div>
           <div ref={body} class="twin-panel__body twin-log" role="log" aria-live="off" aria-label="Conversation with Harnie">
-            <Conversation />
+            {s.messages.length ? <Conversation /> : <Starters />}
           </div>
           <div class="twin-panel__foot">
             <Composer inputRef={input} />
@@ -332,13 +364,14 @@ export function Dock() {
       <button
         ref={launcher}
         type="button"
-        class="twin-launcher"
-        aria-label={s.open ? 'Close chat with Harnie' : 'Open chat with Harnie'}
+        class={`twin-launcher${phone ? ' twin-launcher--pill' : ''}`}
+        aria-label={phone ? 'Ask Harnie, my AI twin' : s.open ? 'Close chat with Harnie' : 'Open chat with Harnie'}
         aria-expanded={s.open}
         aria-controls="twin-panel"
         onClick={() => (s.open ? close() : setState({ open: true }))}
       >
-        <Orb state={s.orb} size={64} />
+        <Orb state={s.orb} size={phone ? 40 : 64} />
+        {phone && <span class="twin-launcher__label">Ask Harnie</span>}
       </button>
     </div>
   );

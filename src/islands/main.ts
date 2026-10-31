@@ -41,6 +41,28 @@ form?.addEventListener('submit', (e) => {
     if (m.ask(question) && input) input.value = '';
   });
 });
+// Phones: the floating button opens the chat panel, loading the island first if needed.
+// It steps aside while the hero buttons sit in its lane at the bottom of the screen.
+const ctas = document.querySelector<HTMLElement>('.hero__ctas');
+if (ctas && matchMedia('(max-width: 760px)').matches) {
+  // The observer's root is just the bottom strip of the viewport, so layout shifts (font swap) re-check too.
+  let lane: IntersectionObserver | undefined;
+  const watch = () => {
+    lane?.disconnect();
+    lane = new IntersectionObserver(([e]) => root.toggleAttribute('data-cta-lane', e.isIntersecting), {
+      rootMargin: `-${Math.max(0, innerHeight - 96)}px 0px 0px 0px`,
+    });
+    lane.observe(ctas);
+    // The first observer callback is async; decide the first frame now.
+    const r = ctas.getBoundingClientRect();
+    root.toggleAttribute('data-cta-lane', r.top < innerHeight && r.bottom > innerHeight - 96);
+  };
+  watch();
+  addEventListener('resize', watch, { passive: true });
+}
+const fab = document.querySelector<HTMLButtonElement>('[data-twin-fab]');
+fab?.addEventListener('touchstart', loadChat, { once: true, passive: true });
+fab?.addEventListener('click', () => loadChat().then((m) => m.openPanel()));
 if (card) {
   if ('requestIdleCallback' in window) requestIdleCallback(() => loadChat(), { timeout: 4000 });
   else setTimeout(loadChat, 2500);

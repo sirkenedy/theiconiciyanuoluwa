@@ -1,4 +1,7 @@
 ---
+import { Picture } from 'astro:assets';
+import portrait from '../assets/portrait.png';
+import Avatar from './Avatar.astro';
 import ClayObject from './ClayObject.astro';
 import TwinOrb from './TwinOrb.astro';
 import Icon from './Icon.astro';
@@ -29,8 +32,8 @@ const answerCss = faq
 <section id="top" class="container hero" aria-labelledby="hero-title" data-idle>
   <div class="hero__copy exT">
     <p class="badge hl1">
-      <span class="badge__icon"><Icon name="sparkle" size={14} /></span>
-      <Text value={identity.headline} fallback="headline" />
+      <Avatar size={30} eager />
+      Hi, I'm {identity.name}
     </p>
     <h1 id="hero-title" class="hero__title">
       <span class="hl1"><Text value={line1} /></span>
@@ -45,8 +48,8 @@ const answerCss = faq
 
     <div class="twin hl3" aria-labelledby="twin-title">
       <div class="twin__head">
-        <TwinOrb size={32} />
-        <h2 id="twin-title" class="twin__title">Ask Harnie, my AI twin</h2>
+        <TwinOrb size={36} />
+        <h2 id="twin-title" class="twin__title">Ask Harnie, my AI twin <span class="twin__sub">· answers from my résumé</span></h2>
         <span class="twin__dots" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
       </div>
       <fieldset class="twin__chips">
@@ -85,16 +88,52 @@ const answerCss = faq
     </div>
   </div>
 
-  <div class="hero-stage" aria-hidden="true">
-    <span class="stage__halo"></span>
-    <span class="stage__orbit spin"></span>
-    <div class="obj obj--sphere exA" data-depth="0.6" data-tone="peach"><div class="f1"><ClayObject tone="peach" shade="28cqw" class="squish" /></div></div>
-    <div class="obj obj--bubble exB" data-depth="1" data-tone="lilac"><div class="f2"><ClayObject shape="bubble" tone="lilac" shade="2.9cqw" class="squish" /></div></div>
-    <div class="obj obj--sparkle exC" data-depth="0.8" data-tone="mint"><span class="obj__pad"></span><div class="f3"><ClayObject shape="sparkle" tone="mint" class="squish" /></div></div>
-    <div class="obj obj--ring exD" data-depth="0.45" data-tone="butter"><div class="f2"><ClayObject shape="ring" tone="butter" shade="2.6cqw" class="squish" /></div></div>
-    <div class="obj obj--card exB" data-depth="0.9"><div class="f1 f-delay-8"><ClayObject shape="card" label="PRD · v3" shade="2.7cqw" class="squish" /></div></div>
-    <div class="obj obj--cursor exA" data-depth="1"><span class="obj__pad"></span><div class="f3 f-delay-4"><ClayObject shape="cursor" /></div></div>
-    <div class="obj obj--pill exC" data-depth="0.7"><div class="f2"><ClayObject shape="pill" label="+ AI" shade="max(12px, 3.2cqw)" /></div></div>
+  <div class="hero-stage">
+    <span class="stage__halo" aria-hidden="true"></span>
+    <span class="stage__orbit spin" aria-hidden="true"></span>
+
+    {/* behind the portrait */}
+    <div class="obj obj--bubble exB" data-depth="1" data-tone="lilac" aria-hidden="true"><div class="f2"><ClayObject shape="bubble" tone="lilac" shade="2.9cqw" class="squish" /></div></div>
+    <div class="obj obj--ring exD" data-depth="0.45" data-tone="butter" aria-hidden="true"><div class="f1"><ClayObject shape="ring" tone="butter" shade="2.6cqw" class="squish" /></div></div>
+
+    {/* the portrait: a clay arch with the head breaking the frame; it docks into the nav avatar on scroll */}
+    <figure class="portrait exP" data-portrait>
+      <span class="portrait__arch" aria-hidden="true"></span>
+      <div class="portrait__clip">
+        <Picture
+          class="portrait__img"
+          src={portrait}
+          formats={['avif', 'webp']}
+          fallbackFormat="webp"
+          quality={60}
+          widths={[400, 560, 800, 1040]}
+          sizes="(max-width: 760px) 260px, 520px"
+          alt={`Portrait of ${identity.name}`}
+          loading="eager"
+          fetchpriority="high"
+          decoding="async"
+        />
+      </div>
+    </figure>
+
+    {/* in front of the portrait */}
+    <p class="stage__open exC"><span class="stage__dot" aria-hidden="true"></span><Text value={identity.open_to ? `Open to ${identity.open_to}` : ''} fallback="Open to roles" /></p>
+    <div class="obj obj--sparkle exA" data-depth="0.8" data-tone="mint" aria-hidden="true"><span class="obj__pad"></span><div class="f3"><ClayObject shape="sparkle" tone="mint" class="squish" /></div></div>
+    <div class="obj obj--card exC" data-depth="0.9" aria-hidden="true"><div class="f2 f-delay-8"><ClayObject shape="card" label="PRD · v3" shade="2.7cqw" class="squish" /></div></div>
+    <div class="obj obj--cursor exA" data-depth="1" aria-hidden="true"><span class="obj__pad"></span><div class="f3 f-delay-4"><ClayObject shape="cursor" /></div></div>
+    <div class="obj obj--pill exB" data-depth="0.7" aria-hidden="true"><div class="f2"><ClayObject shape="pill" label="+ AI" shade="max(12px, 3.2cqw)" /></div></div>
+    <p class="stage__name exD">
+      <span class="stage__name-who">{identity.name}</span>
+      <span class="stage__name-role"><Text value={identity.headline} fallback="headline" /></span>
+    </p>
+  </div>
+
+  {/* Phones: Harnie as a floating button; the chat island takes over this spot when it loads. */}
+  <div class="twin-dock twin-dock--static">
+    <button class="twin-launcher twin-launcher--pill" type="button" data-twin-fab aria-label="Ask Harnie, my AI twin">
+      <TwinOrb size={40} live={false} />
+      <span class="twin-launcher__label">Ask Harnie</span>
+    </button>
   </div>
 </section>
 
@@ -122,21 +161,12 @@ const answerCss = faq
     display: flex;
     align-items: center;
     gap: var(--s-2);
-    padding: var(--s-2) 14px var(--s-2) var(--s-2);
+    padding: 6px var(--s-4) 6px 6px;
     border-radius: var(--r-pill);
     background: var(--surface);
     box-shadow: var(--ledge-sm) var(--line);
-    font-size: var(--fs-label);
+    font-size: var(--fs-body);
     font-weight: 500;
-  }
-  .badge__icon {
-    display: grid;
-    place-items: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: var(--mint);
-    color: var(--on-pastel);
   }
 
   .hero__title {
@@ -182,6 +212,11 @@ const answerCss = faq
     font-weight: 700;
     letter-spacing: 0;
   }
+  .twin__sub {
+    font-weight: 400;
+    color: var(--ink-subtle);
+  }
+  .twin__head :global(.twin-orb) { margin-right: 4px; }
   .twin__dots {
     display: flex;
     gap: var(--s-1);
@@ -238,24 +273,111 @@ const answerCss = faq
     line-height: 1.5;
   }
 
-  /* ---------- clay stage ---------- */
+  /* ---------- portrait stage ---------- */
   .hero-stage {
     flex: 1 1 420px;
     position: relative;
     width: 100%;
-    max-width: 560px;
+    max-width: 520px;
     min-width: 0;
     margin: 0 auto;
-    aspect-ratio: 1;
+    aspect-ratio: 4 / 5;
     container-type: inline-size;
   }
   .stage__halo,
   .stage__orbit {
     position: absolute;
+    aspect-ratio: 1;
     border-radius: 50%;
   }
-  .stage__halo { inset: 8%; background: var(--surface-sunk); }
-  .stage__orbit { inset: 2%; border: 2px dashed var(--line); }
+  .stage__halo { left: 4%; right: 4%; top: 6%; background: var(--surface-sunk); }
+  .stage__orbit { left: 0; right: 0; top: 2%; border: 2px dashed var(--line); }
+
+  /* The arch sits in the middle layer; the photo is clipped to it at the sides and bottom only, so the head rises out of the top. */
+  .portrait {
+    position: absolute;
+    left: 17%;
+    right: 17%;
+    top: 16%;
+    bottom: 5%;
+    z-index: 2;
+    margin: 0;
+  }
+  .portrait__arch {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--r-pill) var(--r-pill) 48px 48px;
+    background: var(--lilac);
+    box-shadow:
+      inset -18px -24px 40px color-mix(in srgb, var(--lilac-deep) 55%, transparent),
+      0 18px 0 -6px var(--lilac-deep),
+      0 40px 60px var(--clay-drop);
+  }
+  .portrait__clip {
+    position: absolute;
+    inset: 0;
+    clip-path: inset(-30% 0 0 0 round 0 0 48px 48px);
+  }
+  .portrait :global(.portrait__img) {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 150%;
+    max-width: none;
+    height: auto;
+    translate: -50% 0;
+  }
+
+  .stage__open,
+  .stage__name {
+    position: absolute;
+    margin: 0;
+    background: var(--surface);
+  }
+  .stage__open {
+    left: 4%;
+    top: 8%;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-2) 14px;
+    border-radius: var(--r-pill);
+    font-size: var(--fs-label);
+    font-weight: 700;
+    box-shadow: var(--ledge-sm) var(--line), 0 14px 24px var(--clay-drop);
+  }
+  .stage__dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--mint-deep);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--mint) 45%, transparent);
+  }
+  .stage__name {
+    right: 0;
+    bottom: 9%;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 14px 18px;
+    border-top: 8px solid var(--peach);
+    border-radius: var(--r-lg);
+    rotate: 5deg;
+    box-shadow: var(--ledge-md) var(--peach-ledge), 0 22px 30px var(--clay-drop);
+  }
+  .stage__name-who {
+    font-family: var(--font-display);
+    font-size: var(--fs-body);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  .stage__name-role {
+    color: var(--ink-subtle);
+    font-size: var(--fs-meta);
+  }
+
   .obj {
     position: absolute;
     touch-action: manipulation;
@@ -286,22 +408,34 @@ const answerCss = faq
     border-radius: 50%;
     background: var(--clay-drop);
   }
-  .obj--sphere { left: 26%; top: 28%; width: 46%; height: 46%; }
-  .obj--bubble { right: 2%; top: 8%; width: 34%; height: 25%; }
-  .obj--sparkle { left: 4%; top: 12%; width: 20%; height: 20%; }
-  .obj--ring { left: 6%; bottom: 10%; width: 22%; height: 22%; }
-  .obj--card { right: 6%; bottom: 12%; width: 30%; height: 30%; }
-  .obj--cursor { left: 60%; top: 52%; width: 12%; height: 15%; }
-  .obj--pill { left: 34%; bottom: 4%; }
+  /* Behind the arch (z 1), then in front of it (z 3). */
+  .obj--bubble { right: 2%; top: 10%; width: 28%; height: 15%; z-index: 1; }
+  .obj--ring { left: 0; top: 44%; width: 20%; height: 16%; z-index: 1; }
+  .obj--sparkle { left: 6%; top: 24%; width: 15%; height: 12%; z-index: 3; }
+  .obj--card { left: 0; bottom: 12%; width: 30%; height: 20%; z-index: 3; }
+  .obj--cursor { right: 12%; top: 40%; width: 9%; height: 9%; z-index: 3; }
+  .obj--pill { right: 22%; top: 4%; z-index: 3; }
 
   @media (max-width: 760px) {
     .hero { min-height: 0; padding-top: var(--s-6); }
-    /* Above the text on phones; sized by height too, so the headline is visible without scrolling on short screens. */
+    /* Portrait first on phones; sized by height too, so the headline is still visible without scrolling on short screens. */
     .hero-stage {
       order: -1;
       /* flex: none, or the stage grows to fill its wrapped line and ignores the width. */
       flex: none;
-      width: min(80vw, 36svh);
+      width: min(80vw, 30svh);
     }
+    .hero__copy { gap: var(--s-4); }
+    .hero__lead { font-size: var(--fs-body); }
+    /* The phone layout goes straight from portrait to headline; the name is on the stage badge. */
+    .badge { display: none; }
+    /* Side by side, as in the phone design, so they sit above the floating Harnie button. */
+    .hero__ctas { flex-wrap: nowrap; }
+    .hero__ctas .btn { flex: 1; justify-content: center; padding-inline: var(--s-3); }
+    .stage__open { font-size: var(--fs-meta); padding: 6px 10px; }
+    .stage__name { padding: 10px 14px; border-top-width: 6px; }
+    .stage__name-who { font-size: var(--fs-label); }
+    /* With JS, Harnie lives in the floating button; without it, the card (and its CSS-only answers) stays. */
+    :global(.js) .twin { display: none; }
   }
 </style>

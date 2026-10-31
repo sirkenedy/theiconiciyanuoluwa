@@ -206,9 +206,23 @@ for (const name of ['iPhone 15', 'Pixel 7', 'iPad Mini'] as const) {
           : r.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: 'event: token\ndata: {"t":"Hello!"}\n\nevent: meta\ndata: {"cite":[],"followups":[],"action":null,"unknown":false}\n\nevent: done\ndata: {}\n\n' }),
       );
       await page.goto('/');
-      await page.locator('#twin-input').fill('hi');
-      await page.locator('#twin-input').press('Enter');
-      await expect(page.locator('[data-twin-log] .bubble--twin')).toContainText('Hello!');
+      if (await page.locator('.twin').isVisible()) {
+        await page.locator('#twin-input').fill('hi');
+        await page.locator('#twin-input').press('Enter');
+        await expect(page.locator('[data-twin-log] .bubble--twin')).toContainText('Hello!');
+      } else {
+        // Phones: no inline card; Harnie is the floating button, which opens the sheet (loading the island if needed).
+        // It steps aside while the hero buttons fill its lane, so scroll them past first.
+        await page.evaluate(() => scrollTo({ top: 400, behavior: 'instant' }));
+        await page.locator('.twin-launcher').first().click();
+        await expect(page.locator('[data-twin-fab]')).toHaveCount(0);
+        await expect(page.locator('.twin-panel .twin-starter').first()).toBeVisible();
+        await page.locator('#twin-panel-input').fill('hi');
+        await page.locator('#twin-panel-input').press('Enter');
+        await expect(page.locator('.twin-panel .bubble--twin')).toContainText('Hello!');
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.twin-panel')).toHaveCount(0);
+      }
       await page.evaluate(() => scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
       const launcher = page.locator('.twin-launcher');
       await expect(launcher).toBeVisible();

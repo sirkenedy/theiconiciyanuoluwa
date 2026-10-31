@@ -123,3 +123,25 @@ test.describe('reduced motion', () => {
     expect(await page.locator('.track-wrap').evaluate((el) => getComputedStyle(el).overflowX)).toBe('auto');
   });
 });
+
+test('hero portrait docks into the nav avatar at the end of its exit', async ({ page }) => {
+  await page.goto('/');
+  const y = await page.evaluate(() => {
+    const f = document.querySelector<HTMLElement>('[data-portrait]')!;
+    let top = 0;
+    for (let el: HTMLElement | null = f; el; el = el.offsetParent as HTMLElement | null) top += el.offsetTop;
+    // exit 90% of the view timeline, whose start edge is the scroll-padding line.
+    return top - parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) + 0.9 * f.offsetHeight;
+  });
+  await page.evaluate((y) => scrollTo({ top: y, behavior: 'instant' }), y);
+  await page.waitForTimeout(250);
+  const [fig, avatar] = await page.evaluate(() =>
+    ['[data-portrait]', '.brand .avatar'].map((s) => {
+      const r = document.querySelector(s)!.getBoundingClientRect();
+      return { x: r.left + r.width / 2, top: r.top, w: r.width };
+    }),
+  );
+  expect(Math.abs(fig.x - avatar.x)).toBeLessThan(2);
+  expect(Math.abs(fig.top - avatar.top)).toBeLessThan(2);
+  expect(Math.abs(fig.w - avatar.w)).toBeLessThan(2);
+});

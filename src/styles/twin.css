@@ -1,6 +1,6 @@
 /* AI twin: the orb's states, the conversation log, the docked launcher and panel (src/islands/chat). */
 
-/* ---------- orb ---------- */
+/* ---------- orb: the portrait avatar in a lilac ring, with a sparkle badge ---------- */
 .twin-orb {
   position: relative;
   display: inline-grid;
@@ -9,31 +9,40 @@
   height: var(--orb);
   transition: rotate var(--dur-3) var(--ease-spring), opacity var(--dur-2) var(--ease-out);
 }
-.twin-orb > * { grid-area: 1 / 1; }
 .twin-orb__body {
+  display: block;
   width: 100%;
   height: 100%;
-  font-size: calc(var(--orb) * 0.6);
-}
-.twin-orb__eyes {
-  display: flex;
-  gap: calc(var(--orb) * 0.14);
-  align-self: center;
-  justify-self: center;
-  margin-top: calc(var(--orb) * -0.08);
-  translate: var(--look, 0px) 0;
-  transition: translate var(--dur-2) var(--ease-spring);
-}
-.twin-orb__eyes span {
-  width: calc(var(--orb) * 0.1);
-  height: calc(var(--orb) * 0.13);
+  overflow: hidden;
   border-radius: 50%;
-  background: var(--on-pastel);
+  background: var(--lilac);
+  /* The gap matches whatever the orb sits on (card surface by default). */
+  box-shadow: 0 0 0 3px var(--orb-gap, var(--surface)), 0 0 0 5px var(--lilac-deep);
+}
+.twin-orb__body img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.twin-orb__badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: grid;
+  place-items: center;
+  width: max(16px, calc(var(--orb) * 0.42));
+  height: max(16px, calc(var(--orb) * 0.42));
+  padding: 3px;
+  border-radius: 50%;
+  background: var(--mint);
+  color: var(--on-pastel);
+  box-shadow: 0 0 0 2px var(--orb-gap, var(--surface));
 }
 .twin-orb::after {
   content: '';
   position: absolute;
-  inset: -4px;
+  inset: -6px;
   border-radius: 50%;
   box-shadow: 0 0 0 3px var(--lilac), 0 0 18px var(--lilac);
   opacity: 0;
@@ -44,18 +53,21 @@
 @media (prefers-reduced-motion: no-preference) {
   .twin-orb[data-state='idle'] .twin-orb__body { animation: orbBreathe 3.2s ease-in-out infinite; }
   .twin-orb[data-state='typing'] { rotate: 8deg; }
-  .twin-orb[data-state='thinking'] .twin-orb__body { animation: orbSquish 0.6s ease-in-out infinite alternate; }
+  .twin-orb[data-state='thinking'] .twin-orb__badge { animation: orbSpin 1.2s linear infinite; }
+  .twin-orb[data-state='thinking']::after,
   .twin-orb[data-state='streaming']::after { animation: orbGlow 1.1s ease-in-out infinite; }
   .twin-orb[data-state='answered'] .twin-orb__body { animation: orbSettle 0.7s var(--ease-spring) both; }
   .twin-orb[data-state='unknown'] { rotate: -12deg; }
   [data-offscreen] .twin-orb__body,
+  [data-offscreen] .twin-orb__badge,
   :root[data-tab-hidden] .twin-orb__body,
+  :root[data-tab-hidden] .twin-orb__badge,
   :root[data-tab-hidden] .twin-orb::after { animation-play-state: paused; }
 }
 @keyframes orbBreathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
-@keyframes orbSquish { from { transform: scale(1.08, 0.92); } to { transform: scale(0.94, 1.06); } }
+@keyframes orbSpin { to { transform: rotate(360deg); } }
 @keyframes orbGlow { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.8; } }
-@keyframes orbSettle { 0% { transform: scale(1); } 35% { transform: translateY(-3px) scale(0.92, 1.1); } 70% { transform: scale(1.08, 0.92); } 100% { transform: scale(1); } }
+@keyframes orbSettle { 0% { transform: scale(1); } 35% { transform: translateY(-3px) scale(0.96, 1.04); } 70% { transform: scale(1.04, 0.96); } 100% { transform: scale(1); } }
 
 /* ---------- conversation ---------- */
 .twin-log {
@@ -187,6 +199,70 @@ span.mini-chip { cursor: default; }
   cursor: pointer;
 }
 .twin-launcher:focus-visible { outline-offset: 4px; }
+.twin-launcher { --orb-gap: var(--bg); }
+/* Phones: Harnie is a floating pill ("Ask Harnie") instead of the inline hero card. */
+.twin-launcher--pill {
+  gap: 10px;
+  grid-auto-flow: column;
+  width: auto;
+  height: auto;
+  min-height: 52px;
+  padding: 6px var(--s-4) 6px 6px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  box-shadow: var(--ledge-md) var(--lilac-ledge), 0 14px 24px var(--clay-drop);
+  --orb-gap: var(--surface);
+}
+.twin-dock--static { display: none; }
+.twin-launcher--pill {
+  transition:
+    opacity var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-out),
+    visibility 0s;
+}
+:root[data-cta-lane] .twin-dock:not(.is-open) .twin-launcher--pill {
+  opacity: 0;
+  transform: translateY(16px);
+  visibility: hidden;
+  pointer-events: none;
+  /* Leave the lane at once; only the way back is animated. */
+  transition: none;
+}
+@media (max-width: 760px) {
+  :root.js .twin-dock--static { display: block; }
+  /* The sheet has its own close button and covers the corner. */
+  .twin-dock.is-open .twin-launcher { visibility: hidden; }
+}
+
+/* Starter questions in an empty panel. */
+.twin-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.twin-starters__hint {
+  flex-basis: 100%;
+  margin: 0 0 var(--s-1);
+  color: var(--ink-muted);
+}
+.twin-starter {
+  min-height: var(--tap);
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  font-size: var(--fs-label);
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform var(--dur-2) var(--ease-spring);
+}
+.twin-starter:hover { transform: translateY(-2px); }
 .twin-panel {
   position: fixed;
   right: max(var(--s-5), env(safe-area-inset-right));

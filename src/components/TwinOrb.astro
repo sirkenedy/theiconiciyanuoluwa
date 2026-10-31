@@ -1,13 +1,23 @@
 ---
-// The AI twin's clay orb. Its look follows data-state (idle, typing, thinking, streaming, answered, unknown, error);
-// the chat island mirrors this markup for the docked launcher. Styles live in src/styles/twin.css.
+import { Picture } from 'astro:assets';
+import avatar from '../assets/portrait-avatar.png';
+
+// The AI twin's avatar: the portrait in a lilac ring with a sparkle badge. Its look follows data-state (idle, typing,
+// thinking, streaming, answered, unknown, error); the chat island reuses this <img> for the docked launcher.
+// Styles live in src/styles/twin.css.
 interface Props {
   size?: number;
+  /** Only the hero card's orb mirrors the chat state. */
+  live?: boolean;
 }
-const { size = 32 } = Astro.props;
+const { size = 36, live = true } = Astro.props;
 ---
 
-<span class="twin-orb" data-twin-orb data-state="idle" style={`--orb:${size}px`} aria-hidden="true">
-  <span class="twin-orb__body clay-sphere clay--lilac"></span>
-  <span class="twin-orb__eyes"><span></span><span></span></span>
+<span class="twin-orb" data-twin-orb={live ? '' : undefined} data-state="idle" style={`--orb:${size}px`} aria-hidden="true">
+  <span class="twin-orb__body">
+    <Picture class="twin-orb__img" src={avatar} formats={['avif', 'webp']} fallbackFormat="webp" widths={[64, 128]} sizes={`${size}px`} width={size} height={size} alt="" decoding="async" />
+  </span>
+  <span class="twin-orb__badge">
+    <svg viewBox="0 0 24 24" width="100%" height="100%"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" fill="currentColor" /></svg>
+  </span>
 </span>

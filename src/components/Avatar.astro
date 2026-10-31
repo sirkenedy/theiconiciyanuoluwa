@@ -1,0 +1,35 @@
+---
+import { Picture } from 'astro:assets';
+import avatar from '../assets/portrait-avatar.png';
+
+// Small round portrait (nav, hero badge, résumé card, footer). Decorative: the name always sits next to it.
+interface Props {
+  size: number;
+  class?: string;
+  /** Above the fold (nav, hero): load straight away. */
+  eager?: boolean;
+}
+const { size, class: className, eager = false } = Astro.props;
+---
+
+<span class:list={['avatar', className]} style={`--av:${size}px`} aria-hidden="true">
+  <Picture src={avatar} formats={['avif', 'webp']} fallbackFormat="webp" widths={[size * 2]} sizes={`${size}px`} width={size} height={size} alt="" loading={eager ? 'eager' : 'lazy'} decoding="async" />
+</span>
+
+<style>
+  .avatar {
+    display: block;
+    flex: none;
+    width: var(--av);
+    height: var(--av);
+    overflow: hidden;
+    border-radius: 50%;
+    background: var(--lilac);
+  }
+  .avatar :global(img) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+</style>

@@ -11,6 +11,7 @@ const ResumeSchema = z.object({
     headline: z.string().min(1),
     location: text.default(''),
     availability: text.default(''),
+    open_to: text.default(''),
     email: z.string().min(1),
     linkedin: text.default(''),
     instagram: text.default(''),
