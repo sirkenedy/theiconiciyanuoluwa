@@ -132,7 +132,7 @@ export function Conversation({ inline: isInline }: { inline?: boolean }) {
         ) : (
           <div key={m.id} class="twin-turn">
             <div class={`bubble bubble--twin${m.error ? ' bubble--error' : ''}${m.status !== 'done' ? ' is-new' : ''}`}>
-              <span class="sr-only">AI twin: </span>
+              <span class="sr-only">Harnie: </span>
               {m.status === 'thinking' ? (
                 <span class="typing-dots" aria-hidden="true">
                   <span />
@@ -162,9 +162,9 @@ function questionsSummary(messages: Message[]) {
 export function Handoff({ inline: isInline }: { inline?: boolean }) {
   const s = useStore();
   if ((isInline && !s.inlineActive) || !s.messages.some((m) => m.role === 'user')) return null;
-  const body = `Hi ${twinData.firstName},\n\nI chatted with your AI twin and asked:\n${questionsSummary(s.messages)}\n\n`;
+  const body = `Hi ${twinData.firstName},\n\nI chatted with Harnie, your AI twin, and asked:\n${questionsSummary(s.messages)}\n\n`;
   return (
-    <a class="handoff" href={mailto('My chat with your AI twin', body)}>
+    <a class="handoff" href={mailto('My chat with Harnie, your AI twin', body)}>
       Email {twinData.firstName} this conversation
     </a>
   );
@@ -295,18 +295,18 @@ export function Dock() {
           <span class="twin-panel__handle" aria-hidden="true" onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={onHandleUp} />
           <div class="twin-panel__head">
             <Orb state={s.orb} size={32} />
-            <h2 id="twin-panel-title" class="twin-panel__title">Ask my AI twin</h2>
+            <h2 id="twin-panel-title" class="twin-panel__title">Ask Harnie</h2>
             <button type="button" class="twin-panel__close" aria-label="Close chat" onClick={close}>
               <Glyph d="M6 6l12 12M18 6L6 18" />
             </button>
           </div>
-          <div ref={body} class="twin-panel__body twin-log" role="log" aria-live="off" aria-label="Conversation with my AI twin">
+          <div ref={body} class="twin-panel__body twin-log" role="log" aria-live="off" aria-label="Conversation with Harnie">
             <Conversation />
           </div>
           <div class="twin-panel__foot">
             <Composer inputRef={input} />
             <p class="twin-form__note">
-              <span>AI twin · answers from {twinData.firstName}'s résumé · may be imperfect</span>
+              <span>Harnie (AI twin) · answers from {twinData.firstName}'s résumé · may be imperfect</span>
               <a href="#ai-twin-note">What gets logged?</a>
             </p>
             <Handoff />
@@ -317,7 +317,7 @@ export function Dock() {
         ref={launcher}
         type="button"
         class="twin-launcher"
-        aria-label={s.open ? 'Close chat with my AI twin' : 'Open chat with my AI twin'}
+        aria-label={s.open ? 'Close chat with Harnie' : 'Open chat with Harnie'}
         aria-expanded={s.open}
         aria-controls="twin-panel"
         onClick={() => (s.open ? close() : setState({ open: true }))}

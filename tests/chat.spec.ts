@@ -66,10 +66,10 @@ test('streams an answer, keeps meta out of the text, cites → Journey pulse, an
 });
 
 test('name privacy: the visitor typing the owner name sends {{NAME}}; answers expand placeholders', async ({ page }) => {
-  const bodies = await mockTwin(page, { tokens: ["I'm {{", 'NAME}}', "'s AI twin."] });
+  const bodies = await mockTwin(page, { tokens: ["I'm Harnie, {{", 'NAME}}', "'s AI twin."] });
   await page.goto('/');
   await askInline(page, `Is ${firstName} open to remote roles?`);
-  await expect(page.locator('[data-twin-log] .bubble--twin').last()).toContainText(`I'm ${resume.identity.name}'s AI twin.`);
+  await expect(page.locator('[data-twin-log] .bubble--twin').last()).toContainText(`I'm Harnie, ${resume.identity.name}'s AI twin.`);
   const sent = JSON.stringify(bodies[0]);
   expect(sent).toContain('{{NAME}}');
   expect(sent.toLowerCase()).not.toContain(firstName.toLowerCase());
@@ -123,13 +123,13 @@ test('docks into a non-modal panel when the card scrolls away; Esc returns focus
   await page.goto('/');
   await askInline(page, 'hi');
   await expect(page.locator('[data-twin-log] .bubble--twin')).toContainText('Hello!');
-  const launcher = page.getByRole('button', { name: 'Open chat with my AI twin' });
+  const launcher = page.getByRole('button', { name: 'Open chat with Harnie' });
   await expect(launcher).toHaveCount(0);
 
   await centre(page, 'about');
   await expect(launcher).toBeVisible();
   await launcher.click();
-  const panel = page.getByRole('dialog', { name: 'Ask my AI twin' });
+  const panel = page.getByRole('dialog', { name: 'Ask Harnie' });
   await expect(panel).toBeVisible();
   await expect(panel).toHaveAttribute('aria-modal', 'false');
   await expect(page.locator('#twin-panel-input')).toBeFocused();
@@ -143,10 +143,10 @@ test('docks into a non-modal panel when the card scrolls away; Esc returns focus
 
   await page.locator('#twin-panel-input').press('Escape');
   await expect(panel).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Open chat with my AI twin' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Open chat with Harnie' })).toBeFocused();
 
   await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
-  await expect(page.getByRole('button', { name: /chat with my AI twin/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /chat with Harnie/ })).toHaveCount(0);
 });
 
 test('conversation survives a reload in the dock without shifting the hero', async ({ page }) => {
@@ -159,7 +159,7 @@ test('conversation survives a reload in the dock without shifting the hero', asy
   await page.evaluate(() =>
     new PerformanceObserver((l) => l.getEntries().forEach((e) => ((window as unknown as { __shifts: number }).__shifts += (e as unknown as { value: number }).value))).observe({ type: 'layout-shift' }),
   );
-  const launcher = page.getByRole('button', { name: 'Open chat with my AI twin' });
+  const launcher = page.getByRole('button', { name: 'Open chat with Harnie' });
   await expect(launcher).toBeVisible({ timeout: 8000 });
   await expect(page.locator('[data-twin-log] .bubble')).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { __shifts: number }).__shifts)).toBeLessThan(0.001);
@@ -213,7 +213,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.locator('.twin [data-twin-orb]')).toHaveAttribute('data-state', 'answered');
     expect((await new AxeBuilder({ page }).include('.twin').analyze()).violations.map((v) => v.id)).toEqual([]);
     await centre(page, 'about');
-    await page.getByRole('button', { name: 'Open chat with my AI twin' }).click();
+    await page.getByRole('button', { name: 'Open chat with Harnie' }).click();
     const { violations } = await new AxeBuilder({ page }).include('.twin-dock').analyze();
     expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([]);
   });

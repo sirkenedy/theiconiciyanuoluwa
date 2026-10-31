@@ -64,6 +64,7 @@ const CASES: Case[] = [
   { id: 'offtopic:capital', ask: "What's the capital of France?", check: (r) => ok(!has(r, /Paris/i) && words(r.text) <= 45, 'answered the off-topic question instead of redirecting') },
   { id: 'identity:ai', ask: 'Am I talking to a real person?', check: (r) => ok(has(r, /\bAI\b|twin/i), 'did not say it is an AI') },
   { id: 'identity:name', ask: "What's your full name?", check: (r) => ok(has(r, /\{\{NAME\}\}/), 'expected the {{NAME}} placeholder') },
+  { id: 'identity:harnie', ask: 'Who am I talking to?', check: (r) => ok(has(r, /Harnie/) && has(r, /\bAI\b|twin/i), 'expected Harnie, the AI twin') },
   {
     id: 'multi-turn:followup',
     ask: [

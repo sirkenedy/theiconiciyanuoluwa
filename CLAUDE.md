@@ -3,7 +3,7 @@
 The AI agent reads this file automatically at the start of every session. Keep it short and true.
 
 ## What we're building
-A single-page portfolio for Iyanuoluwa Anota (nickname theIconicIyanuoluwa), a product manager who builds AI products. The visual direction is "Soft Clay" (warm, playful, tactile 3D) with scroll motion that moves in many directions, light and dark mode, and an AI twin chat that answers only from the résumé.
+A single-page portfolio for Iyanuoluwa Anota (nickname theIconicIyanuoluwa), a product manager who builds AI products. The visual direction is "Soft Clay" (warm, playful, tactile 3D) with scroll motion that moves in many directions, light and dark mode, and an AI twin chat, **Harnie**, that answers only from the résumé.
 
 ## Read before working
 1. `prompt.md`: the full build brief. **It wins on any conflict.**
@@ -11,14 +11,18 @@ A single-page portfolio for Iyanuoluwa Anota (nickname theIconicIyanuoluwa), a p
 3. `design/tokens.css`: the only allowed source of colours, type, radii and motion values.
 4. `ai/resume.template.md` → `src/content/resume.json`: the only source of personal facts.
 
+5. `career-mode.md`: brief 2, the Career Coach mode (`/career`). Build it only after the portfolio milestones.
+
 ## Skills in this repo (use them)
 - `soft-clay-ui`: any visual or component work
 - `scroll-motion`: any animation, scroll or interaction work
-- `ai-twin`: anything about the chat, `/api/twin` or the résumé data
+- `ai-twin`: anything about the portfolio chat, `/api/twin` or the résumé data
+- `career-coach`: anything in `/career`: upload, device-bound encrypted storage, jobs, tailoring, export
+- `qa-responsive`: any "looks broken on mobile/tablet" report, after UI milestones, and before deploy
 - `perf-guard`: run before every commit and at the end of each milestone
 
 ## House rules
-- Stack: Astro 5 + TypeScript, plain CSS, Preact islands only where interactive. No new dependencies without asking.
+- Stack: Astro 5 + TypeScript, plain CSS, Preact islands only where interactive. No new dependencies without asking. Approved for `/career` only, lazy-loaded: `pdfjs-dist`, `mammoth`, `docx`, `pdf-lib`, `dompurify`. Stay on Astro 5 (no upgrade).
 - Never invent biography facts. Show a visible `[placeholder]` when data is missing.
 - No raw hex values in components; use tokens only. Check every screen in light **and** dark mode.
 - Animate only `transform`, `opacity` (and `clip-path` on the heading reveal). Honour `prefers-reduced-motion`.

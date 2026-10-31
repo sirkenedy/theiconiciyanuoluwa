@@ -135,7 +135,7 @@ If you want richer 3D than CSS: pre-render the 7 hero clay objects in Blender/Sp
 ## 7. AI twin: chat design (most important new feature)
 
 ### 7.1 Placement: chat that never breaks the page
-- **Inline first:** the hero card "Ask my AI twin" (as in the reference) is the chat's home. Suggested chips + a text input ("Ask about my work, projects or how I use AI…").
+- **Inline first:** the hero card "Ask Harnie, my AI twin" (the AI twin is named **Harnie**) is the chat's home. Suggested chips + a text input ("Ask about my work, projects or how I use AI…").
 - **Docks when you scroll:** once the hero card leaves the viewport, the conversation (if any) **collapses into a floating clay orb** bottom-right (the same lilac orb). Tapping it opens a **non-modal** panel (desktop: 380×560 card; mobile: bottom sheet at 70% height with a drag handle). The page behind keeps scrolling and animating; no scroll lock on desktop.
 - The orb is **one continuous object**: use a View Transition / FLIP so the hero avatar orb visibly flies down into the dock (another "landing").
 - Conversation state lives in a tiny store shared by the inline and docked views (and `sessionStorage`, so it survives reloads).
@@ -166,7 +166,7 @@ If you want richer 3D than CSS: pre-render the 7 hero clay objects in Blender/Sp
 - **Name privacy (hard rule):** the owner's name, nickname, email, LinkedIn and Instagram never reach the Claude API. The build writes `src/content/resume.twin.json`, a copy of `resume.json` with those values replaced by `{{NAME}}`, `{{NICKNAME}}`, `{{EMAIL}}`, `{{LINKEDIN}}`, `{{INSTAGRAM}}`, and fails if any name part (case-insensitive) is still present anywhere in it. The server only ever loads `resume.twin.json`. Before sending, the client replaces name parts in visitor messages with `{{NAME}}`, and keeps chat history in tokenised form. Tokens are expanded only in the browser at render time; the streaming renderer buffers a partial `{{…` until it closes.
 - **Validation on the server:** drop any `cite` id not present in `resume.json`; whitelist `action` values.
 - **Guardrails:** refuses invented facts, `boundaries` topics (salary etc.), prompt injection, and off-topic requests (see system prompt). Input max 500 chars; keep the last 6 turns; strip HTML from input.
-- **Disclosure:** small caption under the input: "AI twin · answers from Iyanuoluwa's résumé · may be imperfect". A footer link explains what's logged.
+- **Disclosure:** small caption under the input: "Harnie (AI twin) · answers from Iyanuoluwa's résumé · may be imperfect". A footer link explains what's logged.
 
 ### 7.5 Chat ↔ page interplay (what makes it special)
 - **Citation chips** ("From: Product Manager @ Company") → click **scrolls to the Journey**, scrubs the road to that milestone, and pulses the card with a clay highlight. `post-*` ids scroll to Writing and wiggle the card.
@@ -250,7 +250,8 @@ Pass rate ≥ 95% before launch.
 3. **Scroll choreography:** CSS scroll-driven animations + fallback + reduced motion.
 4. **Interactivity upgrades:** parallax, grab-and-throw, Journey scrub/expand, reactions with confetti, paper-plane download, magnetic contact.
 5. **AI twin:** inline + dock, orb states, FAQ instant answers, `/api/twin` streaming, citations ↔ page interplay, rate limiting, evals.
-6. **Polish & ship:** OG image, JSON-LD, 404, budgets verified, deploy.
+6. **Responsive QA:** run the `qa-responsive` skill (web + mobile, light + dark) and fix everything at the root. Repeat before every deploy.
+7. **Polish & ship:** OG image, JSON-LD, 404, budgets verified, deploy.
 
 ---
 
@@ -262,4 +263,10 @@ Pass rate ≥ 95% before launch.
 - [ ] Every interactive element keyboard-operable with a visible focus ring (2px lilac + offset)
 - [ ] Chat: first token ≤ 700 ms p50; FAQ chips instant; eval pass ≥ 95%; never invents facts
 - [ ] Citation chips scroll to and highlight the right Journey/Writing card
+- [ ] `qa/REPORT.md` has no open rows; no horizontal scroll at any width from 320px to 1920px
 - [ ] Works with JS disabled; no console errors; no secrets in the client
+
+---
+
+## 14. Next: Career Coach mode
+After this brief is done, build `career-mode.md` (a second AI mode for visitors: résumé upload, 5 fresh jobs a day, tailored résumés, device-bound encrypted history).
