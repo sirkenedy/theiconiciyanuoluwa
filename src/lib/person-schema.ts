@@ -5,7 +5,8 @@ import { isCurrent } from './text';
 export function personSchema(resume: Resume, site: URL) {
   const { identity } = resume;
   const real = (v?: string) => (v && !isPlaceholder(v) ? v : undefined);
-  const [locality, region, country] = identity.location.split('·')[0].split(',').map((s) => s.trim());
+  const parts = identity.location.split('·')[0].split(',').map((s) => s.trim()).filter(Boolean);
+  const [country, region, locality] = parts.reverse();
   const current = resume.experience.find((e) => isCurrent(e.dates));
   const degree = resume.education_and_certs.find((e) => /\b(B\.?Sc|B\.?A|M\.?Sc|MBA|Bachelor|Master|PhD)\b/i.test(e));
   const school = degree?.split(' — ')[1];
@@ -20,7 +21,7 @@ export function personSchema(resume: Resume, site: URL) {
     url: site.href,
     image: new URL('/og.png', site).href,
     email: real(identity.email) && `mailto:${identity.email}`,
-    address: real(locality) && { '@type': 'PostalAddress', addressLocality: locality, addressRegion: region, addressCountry: country },
+    address: real(country) && { '@type': 'PostalAddress', addressLocality: locality, addressRegion: region, addressCountry: country },
     sameAs: [identity.linkedin, identity.instagram].filter((u) => real(u)),
     worksFor: current && real(current.company) && { '@type': 'Organization', name: current.company },
     alumniOf: real(school) && { '@type': 'CollegeOrUniversity', name: school },

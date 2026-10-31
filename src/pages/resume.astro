@@ -79,7 +79,7 @@ const certText = (line: string) => line.replace(/\s+—\s+https?:\/\/\S+$/, '');
                 {isPlaceholder(p.link) || p.link === 'private' ? <Text value={p.name} fallback="Project" /> : <a href={p.link}>{p.name}</a>}
               </h3>
               <p><Text value={p.what} fallback="what it was" /></p>
-              <p class="cv__tags"><strong>AI angle:</strong> <Text value={p.ai_angle} fallback="AI angle" /></p>
+              {p.ai_angle && <p class="cv__tags"><strong>AI angle:</strong> <Text value={p.ai_angle} /></p>}
             </li>
           ))
         }

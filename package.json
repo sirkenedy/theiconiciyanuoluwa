@@ -9,7 +9,8 @@
   "scripts": {
     "resume": "node scripts/build-resume.ts",
     "dev": "npm run resume && astro dev",
-    "build": "npm run resume && astro build",
+    "build": "npm run resume && npm run check:content && astro build && node scripts/check-content.ts --dist",
+    "check:content": "node scripts/check-content.ts",
     "preview": "node scripts/serve-static.mjs",
     "check": "astro check && node scripts/lint-tokens.mjs",
     "size": "node scripts/size-report.mjs",

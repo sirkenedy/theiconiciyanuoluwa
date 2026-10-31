@@ -15,11 +15,11 @@ const ai = skills.ai ?? [];
 const tools = skills.tools ?? [];
 
 // Each stage of the PM loop lists the résumé skills that belong to it; anything not listed falls through to the chips.
-const STAGES: { title: string; tone: 'peach' | 'lilac' | 'mint' | 'butter'; icon: IconName; from: string[]; picks: string[]; dir: string }[] = [
-  { title: 'Discover', tone: 'peach', icon: 'search', dir: 'from-l', from: product, picks: ['Product Discovery', 'User Interviews', 'Usability Testing', 'Competitive Analysis', 'Customer Journey Mapping', 'Jobs-to-be-Done'] },
-  { title: 'Define', tone: 'lilac', icon: 'doc', dir: 'from-t', from: product, picks: ['Product Strategy', 'Roadmapping', 'PRDs & User Stories', 'Prioritisation (RICE, MoSCoW)'] },
-  { title: 'Build with AI', tone: 'mint', icon: 'sparkle', dir: 'from-b', from: ai, picks: ai },
-  { title: 'Ship & learn', tone: 'butter', icon: 'arrow-up-right', dir: 'from-r', from: product, picks: ['Go-to-Market', 'Product Metrics & KPIs', 'A/B Testing', 'Funnel & Cohort Analysis'] },
+const STAGES: { title: string; text: string; tone: 'peach' | 'lilac' | 'mint' | 'butter'; icon: IconName; from: string[]; picks: string[]; dir: string }[] = [
+  { title: 'Discover', text: 'I start with users: interviews, usability tests, competitive analysis and journey mapping, so we build for a real job to be done.', tone: 'peach', icon: 'search', dir: 'from-l', from: product, picks: ['Product Discovery', 'User Interviews', 'Usability Testing', 'Competitive Analysis', 'Customer Journey Mapping', 'Jobs-to-be-Done'] },
+  { title: 'Define', text: 'I turn ambiguous needs into clear PRDs, a prioritised backlog and a roadmap the whole team can rally behind.', tone: 'lilac', icon: 'doc', dir: 'from-t', from: product, picks: ['Product Strategy', 'Roadmapping', 'PRDs & User Stories', 'Prioritisation (RICE, MoSCoW)'] },
+  { title: 'Build with AI', text: 'I prototype fast with tools like Lovable and Claude, and use AI agents to automate research, documentation and reporting.', tone: 'mint', icon: 'sparkle', dir: 'from-b', from: ai, picks: ai },
+  { title: 'Ship & learn', text: 'I lead cross-functional teams through launch, then read the metrics, A/B tests and funnels to decide what comes next.', tone: 'butter', icon: 'arrow-up-right', dir: 'from-r', from: product, picks: ['Go-to-Market', 'Product Metrics & KPIs', 'A/B Testing', 'Funnel & Cohort Analysis'] },
 ];
 const cards = STAGES.map((s) => ({ ...s, items: s.picks.filter((p) => s.from.includes(p)) }));
 const used = new Set(cards.flatMap((c) => c.items));
@@ -27,7 +27,7 @@ const chips = [...product.filter((p) => !used.has(p)), ...tools];
 ---
 
 <section id="about" class="container about cv-auto" aria-labelledby="about-title">
-  <SectionLanding id="about-title" label="01 · About me" title="I live where users, data and models meet." tone="peach" land="l" />
+  <SectionLanding id="about-title" label="01 · About me" title="Strategic thinking, hands-on execution." tone="peach" land="l" />
   <p class="about__lead rise"><Text value={about} fallback="2–3 sentences about who you are as a PM" /></p>
 
   <ul class="about__cards" role="list">
@@ -37,9 +37,8 @@ const chips = [...product.filter((p) => !used.has(p)), ...tools];
           <div class={`card card--${c.tone} about__card`} data-tilt data-glance={c.tone}>
             <span class={`tile tile--${c.tone}`}><Icon name={c.icon} size={24} /></span>
             <h3 class="about__card-title">{c.title}</h3>
-            <p class="about__card-text">
-              <Text value={c.items.join(' · ')} fallback="skills for this stage" />
-            </p>
+            <p class="about__card-text">{c.text}</p>
+            <p class="about__card-tags"><small><Text value={c.items.join(' · ')} fallback="skills for this stage" /></small></p>
           </div>
         </li>
       ))
@@ -94,6 +93,8 @@ const chips = [...product.filter((p) => !used.has(p)), ...tools];
   .tile--butter { background: var(--butter); }
   .about__card-title { font-size: var(--fs-h3); }
   .about__card-text { color: var(--ink-muted); }
+  .about__card-tags { margin-top: auto; color: var(--ink-subtle); }
+  .about__card-tags small { font-size: var(--fs-meta); }
   .about__chips {
     display: flex;
     flex-wrap: wrap;

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import satori from 'satori';
 import resume from '../content/resume.json';
 import { lightTokens as t } from '../lib/tokens';
+import { heroLines } from '../lib/text';
 
 // Rendered once at build time into /og.png (1200×630): the Soft Clay card used for link previews.
 export const prerender = true;
@@ -24,6 +25,7 @@ const sphere = (size: number, hi: string, fill: string, deep: string, style: Rec
 export const GET: APIRoute = async ({ site }) => {
   const { identity } = resume;
   const host = site ? new URL(site).host : '';
+  const [line1, line2 = '', line3 = ''] = heroLines(identity.hero);
 
   const card = el({ width: 1200, height: 630, background: t.bg, position: 'relative', fontFamily: 'DM Sans', color: t.ink }, [
     // clay stage, right
@@ -44,9 +46,9 @@ export const GET: APIRoute = async ({ site }) => {
         identity.headline,
       ),
       el({ flexDirection: 'column', marginTop: 34, fontFamily: 'Bricolage', fontSize: 92, lineHeight: 0.98, letterSpacing: -3 }, [
-        el({}, 'I shape AI'),
-        el({ color: t['ink-accent'] }, 'into products'),
-        el({}, 'people love.'),
+        el({}, line1),
+        el({ color: t['ink-accent'] }, line2),
+        el({}, line3),
       ]),
     ]),
     el({ position: 'absolute', left: 80, bottom: 64, alignItems: 'center' }, [

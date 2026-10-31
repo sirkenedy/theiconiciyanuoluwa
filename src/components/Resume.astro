@@ -11,19 +11,20 @@ interface Props {
 }
 const { identity } = Astro.props;
 const fileName = identity.resume_pdf.split('/').at(-1);
+const LINKEDIN_FALLBACK = '[LinkedIn URL]'; // content-check: fallback
 ---
 
 <section id="resume" class="container resume cv-auto" aria-labelledby="resume-title">
   <div class="resume__copy">
     <SectionLanding id="resume-title" label="04 · Résumé" title="The one-pager." tone="butter" land="s" />
-    <p class="resume__lead rise">Everything above, condensed into a single page — roles, launches and the skills I bring to an AI product team.</p>
+    <p class="resume__lead rise">Everything above, condensed into a single page — roles, launches and the skills I bring to a product team.</p>
     <div class="resume__ctas rise">
       <a class="btn btn--lg btn--primary" href={identity.resume_pdf} download={fileName} data-plane-download>
         <Icon name="download" size={18} />Download PDF
       </a>
       {
         isPlaceholder(identity.linkedin) ? (
-          <span class="btn btn--lg btn--secondary"><Text value="[LinkedIn URL]" /></span>
+          <span class="btn btn--lg btn--secondary"><Text value={LINKEDIN_FALLBACK} /></span>
         ) : (
           <a class="btn btn--lg btn--secondary" href={identity.linkedin} rel="me noopener" target="_blank">View on LinkedIn</a>
         )
@@ -47,7 +48,7 @@ const fileName = identity.resume_pdf.split('/').at(-1);
       <span class="paper__line w-92" aria-hidden="true"></span>
       <span class="paper__line w-48 is-mint" aria-hidden="true"></span>
       <span class="paper__line w-74" aria-hidden="true"></span>
-      <span class="paper__meta">Updated <Text value="[Month Year]" /> · PDF</span>
+      <span class="paper__meta">Updated <Text value={identity.resume_updated} fallback="Month Year" /> · PDF</span>
     </div>
     </div>
     <svg class="plane" data-plane viewBox="0 0 120 80" width="120" height="80" aria-hidden="true">

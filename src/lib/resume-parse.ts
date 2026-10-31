@@ -15,6 +15,8 @@ const ResumeSchema = z.object({
     linkedin: text.default(''),
     instagram: text.default(''),
     resume_pdf: z.string().startsWith('/'),
+    resume_updated: text.default(''),
+    hero: text.default(''),
     one_liner: text.default(''),
   }),
   about: text,

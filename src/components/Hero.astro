@@ -4,6 +4,7 @@ import TwinOrb from './TwinOrb.astro';
 import Icon from './Icon.astro';
 import Text from './Text.astro';
 import { isPlaceholder } from '../lib/resume-parse.ts';
+import { heroLines } from '../lib/text.ts';
 import type { Resume } from '../lib/resume-parse.ts';
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 const { identity, faq } = Astro.props;
 
 const firstName = identity.name.split(' ')[0];
+const [line1, line2 = '', line3 = ''] = heroLines(identity.hero);
 const lead = isPlaceholder(identity.one_liner)
   ? identity.one_liner
   : identity.one_liner.charAt(0).toLowerCase() + identity.one_liner.slice(1);
@@ -31,9 +33,9 @@ const answerCss = faq
       <Text value={identity.headline} fallback="headline" />
     </p>
     <h1 id="hero-title" class="hero__title">
-      <span class="hl1">I shape AI</span>
-      <span class="hl2 hero__accent">into products</span>
-      <span class="hl3">people love.</span>
+      <span class="hl1"><Text value={line1} /></span>
+      <span class="hl2 hero__accent">{line2}</span>
+      <span class="hl3">{line3}</span>
     </h1>
     <p class="hero__lead hl3">I'm {firstName} — <Text value={lead} fallback="one line about what you build" /></p>
     <div class="hero__ctas hl3">

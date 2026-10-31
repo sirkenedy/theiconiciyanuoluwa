@@ -5,6 +5,8 @@ import '../styles/base.css';
 import '../styles/motion.css';
 import '../styles/twin.css';
 import { darkTokens, lightTokens } from '../lib/tokens';
+import { heroLines } from '../lib/text';
+import resume from '../content/resume.json';
 
 interface Props {
   title: string;
@@ -19,6 +21,7 @@ const bgLight = lightTokens.bg;
 const bgDark = darkTokens.bg;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const ogImage = new URL('/og.png', Astro.site);
+const ogAlt = `${heroLines(resume.identity.hero).join(' ')} — ${resume.identity.name}, ${resume.identity.headline}`;
 // Prerender likely next pages on hover (Chromium); other browsers ignore this.
 const speculation = JSON.stringify({ prerender: [{ where: { href_matches: ['/blog/*', '/resume/'] }, eagerness: 'moderate' }] });
 ---
@@ -51,7 +54,7 @@ const speculation = JSON.stringify({ prerender: [{ where: { href_matches: ['/blo
     <meta property="og:image" content={ogImage} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="I shape AI into products people love — Soft Clay portfolio card" />
+    <meta property="og:image:alt" content={ogAlt} />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="sitemap" href="/sitemap-index.xml" />
     <script type="speculationrules" set:html={speculation} />
