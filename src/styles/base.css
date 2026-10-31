@@ -34,8 +34,13 @@ button { font: inherit; color: inherit; }
 .container {
   max-width: var(--container);
   margin-inline: auto;
-  padding-inline: var(--gutter);
+  /* Fluid gutter: the full token gutter from ~480px up, a little tighter on the smallest phones. */
+  padding-inline: clamp(16px, 5vw, var(--gutter));
 }
+
+/* Entrances fly in from up to ±55vw and the hero scatters on exit: clip that sideways at <main>.
+   overflow-x: clip (not hidden) keeps <main> from becoming a scroll container, so view() timelines still work. */
+main { overflow-x: clip; }
 
 .sr-only {
   position: absolute;

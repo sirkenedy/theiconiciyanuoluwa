@@ -13,7 +13,7 @@ const { identity } = resume;
   <main id="main" tabindex="-1" class="container lost">
     <div id="top" class="lost__scene" aria-hidden="true">
       <span class="lost__pad"></span>
-      <span class="lost__orb"><ClayObject tone="lilac" size={120} shade="72px" /></span>
+      <span class="lost__orb"><ClayObject tone="lilac" shade="min(72px, 12svh)" /></span>
       <span class="lost__dust"></span>
       <span class="lost__dust lost__dust--2"></span>
     </div>
@@ -35,41 +35,44 @@ const { identity } = resume;
     flex-direction: column;
     align-items: center;
     gap: var(--s-4);
-    padding-block: var(--s-14) var(--s-24);
+    padding-block: clamp(var(--s-6), 7svh, var(--s-14)) var(--s-24);
     text-align: center;
   }
+  /* The scene scales with the viewport's height too, so the headline stays above the fold in landscape. */
   .lost__scene {
     position: relative;
-    width: 320px;
-    height: 220px;
-    margin-bottom: var(--s-4);
+    width: min(320px, 80vw, 54svh);
+    aspect-ratio: 32 / 22;
+    margin-bottom: var(--s-2);
   }
   /* The pad is where the orb should have landed; the orb ended up beside it, tipped over. */
   .lost__pad {
     position: absolute;
-    left: 40px;
-    bottom: 10px;
-    width: 140px;
-    height: 22px;
+    left: 12.5%;
+    bottom: 4.5%;
+    width: 44%;
+    height: 10%;
     border-radius: 50%;
     background: var(--clay-drop);
   }
   .lost__orb {
     position: absolute;
-    right: 20px;
-    bottom: 14px;
+    right: 6%;
+    bottom: 6%;
+    width: 37.5%;
+    aspect-ratio: 1;
     rotate: 24deg;
   }
   .lost__dust {
     position: absolute;
-    right: 140px;
-    bottom: 12px;
-    width: 18px;
-    height: 18px;
+    right: 44%;
+    bottom: 5%;
+    width: 5.6%;
+    aspect-ratio: 1;
     border-radius: 50%;
     background: var(--surface-alt);
   }
-  .lost__dust--2 { right: 10px; bottom: 8px; width: 12px; height: 12px; }
+  .lost__dust--2 { right: 3%; bottom: 3.6%; width: 3.8%; }
   .lost__title {
     max-width: 14em;
     font-size: var(--fs-h2);

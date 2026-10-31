@@ -250,6 +250,22 @@ export function Dock() {
     if (!prefersReducedMotion()) panel.current?.animate({ transform: ['scale(0.9) translateY(16px)', 'none'], opacity: [0, 1] }, { duration: 380, easing: SPRING });
   }, [s.open]);
 
+  // On phones the keyboard covers the bottom of the layout viewport; expose its height as --kb so the sheet sits above it.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!s.open || !vv) return;
+    const root = document.documentElement;
+    const update = () => root.style.setProperty('--kb', `${Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop))}px`);
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+      root.style.removeProperty('--kb');
+    };
+  }, [s.open]);
+
   useLayoutEffect(() => {
     const el = body.current;
     if (el && s.open) el.scrollTop = el.scrollHeight;
@@ -306,7 +322,7 @@ export function Dock() {
           <div class="twin-panel__foot">
             <Composer inputRef={input} />
             <p class="twin-form__note">
-              <span>Harnie (AI twin) · answers from {twinData.firstName}'s résumé · may be imperfect</span>
+              <small>Harnie (AI twin) · answers from {twinData.firstName}'s résumé · may be imperfect</small>
               <a href="#ai-twin-note">What gets logged?</a>
             </p>
             <Handoff />

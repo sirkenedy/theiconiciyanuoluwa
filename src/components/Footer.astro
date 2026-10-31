@@ -86,12 +86,14 @@ const year = new Date().getFullYear();
   }
   .footer__note {
     flex-basis: 100%;
-    max-width: 760px;
-    font-size: var(--fs-meta);
+    max-width: 68ch;
+    font-size: var(--fs-body);
     line-height: 1.6;
     color: var(--inverse-muted);
   }
   .footer__note:focus { outline: none; }
+  /* While the chat orb is docked bottom-right, keep the footer's links out from under it. */
+  :global(body:has(.twin-dock)) .footer { padding-bottom: calc(var(--s-10) + 80px); }
   .footer__links {
     display: flex;
     flex-wrap: wrap;

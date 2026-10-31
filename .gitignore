@@ -15,3 +15,4 @@ src/content/reaction-keys.ts
 src/content/resume.twin.json
 src/content/twin-prompt.ts
 src/content/twin-client.json
+qa/screens/

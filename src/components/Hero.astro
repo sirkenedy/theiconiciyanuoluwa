@@ -74,7 +74,7 @@ const answerCss = faq
           <button class="btn btn--secondary twin-form__send is-stop" type="button" data-twin-stop aria-label="Stop answering"><Icon name="stop" size={16} /></button>
         </div>
         <p class="twin-form__note">
-          <span>Harnie (AI twin) · answers from {firstName}'s résumé · may be imperfect</span>
+          <small>Harnie (AI twin) · answers from {firstName}'s résumé · may be imperfect</small>
           <a href="#ai-twin-note">What gets logged?</a>
         </p>
       </form>
@@ -103,7 +103,7 @@ const answerCss = faq
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--s-10);
+    gap: clamp(var(--s-6), 5vw, var(--s-10));
     min-height: 760px;
     padding-block: var(--s-14) 80px;
   }
@@ -232,7 +232,7 @@ const answerCss = faq
   .answer {
     padding: 14px var(--s-4);
     border-radius: var(--r-md) var(--r-md) var(--r-md) 6px;
-    font-size: 15px;
+    font-size: var(--fs-body);
     line-height: 1.5;
   }
 
@@ -294,10 +294,12 @@ const answerCss = faq
 
   @media (max-width: 760px) {
     .hero { min-height: 0; padding-top: var(--s-6); }
+    /* Above the text on phones; sized by height too, so the headline is visible without scrolling on short screens. */
     .hero-stage {
       order: -1;
-      flex-basis: auto;
-      width: 80vw;
+      /* flex: none, or the stage grows to fill its wrapped line and ignores the width. */
+      flex: none;
+      width: min(80vw, 36svh);
     }
   }
 </style>

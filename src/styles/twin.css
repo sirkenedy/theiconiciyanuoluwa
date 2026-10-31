@@ -67,7 +67,7 @@
 .bubble {
   max-width: 92%;
   padding: 12px var(--s-4);
-  font-size: 15px;
+  font-size: var(--fs-body);
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -142,7 +142,8 @@ span.mini-chip { cursor: default; }
   background: var(--surface-alt);
   color: var(--ink);
   font: inherit;
-  font-size: 15px;
+  /* 16px or more, or iOS Safari zooms the page when the field is focused. */
+  font-size: var(--fs-body);
 }
 .twin-form__input::placeholder { color: var(--ink-subtle); }
 .twin-form__input:focus-visible { outline: none; border-color: var(--lilac-deep); }
@@ -194,7 +195,7 @@ span.mini-chip { cursor: default; }
   display: flex;
   flex-direction: column;
   width: min(380px, calc(100vw - 2 * var(--s-5)));
-  height: min(560px, calc(100vh - 140px));
+  height: min(560px, calc(100dvh - 140px));
   border-radius: var(--r-xl);
   background: var(--surface);
   color: var(--ink);
@@ -246,9 +247,10 @@ span.mini-chip { cursor: default; }
   .twin-panel {
     left: 0;
     right: 0;
-    bottom: 0;
     width: 100%;
-    height: 70vh;
+    /* --kb is the on-screen keyboard's height (src/islands/chat/ChatTwin.tsx, from visualViewport). */
+    bottom: var(--kb, 0px);
+    height: min(70dvh, calc(100dvh - var(--kb, 0px) - var(--s-4)));
     border-radius: var(--r-xl) var(--r-xl) 0 0;
     transform-origin: bottom center;
     padding-bottom: env(safe-area-inset-bottom);

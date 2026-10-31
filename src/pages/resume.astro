@@ -149,9 +149,14 @@ const certText = (line: string) => line.replace(/\s+—\s+https?:\/\/\S+$/, '');
     font-size: var(--fs-lead);
     font-weight: 700;
   }
+  .cv__dates { color: var(--ink-subtle); font-size: var(--fs-meta); }
   .cv__meta,
-  .cv__dates,
-  .cv__tags { color: var(--ink-subtle); font-size: var(--fs-meta); }
+  .cv__tags { color: var(--ink-subtle); }
+  /* Keep prose at a readable measure on wide screens. */
+  .cv p,
+  .cv__item,
+  .cv__bullets,
+  .cv__skills dd { max-width: 68ch; }
   .cv__meta { margin-top: var(--s-2); }
   .cv__contact {
     grid-column: 1 / -1;
