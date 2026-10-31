@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseResume, type Resume } from '../src/lib/resume-parse.ts';
 import { reactionKeys } from '../src/lib/reactions.ts';
 import { expand, leakedNameParts, replacements, tokenise } from '../src/lib/twin-privacy.ts';
@@ -15,6 +15,8 @@ function citeLabel(resume: Resume, id: string) {
 }
 
 try {
+  // src/content/ holds only generated files and is absent in a fresh clone.
+  mkdirSync(file('src/content/'), { recursive: true });
   const resume = parseResume(readFileSync(file('ai/resume.template.md'), 'utf8'));
   writeFileSync(file('src/content/resume.json'), JSON.stringify(resume, null, 2) + '\n');
 
