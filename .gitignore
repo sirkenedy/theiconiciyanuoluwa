@@ -16,3 +16,6 @@ src/content/resume.twin.json
 src/content/twin-prompt.ts
 src/content/twin-client.json
 qa/screens/
+
+# Original full-resolution photo (local only; the site builds from src/assets/portrait.png)
+src/assets/portrait/
