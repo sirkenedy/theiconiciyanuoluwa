@@ -1,0 +1,247 @@
+---
+import Base from '../layouts/Base.astro';
+import ClayObject from '../components/ClayObject.astro';
+import Footer from '../components/Footer.astro';
+import Header from '../components/Header.astro';
+import Icon from '../components/Icon.astro';
+import Text from '../components/Text.astro';
+import resume from '../content/resume.json';
+import { isPlaceholder, type Resume } from '../lib/resume-parse';
+import { handleFromUrl } from '../lib/text';
+
+// Plain-HTML résumé: the accessible, indexable and printable twin of the PDF, from the same résumé data.
+const data = resume as Resume;
+const { identity } = data;
+const fileName = identity.resume_pdf.split('/').at(-1);
+const SKILL_GROUPS: Record<string, string> = { product: 'Product', ai: 'AI & automation', tools: 'Tools' };
+const certLink = (line: string) => line.match(/https?:\/\/\S+$/)?.[0];
+const certText = (line: string) => line.replace(/\s+—\s+https?:\/\/\S+$/, '');
+---
+
+<Base title={`Résumé — ${identity.name}`} description={`${identity.name}: ${identity.headline}. ${identity.one_liner}`}>
+  <Header brand={identity.name.split(' ')[0]} home={false} />
+  <main id="main" tabindex="-1" class="container cv">
+    <header id="top" class="cv__head">
+      <ClayObject tone="butter" size={64} shade="40px" />
+      <div class="cv__who">
+        <h1 class="cv__name">{identity.name}</h1>
+        <p class="cv__role"><Text value={identity.headline} fallback="headline" /></p>
+        <p class="cv__meta">
+          <Text value={identity.location} fallback="location" /><br />
+          <Text value={identity.availability} fallback="availability" />
+        </p>
+      </div>
+      <ul class="cv__contact" role="list">
+        <li>{isPlaceholder(identity.email) ? <Text value={identity.email} /> : <a href={`mailto:${identity.email}`}>{identity.email}</a>}</li>
+        {!isPlaceholder(identity.linkedin) && <li><a href={identity.linkedin} rel="me noopener">linkedin.com/in/{handleFromUrl(identity.linkedin)}</a></li>}
+        {!isPlaceholder(identity.instagram) && <li><a href={identity.instagram} rel="me noopener">@{handleFromUrl(identity.instagram)}</a></li>}
+      </ul>
+      <div class="cv__actions">
+        <a class="btn btn--lg btn--primary" href={identity.resume_pdf} download={fileName}><Icon name="download" size={18} />Download PDF</a>
+        <a class="btn btn--lg btn--secondary" href="/">Back to the portfolio</a>
+      </div>
+    </header>
+
+    <section class="cv__section" aria-labelledby="cv-summary">
+      <h2 id="cv-summary" class="cv__h2">Summary</h2>
+      <p class="cv__lead"><Text value={data.about} fallback="summary" /></p>
+    </section>
+
+    <section class="cv__section" aria-labelledby="cv-experience">
+      <h2 id="cv-experience" class="cv__h2">Experience</h2>
+      <ol class="cv__list" role="list">
+        {
+          data.experience.map((exp) => (
+            <li class="cv__item">
+              <div class="cv__item-head">
+                <h3 class="cv__h3">
+                  <Text value={exp.role} fallback="Role" /> · <Text value={exp.company} fallback="Company" />
+                </h3>
+                <p class="cv__dates"><Text value={exp.dates} fallback="dates" /></p>
+              </div>
+              <ul class="cv__bullets">
+                {exp.highlights.length ? exp.highlights.map((h) => <li><Text value={h} /></li>) : <li><Text fallback="highlight" /></li>}
+              </ul>
+              {exp.skills.length > 0 && <p class="cv__tags">{exp.skills.join(' · ')}</p>}
+            </li>
+          ))
+        }
+      </ol>
+    </section>
+
+    <section class="cv__section" aria-labelledby="cv-projects">
+      <h2 id="cv-projects" class="cv__h2">Projects</h2>
+      <ul class="cv__list" role="list">
+        {
+          data.projects.map((p) => (
+            <li class="cv__item">
+              <h3 class="cv__h3">
+                {isPlaceholder(p.link) || p.link === 'private' ? <Text value={p.name} fallback="Project" /> : <a href={p.link}>{p.name}</a>}
+              </h3>
+              <p><Text value={p.what} fallback="what it was" /></p>
+              <p class="cv__tags"><strong>AI angle:</strong> <Text value={p.ai_angle} fallback="AI angle" /></p>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <section class="cv__section" aria-labelledby="cv-skills">
+      <h2 id="cv-skills" class="cv__h2">Skills</h2>
+      <dl class="cv__skills">
+        {
+          Object.entries(data.skills).map(([group, items]) => (
+            <div>
+              <dt>{SKILL_GROUPS[group] ?? group}</dt>
+              <dd>{items.join(' · ')}</dd>
+            </div>
+          ))
+        }
+      </dl>
+    </section>
+
+    <section class="cv__section" aria-labelledby="cv-education">
+      <h2 id="cv-education" class="cv__h2">Education &amp; certifications</h2>
+      <ul class="cv__bullets">
+        {
+          data.education_and_certs.map((line) => {
+            const link = certLink(line);
+            return (
+              <li>
+                <Text value={certText(line)} />
+                {link && (
+                  <>
+                    {' '}
+                    — <a href={link} rel="noopener">view certificate</a>
+                  </>
+                )}
+              </li>
+            );
+          })
+        }
+      </ul>
+    </section>
+  </main>
+  <Footer name={identity.name} email={identity.email} linkedin={identity.linkedin} instagram={identity.instagram} />
+</Base>
+
+<style>
+  main:focus { outline: none; }
+  .cv {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-12);
+    max-width: 880px;
+    padding-block: var(--s-14) var(--s-24);
+  }
+  .cv__head {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--s-5) var(--s-6);
+    align-items: start;
+  }
+  .cv__name {
+    font-size: var(--fs-h2);
+    line-height: 1;
+  }
+  .cv__role {
+    margin-top: var(--s-2);
+    font-size: var(--fs-lead);
+    font-weight: 700;
+  }
+  .cv__meta,
+  .cv__dates,
+  .cv__tags { color: var(--ink-subtle); font-size: var(--fs-meta); }
+  .cv__meta { margin-top: var(--s-2); }
+  .cv__contact {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2) var(--s-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .cv__contact a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap);
+    font-weight: 700;
+  }
+  .cv__actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-3);
+  }
+  .cv__section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-4);
+  }
+  .cv__h2 {
+    font-size: var(--fs-h3);
+    padding-bottom: var(--s-2);
+    border-bottom: 2px solid var(--line);
+  }
+  .cv__h3 {
+    font-family: var(--font-body);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+  .cv__lead { color: var(--ink-muted); font-size: var(--fs-lead); line-height: 1.6; }
+  .cv__list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-6);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .cv__item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-2);
+  }
+  .cv__item-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--s-1) var(--s-4);
+  }
+  .cv__bullets {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-2);
+    margin: 0;
+    padding-left: 1.2em;
+    color: var(--ink-muted);
+  }
+  .cv__item a,
+  .cv__bullets a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap);
+  }
+  .cv__skills {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-3);
+    margin: 0;
+  }
+  .cv__skills dt { font-weight: 700; }
+  .cv__skills dd { margin: 0; color: var(--ink-muted); }
+
+  @media print {
+    :global(.site-header),
+    :global(.site-footer),
+    :global(.skip-link),
+    .cv__actions { display: none !important; }
+    .cv { padding: 0; gap: var(--s-6); max-width: none; }
+    :global(body) { background: none; }
+    /* Paper is white whatever the screen theme: use the system ink colour. */
+    :global(:root) { color-scheme: light !important; }
+    .cv, .cv :global(*) { color: CanvasText !important; }
+  }
+</style>

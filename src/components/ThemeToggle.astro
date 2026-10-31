@@ -1,0 +1,236 @@
+---
+const rays = Array.from({ length: 8 }, (_, i) => i * 45);
+---
+
+<button class="theme-toggle" type="button" data-theme-toggle aria-label="Colour theme">
+  <span class="tt-rays" aria-hidden="true">
+    {rays.map((deg) => <span class="tt-ray" style={`--a:${deg}deg`}></span>)}
+  </span>
+  <span class="tt-orb" aria-hidden="true">
+    <span class="tt-sphere clay-sphere clay--butter"></span>
+    <span class="tt-bite"></span>
+  </span>
+  <span class="tt-tip" aria-hidden="true" data-tip></span>
+</button>
+<span class="sr-only" role="status" data-theme-status></span>
+
+<style>
+  .theme-toggle {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: var(--tap);
+    height: var(--tap);
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--surface);
+    box-shadow: var(--ledge-sm) var(--line);
+    cursor: pointer;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform var(--dur-2) var(--ease-spring);
+  }
+  .theme-toggle:hover { transform: translateY(-3px); }
+  .theme-toggle:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--line); }
+  :global(.no-js) .theme-toggle { visibility: hidden; }
+
+  .tt-orb,
+  .tt-rays {
+    grid-area: 1 / 1;
+    width: 22px;
+    height: 22px;
+  }
+  .tt-orb {
+    position: relative;
+    border-radius: 50%;
+    overflow: hidden;
+    transition: transform var(--dur-3) var(--ease-spring);
+  }
+  .tt-sphere {
+    position: absolute;
+    inset: 0;
+    font-size: 11px;
+  }
+  /* The "bite": a disc in the button colour with a lilac rim, which slides over the sun to leave a crescent. */
+  .tt-bite {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--surface);
+    box-shadow: -2px 2px 0 var(--lilac);
+    transform: translate(120%, -120%);
+    transition: transform var(--dur-3) var(--ease-spring);
+  }
+  .tt-rays { position: relative; }
+  .tt-ray {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 3px;
+    height: 5px;
+    margin: -2.5px 0 0 -1.5px;
+    border-radius: var(--r-pill);
+    background: var(--butter-deep);
+    transform: rotate(var(--a)) translateY(-16px);
+    transition: transform var(--dur-3) var(--ease-spring);
+  }
+
+  :global(:root[data-theme='dark']) .tt-bite { transform: translate(34%, -30%); }
+  :global(:root[data-theme='dark']) .tt-ray { transform: rotate(var(--a)) translateY(-8px) scale(0); }
+  :global(:root[data-theme='dark']) .tt-orb { transform: rotate(-20deg); }
+  @media (prefers-color-scheme: dark) {
+    :global(:root:not([data-theme='light'])) .tt-bite { transform: translate(34%, -30%); }
+    :global(:root:not([data-theme='light'])) .tt-ray { transform: rotate(var(--a)) translateY(-8px) scale(0); }
+    :global(:root:not([data-theme='light'])) .tt-orb { transform: rotate(-20deg); }
+  }
+
+  .tt-tip {
+    position: absolute;
+    top: calc(100% + var(--s-3));
+    right: 0;
+    z-index: 30;
+    width: max-content;
+    max-width: 240px;
+    padding: var(--s-2) var(--s-3);
+    border-radius: var(--r-sm);
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    font-size: var(--fs-meta);
+    font-weight: 500;
+    line-height: 1.4;
+    text-align: left;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-spring);
+  }
+  .theme-toggle:hover .tt-tip,
+  .theme-toggle:focus-visible .tt-tip,
+  .theme-toggle.is-tip .tt-tip {
+    opacity: 1;
+    transform: none;
+  }
+</style>
+
+<script>
+  type Pref = 'light' | 'dark' | 'system';
+
+  const KEY = 'theme';
+  const LONG_PRESS_MS = 550;
+  const root = document.documentElement;
+  const osDark = matchMedia('(prefers-color-scheme: dark)');
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const button = document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
+  const tip = button?.querySelector<HTMLElement>('[data-tip]');
+  const status = document.querySelector<HTMLElement>('[data-theme-status]');
+  const metas = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
+
+  const readPref = (): Pref => {
+    try {
+      const v = localStorage.getItem(KEY);
+      return v === 'light' || v === 'dark' ? v : 'system';
+    } catch {
+      return 'system';
+    }
+  };
+  const resolve = (pref: Pref) => (pref === 'system' ? (osDark.matches ? 'dark' : 'light') : pref);
+
+  function render() {
+    if (!button || !tip) return;
+    const pref = readPref();
+    const current = resolve(pref);
+    const next = current === 'dark' ? 'light' : 'dark';
+    const name = pref === 'system' ? `System (${current})` : current === 'dark' ? 'Dark' : 'Light';
+    button.setAttribute('aria-label', `Colour theme: ${name}. Switch to ${next}`);
+    tip.textContent =
+      pref === 'system'
+        ? `${name} · click for ${next}`
+        : `${name} · hold, right-click or Shift+click for System`;
+  }
+
+  function apply(pref: Pref) {
+    try {
+      if (pref === 'system') localStorage.removeItem(KEY);
+      else localStorage.setItem(KEY, pref);
+    } catch {}
+    if (pref === 'system') delete root.dataset.theme;
+    else root.dataset.theme = pref;
+    metas.forEach((m) => {
+      const own = m.media.includes('dark') ? m.dataset.dark : m.dataset.light;
+      m.content = (pref === 'system' ? own : pref === 'dark' ? m.dataset.dark : m.dataset.light) ?? m.content;
+    });
+    render();
+  }
+
+  // A view-transition snapshot of a page that is still scrolling is costly and looks odd: switch instantly instead.
+  let lastScroll = 0;
+  addEventListener('scroll', () => (lastScroll = performance.now()), { passive: true });
+
+  function switchTo(pref: Pref) {
+    if (!button) return;
+    const before = resolve(readPref());
+    const scrolling = performance.now() - lastScroll < 300;
+    if (!document.startViewTransition || reducedMotion.matches || scrolling || resolve(pref) === before) {
+      apply(pref);
+      return;
+    }
+    const box = button.getBoundingClientRect();
+    const x = box.left + box.width / 2;
+    const y = box.top + box.height / 2;
+    const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+    const transition = document.startViewTransition(() => apply(pref));
+    transition.ready.then(() => {
+      const css = getComputedStyle(root);
+      root.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+        {
+          duration: parseFloat(css.getPropertyValue('--dur-3')) || 500,
+          easing: css.getPropertyValue('--ease-out').trim() || 'ease-out',
+          pseudoElement: '::view-transition-new(root)',
+        },
+      );
+    });
+  }
+
+  function toSystem() {
+    switchTo('system');
+    if (status) status.textContent = 'Theme follows your system setting';
+    button?.classList.add('is-tip');
+    setTimeout(() => button?.classList.remove('is-tip'), 1800);
+  }
+
+  if (button) {
+    let timer = 0;
+    let longPressed = false;
+    const cancel = () => clearTimeout(timer);
+
+    button.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      longPressed = false;
+      timer = window.setTimeout(() => {
+        longPressed = true;
+        toSystem();
+      }, LONG_PRESS_MS);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach((t) => button.addEventListener(t, cancel, { passive: true }));
+    button.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      cancel();
+      toSystem();
+    });
+    button.addEventListener('click', (e) => {
+      if (longPressed) {
+        longPressed = false;
+        return;
+      }
+      if (e.shiftKey) return toSystem();
+      const next = resolve(readPref()) === 'dark' ? 'light' : 'dark';
+      switchTo(next);
+      if (status) status.textContent = `${next === 'dark' ? 'Dark' : 'Light'} theme`;
+    });
+    osDark.addEventListener('change', render);
+    apply(readPref());
+  }
+</script>

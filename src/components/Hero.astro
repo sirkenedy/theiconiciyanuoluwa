@@ -1,0 +1,303 @@
+---
+import ClayObject from './ClayObject.astro';
+import TwinOrb from './TwinOrb.astro';
+import Icon from './Icon.astro';
+import Text from './Text.astro';
+import { isPlaceholder } from '../lib/resume-parse.ts';
+import type { Resume } from '../lib/resume-parse.ts';
+
+interface Props {
+  identity: Resume['identity'];
+  faq: Resume['faq'];
+}
+const { identity, faq } = Astro.props;
+
+const firstName = identity.name.split(' ')[0];
+const lead = isPlaceholder(identity.one_liner)
+  ? identity.one_liner
+  : identity.one_liner.charAt(0).toLowerCase() + identity.one_liner.slice(1);
+const tones = ['peach', 'lilac', 'mint', 'butter'];
+
+// Without JS the chips are radio buttons; :has() shows the matching answer. Milestone 5 upgrades this card into the chat.
+const answerCss = faq
+  .map((_, i) => `.twin:has(#twin-q-${i}:checked):not(.has-log) .twin__answer[data-q="${i}"]{display:block}`)
+  .join('');
+---
+
+<section id="top" class="container hero" aria-labelledby="hero-title" data-idle>
+  <div class="hero__copy exT">
+    <p class="badge hl1">
+      <span class="badge__icon"><Icon name="sparkle" size={14} /></span>
+      <Text value={identity.headline} fallback="headline" />
+    </p>
+    <h1 id="hero-title" class="hero__title">
+      <span class="hl1">I shape AI</span>
+      <span class="hl2 hero__accent">into products</span>
+      <span class="hl3">people love.</span>
+    </h1>
+    <p class="hero__lead hl3">I'm {firstName} — <Text value={lead} fallback="one line about what you build" /></p>
+    <div class="hero__ctas hl3">
+      <a class="btn btn--lg btn--primary" href="#journey">See my journey <Icon name="arrow-right" size={18} /></a>
+      <a class="btn btn--lg btn--secondary" href="#resume">Download résumé</a>
+    </div>
+
+    <div class="twin hl3" aria-labelledby="twin-title">
+      <div class="twin__head">
+        <TwinOrb size={32} />
+        <h2 id="twin-title" class="twin__title">Ask my AI twin</h2>
+        <span class="twin__dots" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
+      </div>
+      <fieldset class="twin__chips">
+        <legend class="sr-only">Pick a question</legend>
+        {
+          faq.map((f, i) => (
+            <>
+              <input class="twin__radio sr-only" type="radio" name="twin-q" id={`twin-q-${i}`} checked={i === 0} />
+              <label class="chip" for={`twin-q-${i}`}>{f.q}</label>
+            </>
+          ))
+        }
+      </fieldset>
+      {
+        faq.map((f, i) => (
+          <p class={`twin__answer answer tint--${tones[i % tones.length]}`} data-q={i}>
+            <Text value={f.a} fallback="answer" />
+          </p>
+        ))
+      }
+      <div class="twin-log" data-twin-log role="log" aria-live="off" aria-label="Conversation with my AI twin"></div>
+      <form class="twin-form" data-twin-form action="#" autocomplete="off">
+        <label class="twin-form__label" for="twin-input">Ask anything else</label>
+        <div class="twin-form__row">
+          <input id="twin-input" class="twin-form__input" name="q" type="text" maxlength="500" placeholder="Ask about my work, projects or how I use AI…" enterkeyhint="send" />
+          <button class="btn btn--primary twin-form__send is-send" type="submit" aria-label="Send question"><Icon name="arrow-right" size={18} /></button>
+          <button class="btn btn--secondary twin-form__send is-stop" type="button" data-twin-stop aria-label="Stop answering"><Icon name="stop" size={16} /></button>
+        </div>
+        <p class="twin-form__note">
+          <span>AI twin · answers from {firstName}'s résumé · may be imperfect</span>
+          <a href="#ai-twin-note">What gets logged?</a>
+        </p>
+      </form>
+      <div class="twin__handoff" data-twin-handoff></div>
+      <p class="sr-only" role="status" data-twin-status></p>
+    </div>
+  </div>
+
+  <div class="hero-stage" aria-hidden="true">
+    <span class="stage__halo"></span>
+    <span class="stage__orbit spin"></span>
+    <div class="obj obj--sphere exA" data-depth="0.6" data-tone="peach"><div class="f1"><ClayObject tone="peach" shade="28cqw" class="squish" /></div></div>
+    <div class="obj obj--bubble exB" data-depth="1" data-tone="lilac"><div class="f2"><ClayObject shape="bubble" tone="lilac" shade="2.9cqw" class="squish" /></div></div>
+    <div class="obj obj--sparkle exC" data-depth="0.8" data-tone="mint"><span class="obj__pad"></span><div class="f3"><ClayObject shape="sparkle" tone="mint" class="squish" /></div></div>
+    <div class="obj obj--ring exD" data-depth="0.45" data-tone="butter"><div class="f2"><ClayObject shape="ring" tone="butter" shade="2.6cqw" class="squish" /></div></div>
+    <div class="obj obj--card exB" data-depth="0.9"><div class="f1 f-delay-8"><ClayObject shape="card" label="PRD · v3" shade="2.7cqw" class="squish" /></div></div>
+    <div class="obj obj--cursor exA" data-depth="1"><span class="obj__pad"></span><div class="f3 f-delay-4"><ClayObject shape="cursor" /></div></div>
+    <div class="obj obj--pill exC" data-depth="0.7"><div class="f2"><ClayObject shape="pill" label="+ AI" shade="max(12px, 3.2cqw)" /></div></div>
+  </div>
+</section>
+
+<style is:inline set:html={`@supports selector(:has(*)){.twin__answer{display:none}${answerCss}}`}></style>
+
+<style>
+  .hero {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-10);
+    min-height: 760px;
+    padding-block: var(--s-14) 80px;
+  }
+  .hero__copy {
+    flex: 1 1 460px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-6);
+  }
+
+  .badge {
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-2) 14px var(--s-2) var(--s-2);
+    border-radius: var(--r-pill);
+    background: var(--surface);
+    box-shadow: var(--ledge-sm) var(--line);
+    font-size: var(--fs-label);
+    font-weight: 500;
+  }
+  .badge__icon {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--mint);
+    color: var(--on-pastel);
+  }
+
+  .hero__title {
+    display: flex;
+    flex-direction: column;
+    font-size: var(--fs-hero);
+    line-height: 0.98;
+    letter-spacing: -0.035em;
+  }
+  .hero__title span { display: block; }
+  .hero__accent { color: var(--ink-accent); }
+  .hero__lead {
+    max-width: 520px;
+    font-size: var(--fs-lead);
+    color: var(--ink-muted);
+  }
+  .hero__ctas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-3);
+  }
+
+  .twin {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 540px;
+    padding: 18px;
+    border-radius: var(--r-xl);
+    background: var(--surface);
+    box-shadow:
+      var(--ledge-lg) var(--line),
+      0 20px 40px var(--clay-drop);
+  }
+  .twin__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .twin__title {
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+  .twin__dots {
+    display: flex;
+    gap: var(--s-1);
+    margin-left: auto;
+  }
+  .twin__dots .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--lilac-deep);
+  }
+  .twin__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap);
+    padding: 0 14px;
+    border-radius: var(--r-pill);
+    background: var(--bg);
+    font-size: var(--fs-label);
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      transform var(--dur-2) var(--ease-spring),
+      background-color var(--dur-1) var(--ease-out);
+  }
+  .chip:hover { transform: translateY(-2px); }
+  .twin__radio:checked + .chip {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+  }
+  .twin__radio:focus-visible + .chip {
+    outline: 2px solid var(--lilac-deep);
+    outline-offset: 3px;
+  }
+  /* Empty slots must not take a flex gap, or mounting the chat would nudge the hero. */
+  .twin__handoff:empty { display: none; }
+  /* No overscroll containment here: once the log is at its end, the wheel must carry on scrolling the page. */
+  .twin :global(.twin-log) {
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  .answer {
+    padding: 14px var(--s-4);
+    border-radius: var(--r-md) var(--r-md) var(--r-md) 6px;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  /* ---------- clay stage ---------- */
+  .hero-stage {
+    flex: 1 1 420px;
+    position: relative;
+    width: 100%;
+    max-width: 560px;
+    min-width: 0;
+    margin: 0 auto;
+    aspect-ratio: 1;
+    container-type: inline-size;
+  }
+  .stage__halo,
+  .stage__orbit {
+    position: absolute;
+    border-radius: 50%;
+  }
+  .stage__halo { inset: 8%; background: var(--surface-sunk); }
+  .stage__orbit { inset: 2%; border: 2px dashed var(--line); }
+  .obj {
+    position: absolute;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  :global(.js) .obj { cursor: grab; }
+  .obj:global(.is-grabbed) { z-index: 5; cursor: grabbing; }
+  .hero-stage:global(.is-live) .obj > div { will-change: translate; }
+  .hero-stage :global(.puff) {
+    position: absolute;
+    left: -7px;
+    top: -7px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--surface-alt);
+    box-shadow: inset -2px -2px 4px var(--clay-drop);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .obj > div { width: 100%; height: 100%; position: relative; }
+  .obj__pad {
+    position: absolute;
+    left: 10%;
+    right: 10%;
+    bottom: -14%;
+    height: 14%;
+    border-radius: 50%;
+    background: var(--clay-drop);
+  }
+  .obj--sphere { left: 26%; top: 28%; width: 46%; height: 46%; }
+  .obj--bubble { right: 2%; top: 8%; width: 34%; height: 25%; }
+  .obj--sparkle { left: 4%; top: 12%; width: 20%; height: 20%; }
+  .obj--ring { left: 6%; bottom: 10%; width: 22%; height: 22%; }
+  .obj--card { right: 6%; bottom: 12%; width: 30%; height: 30%; }
+  .obj--cursor { left: 60%; top: 52%; width: 12%; height: 15%; }
+  .obj--pill { left: 34%; bottom: 4%; }
+
+  @media (max-width: 760px) {
+    .hero { min-height: 0; padding-top: var(--s-6); }
+    .hero-stage {
+      order: -1;
+      flex-basis: auto;
+      width: 80vw;
+    }
+  }
+</style>

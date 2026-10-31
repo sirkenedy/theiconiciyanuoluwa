@@ -29,7 +29,11 @@ A single-page portfolio for Iyanuoluwa Anota (nickname theIconicIyanuoluwa), a p
 - Secrets live only in `.env` (never committed). `ANTHROPIC_API_KEY` is used server-side only.
 - The owner's name and contact details never go to the Claude API: the server uses tokenised `resume.twin.json`; the browser expands `{{NAME}}` etc. (prompt.md §7.4).
 
-## Commands (fill in once scaffolded)
-- dev: `npm run dev`
-- build: `npm run build && npm run preview`
-- checks: `npm run check` (astro check + lint) · `npm run test:twin` (chat evals) · `npm run lh` (Lighthouse CI)
+## Commands
+- dev: `npm run dev` (regenerates `src/content/resume.json` from `ai/resume.template.md` first)
+- build: `npm run build && npm run preview` (preview serves `.vercel/output/static` with brotli on :4321; `astro preview` isn't supported by the Vercel adapter)
+- checks: `npm run check` (astro check + raw-colour lint) · `npm run size` (bundle budgets + secret/name grep) · `npm run lh` (Lighthouse mobile ×3, median) · `npm run test:a11y` (Playwright: axe light/dark × 4 widths, JS-off, reduced motion, motion rules, forced fallback, fonts, console, theme flash) · `npm run perf:scroll` (INP + long tasks while scrolling, 4× CPU)
+- `npm run test:unit` (twin privacy + stream helpers) · `npm run test:api` (/api/react vs fake Upstash, /api/twin vs fake Claude API) · `npm run test:twin` (28 live evals vs the real model; needs ANTHROPIC_API_KEY in .env, or EVAL_URL)
+- AI twin: model `claude-haiku-5-5` (no temperature — Haiku 5.5 rejects non-default sampling), thinking off + effort low for first-token speed; server only ever sees tokenised `src/content/twin-prompt.ts`
+- Interactive code lives in `src/islands/*.ts` (plain TS, one entry `main.ts`); shared spring in `physics.ts`. Env vars: see `.env.example`
+- Fonts are pre-built WOFF2 in `public/fonts/` (fonttools instance + Latin subset); fallback metrics live in `src/styles/fonts.css`

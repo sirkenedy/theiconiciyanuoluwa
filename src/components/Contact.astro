@@ -1,0 +1,253 @@
+---
+import Icon, { type IconName } from './Icon.astro';
+import SectionLanding from './SectionLanding.astro';
+import Text from './Text.astro';
+import { isPlaceholder } from '../lib/resume-parse.ts';
+import { handleFromUrl } from '../lib/text.ts';
+import type { Resume } from '../lib/resume-parse.ts';
+
+interface Props {
+  identity: Resume['identity'];
+}
+const { identity } = Astro.props;
+
+const display = (url: string, fmt: (u: string) => string) => (isPlaceholder(url) ? url : fmt(url));
+const channels: { label: string; href: string; value: string; icon: IconName; tone: string; external: boolean }[] = [
+  { label: 'Email', href: `mailto:${identity.email}`, value: identity.email, icon: 'mail', tone: 'peach', external: false },
+  { label: 'LinkedIn', href: identity.linkedin, value: display(identity.linkedin, (u) => `linkedin.com/in/${handleFromUrl(u)}`), icon: 'linkedin', tone: 'lilac', external: true },
+  { label: 'Instagram', href: identity.instagram, value: display(identity.instagram, (u) => `@${handleFromUrl(u)}`), icon: 'instagram', tone: 'mint', external: true },
+];
+const reactions: { key: string; label: string; icon: IconName }[] = [
+  { key: 'love', label: 'Love', icon: 'heart' },
+  { key: 'insightful', label: 'Insightful', icon: 'sparkle' },
+  { key: 'hire', label: 'Hire-worthy', icon: 'bolt' },
+  { key: 'fun', label: 'Fun', icon: 'smile' },
+];
+const emailOk = !isPlaceholder(identity.email);
+---
+
+<section id="contact" class="contact cv-auto" aria-labelledby="contact-title">
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee__row mq-l">
+      <span>Let's build</span><span class="star star--lilac"><Icon name="sparkle" size={64} /></span><span>something</span><span class="accent">intelligent</span><span class="star star--lilac"><Icon name="sparkle" size={64} /></span><span>Let's build</span><span>something</span>
+    </div>
+    <div class="marquee__row marquee__row--outline mq-r">
+      <span>Say hello</span><span class="star"><Icon name="sparkle" size={64} /></span><span>Say hello</span><span class="star"><Icon name="sparkle" size={64} /></span><span>Say hello</span><span class="star"><Icon name="sparkle" size={64} /></span><span>Say hello</span>
+    </div>
+  </div>
+
+  <div class="container contact__body">
+    <div class="contact__main">
+      <SectionLanding id="contact-title" label="05 · Contact" title="Got a product idea, a role, or a model that needs a home?" tone="lilac" land="l" compact />
+      {
+        emailOk ? (
+          <>
+            <a class="contact__email rise" href={`mailto:${identity.email}`}>{identity.email}</a>
+            <button class="btn btn--secondary copy-email rise" type="button" data-copy={identity.email}>
+              <Icon name="copy" size={18} />Copy email
+            </button>
+          </>
+        ) : (
+          <span class="contact__email rise"><Text value={identity.email} /></span>
+        )
+      }
+    </div>
+
+    <div class="contact__side">
+      <ul class="channels" role="list">
+        {
+          channels.map((c) => (
+            <li class="from-r">
+              {isPlaceholder(c.value) || isPlaceholder(c.href) ? (
+                <span class="channel">
+                  <span class={`channel__icon tile--${c.tone}`}><Icon name={c.icon} size={22} /></span>
+                  <span class="channel__text"><span class="channel__label">{c.label}</span><span class="channel__value"><Text value={c.value} /></span></span>
+                </span>
+              ) : (
+                <a class="channel btn" href={c.href} data-magnetic {...(c.external ? { rel: 'me noopener', target: '_blank' } : {})}>
+                  <span class={`channel__icon tile--${c.tone}`}><Icon name={c.icon} size={22} /></span>
+                  <span class="channel__text"><span class="channel__label">{c.label}</span><span class="channel__value">{c.value}</span></span>
+                </a>
+              )}
+            </li>
+          ))
+        }
+      </ul>
+
+      <div class="feel from-b">
+        <p class="feel__title" id="feel-title">How did this portfolio feel?</p>
+        <div class="feel__buttons" role="group" aria-labelledby="feel-title">
+          {
+            reactions.map((r) => (
+              <button class="rx" type="button" aria-pressed="false" data-rx={`site:${r.key}`}>
+                <Icon name={r.icon} size={16} />{r.label} <span data-count>0</span>
+              </button>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" data-toast role="status" aria-live="polite"></div>
+</section>
+
+<style>
+  .contact {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-12);
+    padding-block: var(--s-24) 72px;
+    overflow: hidden;
+    background: var(--surface-sunk);
+  }
+  .marquee {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-1);
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(56px, 9vw, 140px);
+    line-height: 1;
+    letter-spacing: -0.04em;
+    white-space: nowrap;
+  }
+  .marquee__row {
+    display: flex;
+    align-items: center;
+    gap: var(--s-10);
+  }
+  .marquee__row--outline {
+    color: transparent;
+    -webkit-text-stroke: 2px var(--ink);
+  }
+  .star { display: inline-flex; }
+  .star :global(svg) { width: 0.5em; height: 0.5em; stroke-width: 2.4; }
+  .star--lilac { color: var(--ink-accent); }
+  .marquee__row--outline .star { color: var(--ink); }
+  .accent { color: var(--ink-accent); }
+
+  .contact__body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--s-8);
+  }
+  .contact__main {
+    flex: 1 1 420px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-5);
+  }
+  .contact__email {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap);
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(24px, 3vw, 40px);
+    letter-spacing: -0.02em;
+    text-decoration-thickness: 3px;
+    text-underline-offset: 8px;
+    overflow-wrap: anywhere;
+  }
+  .copy-email { align-self: flex-start; }
+  :global(.no-js) .copy-email { display: none; }
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(var(--s-6) + env(safe-area-inset-bottom));
+    z-index: 40;
+    padding: var(--s-3) var(--s-5);
+    border-radius: var(--r-pill);
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    box-shadow: var(--ledge-sm) var(--btn-primary-ledge);
+    font-weight: 700;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, 16px) scale(0.9);
+    transition:
+      opacity var(--dur-1) var(--ease-out),
+      transform var(--dur-2) var(--ease-spring);
+  }
+  .toast:empty { visibility: hidden; }
+  .toast:global(.is-on) {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  .contact__side {
+    flex: 1 1 320px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .channels {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .channel {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 14px;
+    min-height: 64px;
+    padding: var(--s-4) var(--s-5);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: var(--ledge-md) var(--line);
+    text-decoration: none;
+    font-size: inherit;
+    font-weight: inherit;
+  }
+  .channel__icon {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: var(--tap);
+    height: var(--tap);
+    border-radius: var(--r-sm);
+    color: var(--on-pastel);
+  }
+  .tile--peach { background: var(--peach); }
+  .tile--lilac { background: var(--lilac); }
+  .tile--mint { background: var(--mint); }
+  .channel__text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .channel__label {
+    font-size: 17px;
+    font-weight: 700;
+  }
+  .channel__value {
+    font-size: var(--fs-label);
+    color: var(--ink-subtle);
+    overflow-wrap: anywhere;
+  }
+  .feel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-3);
+    margin-top: var(--s-2);
+    padding: var(--s-4) 18px;
+    border-radius: var(--r-lg);
+    background: var(--surface);
+  }
+  .feel__title {
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .feel__buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+  }
+</style>

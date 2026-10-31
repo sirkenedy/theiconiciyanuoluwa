@@ -1,0 +1,67 @@
+---
+import '../../design/tokens.css';
+import '../styles/fonts.css';
+import '../styles/base.css';
+import '../styles/motion.css';
+import '../styles/twin.css';
+import { darkTokens, lightTokens } from '../lib/tokens';
+
+interface Props {
+  title: string;
+  description: string;
+  /** Pages that must not be indexed (the 404). */
+  noindex?: boolean;
+}
+const { title, description, noindex = false } = Astro.props;
+
+// theme-color must be a literal; it comes from the tokens so they stay the single source.
+const bgLight = lightTokens.bg;
+const bgDark = darkTokens.bg;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const ogImage = new URL('/og.png', Astro.site);
+// Prerender likely next pages on hover (Chromium); other browsers ignore this.
+const speculation = JSON.stringify({ prerender: [{ where: { href_matches: ['/blog/*', '/resume/'] }, eagerness: 'moderate' }] });
+---
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script is:inline>
+      (function () {
+        var d = document.documentElement;
+        d.className = 'js';
+        if (!CSS.supports('animation-timeline: view()') && !matchMedia('(prefers-reduced-motion: reduce)').matches) d.classList.add('no-sda');
+        try { var t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') d.dataset.theme = t; } catch (e) {}
+      })();
+    </script>
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content={bgLight} data-light={bgLight} data-dark={bgDark} />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content={bgDark} data-light={bgLight} data-dark={bgDark} />
+    <link rel="preload" href="/fonts/bricolage-800-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={title.split(' — ')[0]} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    {!noindex && <meta property="og:url" content={canonical} />}
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="I shape AI into products people love — Soft Clay portfolio card" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <script type="speculationrules" set:html={speculation} />
+    <slot name="head" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <slot />
+    <script>
+      import '../islands/main.ts';
+    </script>
+  </body>
+</html>

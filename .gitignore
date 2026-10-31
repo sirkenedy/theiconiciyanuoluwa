@@ -10,3 +10,8 @@ dist/
 test-results/
 playwright-report/
 reports/
+src/content/resume.json
+src/content/reaction-keys.ts
+src/content/resume.twin.json
+src/content/twin-prompt.ts
+src/content/twin-client.json

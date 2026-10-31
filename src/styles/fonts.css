@@ -1,0 +1,34 @@
+/* Self-hosted, Latin-subset WOFF2. Bricolage is pinned to wght 800 / wdth 100 and keeps its opsz axis;
+   DM Sans keeps wght 400–700 at opsz 14. Fallback overrides are measured against Arial (Bold) so the swap causes no shift.
+   Bricolage's width varies with opsz (93% of Arial Bold at 96, 102% at 24); 99% centres it on the 36–64px headings. */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/fonts/bricolage-800-latin.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "DM Sans";
+  src: url("/fonts/dm-sans-latin.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Bricolage Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT"), local("Helvetica Neue Bold"), local("Roboto Bold");
+  font-weight: 800;
+  size-adjust: 99%;
+  ascent-override: 93.94%;
+  descent-override: 27.27%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "DM Sans Fallback";
+  src: local("Arial"), local("ArialMT"), local("Helvetica Neue"), local("Roboto");
+  size-adjust: 105.53%;
+  ascent-override: 94.01%;
+  descent-override: 29.38%;
+  line-gap-override: 0%;
+}

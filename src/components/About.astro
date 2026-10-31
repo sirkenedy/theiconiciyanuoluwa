@@ -1,0 +1,105 @@
+---
+import Icon, { type IconName } from './Icon.astro';
+import SectionLanding from './SectionLanding.astro';
+import Text from './Text.astro';
+import type { Resume } from '../lib/resume-parse.ts';
+
+interface Props {
+  about: string;
+  skills: Resume['skills'];
+}
+const { about, skills } = Astro.props;
+
+const product = skills.product ?? [];
+const ai = skills.ai ?? [];
+const tools = skills.tools ?? [];
+
+// Each stage of the PM loop lists the résumé skills that belong to it; anything not listed falls through to the chips.
+const STAGES: { title: string; tone: 'peach' | 'lilac' | 'mint' | 'butter'; icon: IconName; from: string[]; picks: string[]; dir: string }[] = [
+  { title: 'Discover', tone: 'peach', icon: 'search', dir: 'from-l', from: product, picks: ['Product Discovery', 'User Interviews', 'Usability Testing', 'Competitive Analysis', 'Customer Journey Mapping', 'Jobs-to-be-Done'] },
+  { title: 'Define', tone: 'lilac', icon: 'doc', dir: 'from-t', from: product, picks: ['Product Strategy', 'Roadmapping', 'PRDs & User Stories', 'Prioritisation (RICE, MoSCoW)'] },
+  { title: 'Build with AI', tone: 'mint', icon: 'sparkle', dir: 'from-b', from: ai, picks: ai },
+  { title: 'Ship & learn', tone: 'butter', icon: 'arrow-up-right', dir: 'from-r', from: product, picks: ['Go-to-Market', 'Product Metrics & KPIs', 'A/B Testing', 'Funnel & Cohort Analysis'] },
+];
+const cards = STAGES.map((s) => ({ ...s, items: s.picks.filter((p) => s.from.includes(p)) }));
+const used = new Set(cards.flatMap((c) => c.items));
+const chips = [...product.filter((p) => !used.has(p)), ...tools];
+---
+
+<section id="about" class="container about cv-auto" aria-labelledby="about-title">
+  <SectionLanding id="about-title" label="01 · About me" title="I live where users, data and models meet." tone="peach" land="l" />
+  <p class="about__lead rise"><Text value={about} fallback="2–3 sentences about who you are as a PM" /></p>
+
+  <ul class="about__cards" role="list">
+    {
+      cards.map((c) => (
+        <li class={`about__cell ${c.dir}`}>
+          <div class={`card card--${c.tone} about__card`} data-tilt data-glance={c.tone}>
+            <span class={`tile tile--${c.tone}`}><Icon name={c.icon} size={24} /></span>
+            <h3 class="about__card-title">{c.title}</h3>
+            <p class="about__card-text">
+              <Text value={c.items.join(' · ')} fallback="skills for this stage" />
+            </p>
+          </div>
+        </li>
+      ))
+    }
+  </ul>
+
+  <ul class="about__chips from-b" role="list" aria-label="More skills and tools">
+    {chips.length ? chips.map((c) => <li class="skill-chip">{c}</li>) : <li class="skill-chip"><Text fallback="Your skill" /></li>}
+  </ul>
+</section>
+
+<style>
+  .about {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-12);
+    padding-block: var(--s-24);
+  }
+  .about__lead {
+    max-width: 760px;
+    font-size: 20px;
+    line-height: 1.6;
+    color: var(--ink-muted);
+  }
+  .about__cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--s-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .about__cell { display: flex; }
+  .about__card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+    padding: 26px;
+  }
+  .tile {
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    border-radius: var(--r-md);
+    color: var(--on-pastel);
+  }
+  .tile--peach { background: var(--peach); }
+  .tile--lilac { background: var(--lilac); }
+  .tile--mint { background: var(--mint); }
+  .tile--butter { background: var(--butter); }
+  .about__card-title { font-size: var(--fs-h3); }
+  .about__card-text { color: var(--ink-muted); }
+  .about__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+</style>

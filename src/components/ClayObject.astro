@@ -1,0 +1,160 @@
+---
+type Tone = 'peach' | 'lilac' | 'mint' | 'butter';
+type Shape = 'sphere' | 'bubble' | 'sparkle' | 'ring' | 'card' | 'cursor' | 'pill';
+
+interface Props {
+  shape?: Shape;
+  tone?: Tone;
+  /** Fixed size in px. Omit to fill the parent (hero stage objects are sized by their wrapper). */
+  size?: number;
+  /** Lighting scale: the clay recipe's shadows are em-based. Defaults to half the size. */
+  shade?: string;
+  label?: string;
+  class?: string;
+}
+const { shape = 'sphere', tone = 'peach', size, shade, label, class: className } = Astro.props;
+const style = [size ? `--size:${size}px` : '', shade ? `--shade:${shade}` : ''].filter(Boolean).join(';');
+const toneClass = `clay--${tone}`;
+---
+
+{shape === 'sphere' && <span class:list={['clay', 'clay-sphere', toneClass, className]} style={style} aria-hidden="true" />}
+
+{
+  shape === 'bubble' && (
+    <span class:list={['clay', 'clay-bubble', toneClass, className]} style={style} aria-hidden="true">
+      <span class="bubble__dot" />
+      <span class="bubble__dot" />
+      <span class="bubble__dot" />
+      <span class="bubble__tail" />
+    </span>
+  )
+}
+
+{shape === 'sparkle' && <span class:list={['clay', 'clay-sparkle', toneClass, className]} style={style} aria-hidden="true" />}
+
+{shape === 'ring' && <span class:list={['clay', 'clay-ring', toneClass, className]} style={style} aria-hidden="true" />}
+
+{shape === 'cursor' && <span class:list={['clay', 'clay-cursor', className]} style={style} aria-hidden="true" />}
+
+{
+  shape === 'card' && (
+    <span class:list={['clay', 'clay-card', className]} style={style} aria-hidden="true">
+      <span class="card__title">{label}</span>
+      <span class="card__line" />
+      <span class="card__line card__line--80" />
+      <span class="card__line card__line--accent" />
+    </span>
+  )
+}
+
+{shape === 'pill' && <span class:list={['clay', 'clay-pill', className]} style={style} aria-hidden="true">{label}</span>}
+
+<style>
+  .clay {
+    display: block;
+    flex: none;
+    width: var(--size, 100%);
+    height: var(--size, 100%);
+    font-size: var(--shade, calc(var(--size, 24px) * 0.5));
+  }
+
+  .clay-bubble {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6em;
+    border-radius: 2.4em;
+    background: radial-gradient(circle at 30% 25%, var(--hi) 0%, var(--fill) 55%, var(--deep) 100%);
+    box-shadow:
+      inset -0.7em -0.95em 1.55em rgb(0 0 0 / calc(var(--clay-shade) * 0.6)),
+      0 1.4em 1.8em var(--clay-drop),
+      var(--clay-rim);
+  }
+  .bubble__dot {
+    width: 0.85em;
+    height: 0.85em;
+    border-radius: 50%;
+    background: var(--hi);
+  }
+  .bubble__dot:nth-child(2) { opacity: 0.8; }
+  .bubble__dot:nth-child(3) { opacity: 0.6; }
+  .bubble__tail {
+    position: absolute;
+    left: 22%;
+    bottom: -0.85em;
+    z-index: -1;
+    width: 1.8em;
+    height: 1.8em;
+    border-radius: 0.36em;
+    background: var(--deep);
+    transform: rotate(45deg);
+  }
+
+  .clay-sparkle {
+    background: radial-gradient(circle at 40% 35%, var(--hi) 0%, var(--fill) 50%, var(--deep) 100%);
+    clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
+  }
+
+  /* A torus: the radial bands give the tube a lit top edge and a shaded inner/outer rim. */
+  .clay-ring {
+    border-radius: 50%;
+    background: radial-gradient(
+      closest-side,
+      transparent 58%,
+      var(--deep) 60%,
+      var(--fill) 68%,
+      var(--hi) 76%,
+      var(--fill) 86%,
+      var(--deep) 100%
+    );
+    box-shadow: 0 0.9em 1.3em var(--clay-drop);
+  }
+
+  .clay-cursor {
+    background: linear-gradient(145deg, var(--ink-subtle) 0%, var(--ink) 70%);
+    clip-path: polygon(0% 0%, 100% 62%, 56% 66%, 78% 100%, 62% 100%, 42% 70%, 0% 92%);
+  }
+
+  .clay-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10%;
+    padding: 16% 14%;
+    border-radius: 1.3em;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow:
+      0 0.65em 0 -0.13em var(--line),
+      0 1.7em 2em var(--clay-drop);
+    transform: rotate(8deg);
+  }
+  .card__title {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 1em;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .card__line {
+    height: 0.55em;
+    border-radius: 0.4em;
+    background: var(--surface-alt);
+  }
+  .card__line--80 { width: 80%; }
+  .card__line--accent { width: 55%; background: var(--lilac); }
+
+  .clay-pill {
+    width: auto;
+    height: auto;
+    padding: 0.55em 1em;
+    border-radius: var(--r-pill);
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    box-shadow: 0 0.45em 0 var(--btn-primary-ledge);
+    font-family: var(--font-display);
+    font-weight: 800;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+</style>

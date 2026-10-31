@@ -1,0 +1,227 @@
+---
+import ClayObject from './ClayObject.astro';
+import SectionLanding from './SectionLanding.astro';
+import Text from './Text.astro';
+import { isCurrent, startYear } from '../lib/text.ts';
+import type { Resume } from '../lib/resume-parse.ts';
+
+interface Props {
+  experience: Resume['experience'];
+}
+const { experience } = Astro.props;
+
+const TONES = ['peach', 'lilac', 'mint', 'butter'] as const;
+// The résumé lists newest first; the road reads left to right, oldest first.
+const stops = [...experience].reverse().map((exp, i) => ({
+  ...exp,
+  tone: TONES[i % TONES.length],
+  current: isCurrent(exp.dates),
+  year: isCurrent(exp.dates) ? 'Now' : startYear(exp.dates),
+}));
+---
+
+<section id="journey" class="journey cv-auto" aria-labelledby="journey-title">
+  <div class="container">
+    <SectionLanding id="journey-title" label="02 · My journey" title="The roadmap so far." tone="lilac" land="r" inverse>
+      <p class="journey__hint rise">Keep scrolling — the road moves sideways.</p>
+    </SectionLanding>
+  </div>
+
+  <div class="track-wrap" tabindex="0" role="region" aria-label="Career roadmap, oldest to newest">
+    <ol class="track" role="list">
+      {
+        stops.map((s) => (
+          <li id={s.id} class:list={['stop', `stop--${s.tone}`, { 'stop--current': s.current }]}>
+            <span class="stop__year" aria-hidden="true">{s.year}</span>
+            <article class="stop__card">
+              <p class="stop__label"><Text value={s.stage_label} fallback="stage" /></p>
+              <h3 class="stop__title">
+                <Text value={s.role} fallback="Role" /> · <Text value={s.company} fallback="Company" />
+              </h3>
+              <p class="stop__dates"><Text value={s.dates} fallback="dates" /></p>
+              <p class="stop__summary"><Text value={s.summary} fallback="One line for the Journey card" /></p>
+              {s.highlights.length > 0 && (
+                <details class="stop__more">
+                  <summary>Highlights</summary>
+                  <ul>
+                    {s.highlights.map((h) => (
+                      <li><Text value={h} /></li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </article>
+          </li>
+        ))
+      }
+    </ol>
+    <span class="roller" aria-hidden="true">
+      <ClayObject tone="peach" size={44} shade="26px" />
+      <span class="roller__eye"></span>
+    </span>
+  </div>
+</section>
+
+<style>
+  .journey {
+    position: relative;
+    padding-block: var(--s-24);
+    background: var(--inverse-bg);
+    color: var(--inverse-ink);
+  }
+  .journey__hint {
+    max-width: 300px;
+    margin: 0 0 6px auto;
+    color: var(--inverse-muted);
+  }
+  @media (max-width: 760px) {
+    .journey__hint { margin-left: 0; }
+  }
+  .track-wrap {
+    position: relative;
+    margin-top: var(--s-16);
+    padding-bottom: var(--s-6);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-color: var(--inverse-surface) transparent;
+  }
+  .track-wrap:focus-visible { outline-offset: -3px; }
+  @media (prefers-reduced-motion: no-preference) {
+    /* Vertical swipes scroll the page; horizontal ones scrub the road (src/islands/JourneyScrubber.ts). */
+    :global(.js) .track-wrap {
+      touch-action: pan-y;
+      cursor: grab;
+    }
+  }
+  .track-wrap:global(.is-dragging) { cursor: grabbing; }
+  @media (prefers-reduced-motion: reduce) {
+    .track-wrap { scroll-snap-type: x mandatory; }
+    .stop { scroll-snap-align: center; }
+  }
+  /* The dashed road lives on the track so it runs the full scroll width. */
+  .track::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 34px;
+    height: 8px;
+    background: repeating-linear-gradient(90deg, var(--butter) 0 28px, transparent 28px 48px);
+    opacity: 0.7;
+  }
+  .track {
+    position: relative;
+    display: flex;
+    gap: 28px;
+    width: max-content;
+    min-width: 100%;
+    margin: 0;
+    padding: 0 max(var(--gutter), calc((100vw - 1152px) / 2));
+    list-style: none;
+  }
+  .stop {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    flex: none;
+    width: min(360px, 78vw);
+  }
+  .stop:nth-child(even) { margin-top: var(--s-10); }
+  .stop__year {
+    display: grid;
+    place-items: center;
+    width: 76px;
+    height: 76px;
+    border-radius: 50%;
+    background: var(--tone);
+    color: var(--on-pastel);
+    box-shadow: inset -6px -8px 14px var(--tone-deep);
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -0.02em;
+  }
+  .stop__card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 210px;
+    padding: var(--s-6);
+    border-radius: var(--r-xl);
+    background: var(--inverse-surface);
+  }
+  .stop__label {
+    font-size: var(--fs-meta);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--tone);
+  }
+  .stop__title {
+    font-size: var(--fs-h3);
+    line-height: 1.15;
+  }
+  .stop__dates {
+    font-size: var(--fs-meta);
+    color: var(--inverse-muted);
+  }
+  .stop__summary { color: var(--inverse-muted); }
+  :global(.js) .stop__card { cursor: pointer; }
+  .stop__card:global(.is-pulse) {
+    outline: 3px solid var(--butter);
+    outline-offset: 4px;
+  }
+  .stop__more summary {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .stop__more ul {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-2);
+    margin: var(--s-1) 0 0;
+    padding-left: 1.1em;
+    color: var(--inverse-muted);
+    font-size: 15px;
+  }
+
+  .stop--peach { --tone: var(--peach); --tone-deep: var(--peach-deep); }
+  .stop--lilac { --tone: var(--lilac); --tone-deep: var(--lilac-deep); }
+  .stop--mint { --tone: var(--mint); --tone-deep: var(--mint-deep); }
+  .stop--butter { --tone: var(--butter); --tone-deep: var(--butter-deep); }
+
+  .stop--current .stop__year {
+    background: var(--inverse-ink);
+    box-shadow: inset -6px -8px 14px var(--clay-drop);
+  }
+  .stop--current .stop__card {
+    background: var(--peach);
+    color: var(--on-pastel);
+  }
+  .stop--current .stop__label,
+  .stop--current .stop__dates,
+  .stop--current .stop__summary,
+  .stop--current .stop__more ul { color: var(--on-pastel); }
+
+  .roller {
+    position: absolute;
+    left: calc(50% - 22px);
+    top: 16px;
+    display: grid;
+    place-items: center;
+  }
+  .roller > :global(.clay) { grid-area: 1 / 1; }
+  .roller__eye {
+    grid-area: 1 / 1;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--inverse-bg);
+    transform: translate(9px, -6px);
+  }
+</style>

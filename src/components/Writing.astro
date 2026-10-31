@@ -1,0 +1,161 @@
+---
+import ClayObject from './ClayObject.astro';
+import Icon from './Icon.astro';
+import SectionLanding from './SectionLanding.astro';
+import Text from './Text.astro';
+import { isPlaceholder } from '../lib/resume-parse.ts';
+import type { Resume } from '../lib/resume-parse.ts';
+
+interface Props {
+  posts: Resume['writing'];
+}
+const { posts } = Astro.props;
+
+const LOOKS = [
+  { tone: 'peach', art: 'peach', fan: 'fan-l' },
+  { tone: 'lilac', art: 'lilac', fan: 'fan-c' },
+  { tone: 'butter', art: 'butter', fan: 'fan-r' },
+] as const;
+const hasLivePosts = posts.some((p) => !isPlaceholder(p.url));
+---
+
+<section id="blog" class="container writing cv-auto" aria-labelledby="blog-title" data-idle>
+  <SectionLanding id="blog-title" label="03 · Writing" title="Notes from building with AI." tone="mint" land="u">
+    {hasLivePosts && <a class="writing__all rise" href="/blog">All posts <span aria-hidden="true">→</span></a>}
+  </SectionLanding>
+
+  <ul class="writing__grid" role="list">
+    {
+      posts.map((post, i) => {
+        const look = LOOKS[i % LOOKS.length];
+        return (
+          <li class={`writing__cell ${look.fan}`}>
+            <article id={post.id} class={`card card--${look.tone} post`} aria-labelledby={`${post.id}-title`}>
+              <div class={`post__art tint--${look.art}`} aria-hidden="true">
+                {i % 3 === 0 && (
+                  <>
+                    <span class="art art--a f1"><ClayObject tone="peach" shade="56px" /></span>
+                    <span class="art art--b f2" />
+                  </>
+                )}
+                {i % 3 === 1 && (
+                  <>
+                    <span class="art art--c f3"><ClayObject shape="sparkle" tone="mint" /></span>
+                    <span class="art art--d f1"><ClayObject shape="ring" tone="lilac" shade="12px" /></span>
+                  </>
+                )}
+                {i % 3 === 2 && (
+                  <>
+                    <span class="art art--e f2"><ClayObject shape="bubble" tone="lilac" shade="12px" /></span>
+                    <span class="art art--f f1"><ClayObject tone="butter" shade="30px" /></span>
+                  </>
+                )}
+              </div>
+              <div class="post__body">
+                <p class="post__meta"><Text value="[Date] · [X] min read" /></p>
+                <h3 id={`${post.id}-title`} class="post__title"><Text value={post.title} fallback="Post title" /></h3>
+                <p class="post__tldr"><Text value={post.tldr} fallback="one line" /></p>
+                <div class="post__actions">
+                  <button class="rx" type="button" aria-pressed="false" data-rx={`${post.id}:love`} data-label="Love" aria-label="Love, 0">
+                    <Icon name="heart" size={16} /><span data-count>0</span>
+                  </button>
+                  <button class="rx" type="button" aria-pressed="false" data-rx={`${post.id}:insight`} data-label="Insight" aria-label="Insight, 0">
+                    <Icon name="sparkle" size={16} /><span data-count>0</span>
+                  </button>
+                  {isPlaceholder(post.url) ? (
+                    <span class="post__read"><Text value="[Read link]" /></span>
+                  ) : (
+                    <a class="post__read" href={post.url}>Read<span class="sr-only">: {post.title}</span></a>
+                  )}
+                </div>
+              </div>
+            </article>
+          </li>
+        );
+      })
+    }
+  </ul>
+</section>
+
+<style>
+  .writing {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-12);
+    padding-block: 120px var(--s-24);
+  }
+  .writing__all {
+    display: flex;
+    align-items: center;
+    min-height: var(--tap);
+    margin: 0 0 var(--s-2) auto;
+    font-weight: 700;
+  }
+  .writing__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--s-6);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .writing__cell { display: flex; }
+  .post {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    overflow: hidden;
+  }
+  .post__art {
+    position: relative;
+    height: 170px;
+    overflow: hidden;
+  }
+  .art { position: absolute; }
+  .art--a { left: 30%; top: 22%; width: 96px; height: 96px; }
+  .art--b {
+    left: 56%;
+    top: 40%;
+    width: 90px;
+    height: 64px;
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    box-shadow: 0 10px 18px var(--clay-drop);
+  }
+  .art--c { left: 24%; top: 26%; width: 80px; height: 80px; }
+  .art--d { left: 52%; top: 30%; width: 84px; height: 84px; }
+  .art--e { left: 28%; top: 24%; width: 110px; height: 80px; }
+  .art--f { left: 60%; top: 46%; width: 54px; height: 54px; }
+
+  .post__body {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    gap: var(--s-3);
+    padding: var(--s-6);
+  }
+  .post__meta {
+    font-size: var(--fs-meta);
+    color: var(--ink-subtle);
+  }
+  .post__title {
+    font-size: var(--fs-h3);
+    line-height: 1.15;
+  }
+  .post__tldr { color: var(--ink-muted); }
+  .post__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    margin-top: auto;
+    padding-top: var(--s-2);
+  }
+  .post__read {
+    display: flex;
+    align-items: center;
+    min-height: var(--tap);
+    margin-left: auto;
+    font-size: 15px;
+    font-weight: 700;
+  }
+</style>

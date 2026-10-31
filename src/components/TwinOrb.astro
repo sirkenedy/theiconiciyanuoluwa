@@ -1,0 +1,13 @@
+---
+// The AI twin's clay orb. Its look follows data-state (idle, typing, thinking, streaming, answered, unknown, error);
+// the chat island mirrors this markup for the docked launcher. Styles live in src/styles/twin.css.
+interface Props {
+  size?: number;
+}
+const { size = 32 } = Astro.props;
+---
+
+<span class="twin-orb" data-twin-orb data-state="idle" style={`--orb:${size}px`} aria-hidden="true">
+  <span class="twin-orb__body clay-sphere clay--lilac"></span>
+  <span class="twin-orb__eyes"><span></span><span></span></span>
+</span>

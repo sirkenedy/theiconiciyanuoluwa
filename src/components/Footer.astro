@@ -1,0 +1,130 @@
+---
+import ClayObject from './ClayObject.astro';
+import { isPlaceholder } from '../lib/resume-parse.ts';
+
+interface Props {
+  name: string;
+  email: string;
+  linkedin: string;
+  instagram: string;
+}
+const { name, email, linkedin, instagram } = Astro.props;
+
+const socials = [
+  { label: 'Email', href: `mailto:${email}`, value: email, icon: 'M3 8a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3zM4 7l8 6 8-6' },
+  { label: 'LinkedIn', href: linkedin, value: linkedin, icon: 'M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zM8 11v5M8 8v.01M12 16v-5M12 13a2 2 0 0 1 4 0v3' },
+  { label: 'Instagram', href: instagram, value: instagram, icon: 'M8 3h8a5 5 0 0 1 5 5v8a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5zM12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM17.5 6.5v.01' },
+];
+const year = new Date().getFullYear();
+---
+
+<footer class="site-footer">
+  <div class="container footer">
+    <div class="footer__brand">
+      <ClayObject tone="peach" size={34} />
+      <div class="footer__text">
+        <span class="footer__name">{name}</span>
+        <span class="footer__tag">© {year} · Shaped in clay, powered by curiosity.</span>
+      </div>
+    </div>
+    <ul class="footer__links" role="list">
+      {
+        socials.map((s) => (
+          <li>
+            {isPlaceholder(s.value) ? (
+              <span class="tile placeholder-tile" title={`${s.label}: [placeholder]`}>[{s.label}]</span>
+            ) : (
+              <a class="tile" href={s.href} aria-label={s.label} rel={s.label === 'Email' ? undefined : 'me noopener'} target={s.label === 'Email' ? undefined : '_blank'}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={s.icon} /></svg>
+              </a>
+            )}
+          </li>
+        ))
+      }
+      <li><a class="tile tile--top" href="#top">Back to top <span aria-hidden="true">↑</span></a></li>
+    </ul>
+    <p id="ai-twin-note" class="footer__note" tabindex="-1">
+      <strong>About the AI twin:</strong> it answers only from my résumé, using Anthropic's Claude. Your questions are sent to
+      Anthropic's API to write each answer; this site keeps no transcripts, and my name and contact details are never sent.
+      Identical first questions may get a cached answer for up to 24 hours (stored without who asked). The conversation
+      stays in your browser tab until you close it.
+    </p>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    background: var(--inverse-bg);
+    color: var(--inverse-ink);
+  }
+  .footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-5);
+    padding-block: var(--s-10);
+  }
+  .footer__brand {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+  }
+  .footer__text {
+    display: flex;
+    flex-direction: column;
+  }
+  .footer__name {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -0.02em;
+  }
+  .footer__tag {
+    font-size: var(--fs-label);
+    color: var(--inverse-muted);
+  }
+  .footer__note {
+    flex-basis: 100%;
+    max-width: 760px;
+    font-size: var(--fs-meta);
+    line-height: 1.6;
+    color: var(--inverse-muted);
+  }
+  .footer__note:focus { outline: none; }
+  .footer__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .tile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--tap);
+    height: var(--tap);
+    border-radius: var(--r-sm);
+    background: var(--inverse-surface);
+    color: var(--inverse-ink);
+    transition: transform var(--dur-2) var(--ease-spring);
+  }
+  a.tile:hover { transform: translateY(-3px); }
+  .placeholder-tile {
+    padding: 0 var(--s-3);
+    font-size: var(--fs-meta);
+    font-style: italic;
+    color: var(--inverse-muted);
+  }
+  .tile--top {
+    gap: var(--s-1);
+    padding: 0 var(--s-4);
+    background: var(--peach);
+    color: var(--on-pastel);
+    font-size: var(--fs-label);
+    font-weight: 700;
+    text-decoration: none;
+  }
+</style>

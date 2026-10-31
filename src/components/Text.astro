@@ -1,0 +1,11 @@
+---
+import { segments } from '../lib/text.ts';
+
+interface Props {
+  value?: string;
+  fallback?: string;
+}
+const { value, fallback = 'placeholder' } = Astro.props;
+---
+
+{segments(value, fallback).map((s) => (s.placeholder ? <span class="placeholder">{s.text}</span> : s.text))}

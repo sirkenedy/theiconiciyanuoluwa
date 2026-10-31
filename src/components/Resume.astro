@@ -1,0 +1,157 @@
+---
+import ClayObject from './ClayObject.astro';
+import Icon from './Icon.astro';
+import SectionLanding from './SectionLanding.astro';
+import Text from './Text.astro';
+import { isPlaceholder } from '../lib/resume-parse.ts';
+import type { Resume } from '../lib/resume-parse.ts';
+
+interface Props {
+  identity: Resume['identity'];
+}
+const { identity } = Astro.props;
+const fileName = identity.resume_pdf.split('/').at(-1);
+---
+
+<section id="resume" class="container resume cv-auto" aria-labelledby="resume-title">
+  <div class="resume__copy">
+    <SectionLanding id="resume-title" label="04 · Résumé" title="The one-pager." tone="butter" land="s" />
+    <p class="resume__lead rise">Everything above, condensed into a single page — roles, launches and the skills I bring to an AI product team.</p>
+    <div class="resume__ctas rise">
+      <a class="btn btn--lg btn--primary" href={identity.resume_pdf} download={fileName} data-plane-download>
+        <Icon name="download" size={18} />Download PDF
+      </a>
+      {
+        isPlaceholder(identity.linkedin) ? (
+          <span class="btn btn--lg btn--secondary"><Text value="[LinkedIn URL]" /></span>
+        ) : (
+          <a class="btn btn--lg btn--secondary" href={identity.linkedin} rel="me noopener" target="_blank">View on LinkedIn</a>
+        )
+      }
+    </div>
+  </div>
+
+  <div class="resume__stage">
+    <div class="tilt paper-tilt" data-tilt data-plane-paper>
+    <div class="paper flip flip-card">
+      <div class="paper__head">
+        <ClayObject tone="peach" size={48} shade="24px" />
+        <div class="paper__who">
+          <span class="paper__name">{identity.name}</span>
+          <span class="paper__role"><Text value={identity.headline} fallback="headline" /></span>
+        </div>
+      </div>
+      <span class="paper__line" aria-hidden="true"></span>
+      <span class="paper__line w-86" aria-hidden="true"></span>
+      <span class="paper__line w-60 is-lilac" aria-hidden="true"></span>
+      <span class="paper__line w-92" aria-hidden="true"></span>
+      <span class="paper__line w-48 is-mint" aria-hidden="true"></span>
+      <span class="paper__line w-74" aria-hidden="true"></span>
+      <span class="paper__meta">Updated <Text value="[Month Year]" /> · PDF</span>
+    </div>
+    </div>
+    <svg class="plane" data-plane viewBox="0 0 120 80" width="120" height="80" aria-hidden="true">
+      <path class="plane__top" d="M2 40 L118 4 L52 50 Z" />
+      <path class="plane__wing" d="M52 50 L118 4 L70 76 Z" />
+      <path class="plane__fold" d="M52 50 L118 4 L58 58 Z" />
+    </svg>
+  </div>
+</section>
+
+<style>
+  .resume {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-14);
+    padding-block: var(--s-24);
+  }
+  .resume__copy {
+    flex: 1 1 420px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-6);
+  }
+  .resume__lead {
+    max-width: 520px;
+    font-size: var(--fs-lead);
+    line-height: 1.6;
+    color: var(--ink-muted);
+  }
+  .resume__ctas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-3);
+  }
+  .resume__stage {
+    position: relative;
+    flex: 1 1 360px;
+    min-width: 0;
+    display: flex;
+    justify-content: center;
+    padding: var(--s-6);
+  }
+  .paper-tilt {
+    width: 100%;
+    max-width: 380px;
+  }
+  .plane {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    margin: -40px 0 0 -60px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .plane__top { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; stroke-linejoin: round; }
+  .plane__wing { fill: var(--surface-alt); stroke: var(--line); stroke-width: 1.5; stroke-linejoin: round; }
+  .plane__fold { fill: var(--lilac); }
+  .paper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-4);
+    width: 100%;
+    max-width: 380px;
+    padding: var(--s-8);
+    border-radius: var(--r-xl);
+    background: var(--surface);
+    box-shadow:
+      0 16px 0 -6px var(--lilac),
+      0 40px 60px var(--clay-drop);
+    transform: rotate(-3deg);
+  }
+  .paper__head {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+  }
+  .paper__who {
+    display: flex;
+    flex-direction: column;
+  }
+  .paper__name {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: -0.02em;
+  }
+  .paper__role,
+  .paper__meta {
+    font-size: var(--fs-meta);
+    color: var(--ink-subtle);
+  }
+  .paper__meta { margin-top: var(--s-2); }
+  .paper__line {
+    height: 10px;
+    border-radius: 6px;
+    background: var(--surface-alt);
+  }
+  .w-86 { width: 86%; }
+  .w-60 { width: 60%; }
+  .w-92 { width: 92%; }
+  .w-48 { width: 48%; }
+  .w-74 { width: 74%; }
+  .is-lilac { background: var(--lilac); }
+  .is-mint { background: var(--mint); }
+</style>

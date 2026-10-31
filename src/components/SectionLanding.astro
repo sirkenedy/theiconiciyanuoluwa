@@ -1,0 +1,77 @@
+---
+import ClayObject from './ClayObject.astro';
+
+interface Props {
+  id: string;
+  label: string;
+  title: string;
+  tone: 'peach' | 'lilac' | 'mint' | 'butter';
+  /** Orb entrance direction, consumed by the milestone 3 choreography. */
+  land: 'l' | 'r' | 'u' | 's';
+  inverse?: boolean;
+  compact?: boolean;
+}
+const { id, label, title, tone, land, inverse = false, compact = false } = Astro.props;
+---
+
+<div class:list={['landing', { 'landing--inverse': inverse, 'landing--compact': compact }]}>
+  <div class="landing__orb" aria-hidden="true">
+    <span class="landing__pad pad"></span>
+    <ClayObject tone={tone} size={64} shade="40px" class={`landing__ball land-${land}`} />
+  </div>
+  <div class="landing__text reveal">
+    <p class="label landing__label">{label}</p>
+    <h2 id={id} class="landing__title">{title}</h2>
+  </div>
+  <slot />
+</div>
+
+<style>
+  .landing {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--s-5);
+  }
+  .landing__orb {
+    position: relative;
+    flex: none;
+    width: 72px;
+    height: 84px;
+  }
+  .landing__pad {
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    bottom: 0;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--clay-drop);
+  }
+  .landing__orb :global(.landing__ball) {
+    position: absolute;
+    left: 4px;
+    bottom: 10px;
+  }
+  .landing__text {
+    flex: 0 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: min(100%, 260px);
+    max-width: calc(100% - 92px);
+  }
+  @media (max-width: 480px) {
+    .landing__text { max-width: none; }
+  }
+  .landing__title {
+    font-size: var(--fs-h2);
+    line-height: 1;
+    overflow-wrap: break-word;
+  }
+  .landing--compact .landing__title {
+    font-size: clamp(32px, 3.6vw, 52px);
+    line-height: 1.02;
+  }
+  .landing--inverse .landing__label { color: var(--inverse-muted); }
+</style>

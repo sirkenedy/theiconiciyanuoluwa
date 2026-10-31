@@ -1,0 +1,36 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import Hero from '../components/Hero.astro';
+import About from '../components/About.astro';
+import Journey from '../components/Journey.astro';
+import Writing from '../components/Writing.astro';
+import Resume from '../components/Resume.astro';
+import Contact from '../components/Contact.astro';
+import Footer from '../components/Footer.astro';
+import resume from '../content/resume.json';
+import type { Resume as ResumeData } from '../lib/resume-parse.ts';
+import { personSchema } from '../lib/person-schema';
+
+const data = resume as ResumeData;
+const { identity, about, skills, experience, writing, faq } = data;
+const jsonLd = personSchema(data, Astro.site!);
+---
+
+<Base title={`${identity.name} — ${identity.headline}`} description={identity.one_liner}>
+  <script slot="head" type="application/ld+json" set:html={jsonLd} />
+  <Header brand={identity.name.split(' ')[0]} />
+  <main id="main" tabindex="-1">
+    <Hero identity={identity} faq={faq} />
+    <About about={about} skills={skills} />
+    <Journey experience={experience} />
+    <Writing posts={writing} />
+    <Resume identity={identity} />
+    <Contact identity={identity} />
+  </main>
+  <Footer name={identity.name} email={identity.email} linkedin={identity.linkedin} instagram={identity.instagram} />
+</Base>
+
+<style>
+  main:focus { outline: none; }
+</style>

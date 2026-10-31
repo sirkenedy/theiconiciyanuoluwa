@@ -1,0 +1,167 @@
+/* Motion system. Ported from reference/portfolio-reference.html.
+   Everything is gated on prefers-reduced-motion: no-preference, so reduced motion gets a complete, static page.
+   Scroll choreography uses CSS scroll-driven animations; browsers without them get .no-sda (set in <head>) and
+   src/lib/motion-fallback.ts, which adds .is-in on entry and drives --p / --jp / --mq from one rAF loop. */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* ---------- time-based: load-in + idle ---------- */
+  /* The h1 lines move without fading so the LCP paint isn't delayed. */
+  .hero__title .hl1 { animation: inLeftSolid var(--dur-4) var(--ease-spring) both; }
+  .hero__title .hl2 { animation: inRightSolid var(--dur-4) var(--ease-spring) 0.12s both; }
+  .hero__title .hl3 { animation: inUpSolid var(--dur-4) var(--ease-spring) 0.24s both; }
+  .hl1:not(.hero__title *) { animation: inLeft var(--dur-4) var(--ease-spring) both; }
+  .hl3:not(.hero__title *) { animation: inUp var(--dur-4) var(--ease-spring) 0.24s both; }
+
+  .f1 { animation: float1 var(--float-1) ease-in-out infinite; }
+  .f2 { animation: float2 var(--float-2) ease-in-out infinite; }
+  .f3 { animation: float3 var(--float-3) ease-in-out infinite; }
+  .f-delay-4 { animation-delay: 0.4s; }
+  .f-delay-8 { animation-delay: 0.8s; }
+  .spin { animation: spinSlow 18s linear infinite; }
+  .dot { animation: dots 1.2s ease-in-out infinite; }
+  .dot:nth-child(2) { animation-delay: 0.15s; }
+  .dot:nth-child(3) { animation-delay: 0.3s; }
+  .answer { animation: popIn 0.45s var(--ease-spring) both; }
+
+  /* Idle loops stop when their section is off-screen or the tab is hidden (see Base.astro). */
+  [data-offscreen] :is(.f1, .f2, .f3, .spin, .dot),
+  :root[data-tab-hidden] :is(.f1, .f2, .f3, .spin, .dot) { animation-play-state: paused; }
+
+  /* Citation deep-link: the Journey card gets a clay ring that swells and fades twice. */
+  .stop__card.is-pulse { outline-color: transparent; }
+  .stop__card.is-pulse::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border: 3px solid var(--butter);
+    border-radius: calc(var(--r-xl) + 6px);
+    pointer-events: none;
+    animation: pulseRing 1.2s var(--ease-out) 2 both;
+  }
+
+  .squish {
+    cursor: pointer;
+    transition:
+      scale var(--dur-3) var(--ease-spring),
+      rotate var(--dur-3) var(--ease-spring);
+  }
+  .squish:hover { scale: 1.14 0.86; }
+
+  /* ---------- scroll-driven choreography ---------- */
+  @supports (animation-timeline: view()) {
+    :root:not(.no-sda) {
+      .progress__fill { animation: grow linear both; animation-timeline: scroll(root); }
+      .progress__rail { animation: ride linear both; animation-timeline: scroll(root); }
+
+      .exA { animation: exA linear both; animation-timeline: view(); animation-range: exit 0% exit 100%; }
+      .exB { animation: exB linear both; animation-timeline: view(); animation-range: exit 0% exit 100%; }
+      .exC { animation: exC linear both; animation-timeline: view(); animation-range: exit 0% exit 100%; }
+      .exD { animation: exD linear both; animation-timeline: view(); animation-range: exit 0% exit 100%; }
+      .exT { animation: exT linear both; animation-timeline: view(); animation-range: exit 0% exit 100%; }
+
+      .land-l { animation: landL linear both; animation-timeline: view(); animation-range: entry 0% cover 32%; }
+      .land-r { animation: landR linear both; animation-timeline: view(); animation-range: entry 0% cover 32%; }
+      .land-u { animation: landU linear both; animation-timeline: view(); animation-range: entry 0% cover 32%; }
+      .land-s { animation: landS linear both; animation-timeline: view(); animation-range: entry 0% cover 32%; }
+      .pad { animation: pad linear both; animation-timeline: view(); animation-range: entry 0% cover 32%; }
+      .reveal { animation: reveal linear both; animation-timeline: view(); animation-range: cover 22% cover 40%; }
+      .rise { animation: rise linear both; animation-timeline: view(); animation-range: cover 22% cover 40%; }
+
+      .from-l { animation: fromL linear both; animation-timeline: view(); animation-range: entry 0% cover 38%; }
+      .from-r { animation: fromR linear both; animation-timeline: view(); animation-range: entry 0% cover 38%; }
+      .from-t { animation: fromT linear both; animation-timeline: view(); animation-range: entry 0% cover 38%; }
+      .from-b { animation: fromB linear both; animation-timeline: view(); animation-range: entry 0% cover 38%; }
+      .fan-l { animation: fanL linear both; animation-timeline: view(); animation-range: entry 0% cover 42%; }
+      .fan-c { animation: fanC linear both; animation-timeline: view(); animation-range: entry 0% cover 42%; }
+      .fan-r { animation: fanR linear both; animation-timeline: view(); animation-range: entry 0% cover 42%; }
+
+      .journey { view-timeline-name: --journey; }
+      .track-wrap { overflow: hidden; }
+      .track { animation: slide linear both; animation-timeline: --journey; animation-range: cover 18% cover 88%; }
+      .roller { animation: roll linear both; animation-timeline: --journey; animation-range: cover 18% cover 88%; }
+
+      .flip { animation: flip linear both; animation-timeline: view(); animation-range: entry 0% cover 45%; }
+      .mq-l { animation: mqL linear both; animation-timeline: view(); animation-range: cover 0% cover 100%; }
+      .mq-r { animation: mqR linear both; animation-timeline: view(); animation-range: cover 0% cover 100%; }
+    }
+  }
+
+  /* ---------- fallback: time-based entrances + rAF-driven scrubbing ---------- */
+  .no-sda {
+    :is(.land-l, .land-r, .land-u, .land-s, .pad, .reveal, .rise, .from-l, .from-r, .from-t, .from-b, .fan-l, .fan-c, .fan-r, .flip):not(.is-in) { opacity: 0; }
+    .is-in.land-l { animation: landL var(--dur-4) var(--ease-out) both; }
+    .is-in.land-r { animation: landR var(--dur-4) var(--ease-out) both; }
+    .is-in.land-u { animation: landU var(--dur-4) var(--ease-out) both; }
+    .is-in.land-s { animation: landS var(--dur-4) var(--ease-out) both; }
+    .is-in.pad { animation: pad var(--dur-4) var(--ease-out) both; }
+    .is-in.reveal { animation: reveal var(--dur-3) var(--ease-out) 0.35s both; }
+    .is-in.rise { animation: rise var(--dur-3) var(--ease-out) 0.35s both; }
+    .is-in:is(.from-l, .from-r, .from-t, .from-b, .fan-l, .fan-c, .fan-r, .flip) { animation-duration: var(--dur-4); animation-timing-function: var(--ease-out); animation-fill-mode: both; }
+    .is-in.from-l { animation-name: fromL; }
+    .is-in.from-r { animation-name: fromR; }
+    .is-in.from-t { animation-name: fromT; }
+    .is-in.from-b { animation-name: fromB; }
+    .is-in.fan-l { animation-name: fanL; }
+    .is-in.fan-c { animation-name: fanC; }
+    .is-in.fan-r { animation-name: fanR; }
+    .is-in.flip { animation-name: flip; }
+
+    /* :root raises specificity above Header's scoped resting state (scaleX(0)). */
+    &:root .progress__fill { transform: scaleX(var(--p, 0)); }
+    .progress__rail { transform: translateX(calc(var(--p, 0) * 100%)); }
+    .track-wrap { overflow: hidden; }
+    .track { transform: translateX(calc(var(--jp, 0) * min(0px, -100% + 92vw))); }
+    .roller { transform: rotate(calc(var(--jp, 0) * 1080deg)); }
+    .mq-l { transform: translateX(calc(var(--mq, 0) * -38%)); }
+    .mq-r { transform: translateX(calc((1 - var(--mq, 0)) * -38%)); }
+  }
+}
+
+/* Theme switch: the new snapshot is revealed by a circle growing from the toggle (driven from ThemeToggle). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* ---------- keyframes (from the reference; `ride` uses translateX instead of `left`) ---------- */
+@keyframes float1 { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-18px) rotate(4deg); } }
+@keyframes float2 { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(14px) rotate(-7deg); } }
+@keyframes float3 { 0%, 100% { transform: translate(0, 0) rotate(0deg); } 50% { transform: translate(8px, -12px) rotate(10deg); } }
+@keyframes spinSlow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes inLeft { from { opacity: 0; transform: translateX(-80px); } to { opacity: 1; transform: none; } }
+@keyframes inUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
+@keyframes inLeftSolid { from { transform: translateX(-80px); } to { transform: none; } }
+@keyframes inRightSolid { from { transform: translateX(80px); } to { transform: none; } }
+@keyframes inUpSolid { from { transform: translateY(40px); } to { transform: none; } }
+@keyframes popIn { 0% { opacity: 0; transform: scale(0.6); } 70% { opacity: 1; transform: scale(1.06); } 100% { transform: scale(1); } }
+@keyframes pulseRing { 0% { opacity: 1; transform: scale(0.96); } 100% { opacity: 0; transform: scale(1.06); } }
+@keyframes dots { 0%, 100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+
+@keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes ride { from { transform: translateX(0); } to { transform: translateX(100%); } }
+@keyframes exA { to { transform: translate(-260px, -180px) rotate(-40deg) scale(0.7); opacity: 0.2; } }
+@keyframes exB { to { transform: translate(280px, -140px) rotate(50deg) scale(0.8); opacity: 0.2; } }
+@keyframes exC { to { transform: translate(-160px, 240px) rotate(30deg); opacity: 0.2; } }
+@keyframes exD { to { transform: translate(220px, 260px) scale(1.5); opacity: 0.2; } }
+@keyframes exT { to { transform: translateY(-140px); opacity: 0; } }
+@keyframes landL { 0% { opacity: 0; transform: translate(-55vw, -280px) rotate(-280deg) scale(0.4); } 72% { opacity: 1; transform: translate(0, 8px) rotate(0deg) scale(1.22, 0.78); } 86% { transform: translate(0, -8px) scale(0.94, 1.06); } 100% { opacity: 1; transform: none; } }
+@keyframes landR { 0% { opacity: 0; transform: translate(55vw, -320px) rotate(300deg) scale(0.4); } 72% { opacity: 1; transform: translate(0, 8px) rotate(0deg) scale(1.22, 0.78); } 86% { transform: translate(0, -8px) scale(0.94, 1.06); } 100% { opacity: 1; transform: none; } }
+@keyframes landU { 0% { opacity: 0; transform: translate(0, 360px) scale(0.3); } 60% { opacity: 1; transform: translate(0, -60px) scale(0.9, 1.1); } 80% { transform: translate(0, 6px) scale(1.2, 0.8); } 100% { opacity: 1; transform: none; } }
+@keyframes landS { 0% { opacity: 0; transform: translate(30vw, 200px) rotate(720deg) scale(0.2); } 75% { opacity: 1; transform: translate(0, 6px) rotate(0deg) scale(1.2, 0.82); } 100% { opacity: 1; transform: none; } }
+@keyframes pad { 0%, 55% { opacity: 0; transform: scaleX(0.2); } 100% { opacity: 1; transform: scaleX(1); } }
+@keyframes reveal { from { opacity: 0; transform: translateY(56px); clip-path: inset(0 0 100% 0); } to { opacity: 1; transform: none; clip-path: inset(0 0 0 0); } }
+/* Same travel as `reveal` without the clip: clip-path is reserved for headings. */
+@keyframes rise { from { opacity: 0; transform: translateY(56px); } to { opacity: 1; transform: none; } }
+@keyframes fromL { from { opacity: 0; transform: translateX(-180px) rotate(-9deg); } to { opacity: 1; transform: none; } }
+@keyframes fromR { from { opacity: 0; transform: translateX(180px) rotate(9deg); } to { opacity: 1; transform: none; } }
+@keyframes fromT { from { opacity: 0; transform: translateY(-160px) rotate(-5deg); } to { opacity: 1; transform: none; } }
+@keyframes fromB { from { opacity: 0; transform: translateY(180px) scale(0.88); } to { opacity: 1; transform: none; } }
+@keyframes fanL { from { opacity: 0; transform: translate(-120px, 200px) rotate(-18deg); } to { opacity: 1; transform: none; } }
+@keyframes fanC { from { opacity: 0; transform: translateY(260px) scale(0.85); } to { opacity: 1; transform: none; } }
+@keyframes fanR { from { opacity: 0; transform: translate(120px, 200px) rotate(18deg); } to { opacity: 1; transform: none; } }
+@keyframes slide { from { transform: translateX(0); } to { transform: translateX(min(0px, -100% + 92vw)); } }
+@keyframes roll { from { transform: rotate(0deg); } to { transform: rotate(1080deg); } }
+@keyframes flip { from { opacity: 0; transform: perspective(900px) translateX(-120px) rotateY(-80deg) rotate(-8deg); } to { opacity: 1; transform: rotate(-3deg); } }
+@keyframes mqL { from { transform: translateX(0); } to { transform: translateX(-38%); } }
+@keyframes mqR { from { transform: translateX(-38%); } to { transform: translateX(0); } }
