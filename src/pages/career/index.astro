@@ -32,7 +32,7 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
 <Base ogAlt={`${name}'s portfolio and Ami, the career coach`} title={`Ami, your career coach — ${name}`} description="A free AI career coach: upload your résumé, get 5 fresh, well-matched jobs a day, and tailor your résumé to each one. Everything stays on your device.">
   <div class="cc" data-cc>
     <header class="cc-head">
-      <button class="cc-icon-btn cc-menu" type="button" data-rail-toggle aria-controls="cc-rail" aria-expanded="false" aria-label="Chats and résumé">
+      <button class="cc-icon-btn cc-menu" type="button" data-rail-toggle aria-controls="cc-rail" aria-expanded="false" aria-label="Chats, résumé and usage">
         <Icon name="menu" size={20} />
       </button>
       <a class="cc-brand" href="/"><Avatar size={32} eager /><span class="cc-brand__name">{firstName}</span></a>
@@ -44,11 +44,10 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
     </header>
 
     <aside id="cc-rail" class="cc-rail" aria-label="Chats, résumé and usage" data-rail>
-      <button class="cc-peek" type="button" data-rail-toggle aria-controls="cc-rail" aria-expanded="false">
-        <span class="cc-peek__handle" aria-hidden="true"></span>
-        <span class="cc-peek__file"><Icon name="file" size={16} /><span data-resume-name>No résumé yet</span></span>
-        <span class="cc-peek__lock"><Icon name="lock" size={14} />On this device</span>
-      </button>
+      <div class="cc-rail__top">
+        <p class="cc-rail__title">Chats &amp; résumé</p>
+        <button class="cc-icon-btn" type="button" data-rail-close aria-label="Close the menu"><Icon name="close" size={18} /></button>
+      </div>
 
       <div class="cc-rail__body">
         <button class="btn btn--primary cc-new" type="button" data-new-chat><Icon name="plus" size={18} />New chat</button>
@@ -98,6 +97,7 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
         </div>
       </div>
     </aside>
+    <div class="cc-scrim" data-rail-scrim aria-hidden="true"></div>
 
     <main id="main" class="cc-main" tabindex="-1">
       <h1 class="sr-only">Ami, your career coach</h1>
@@ -119,6 +119,7 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
             <p class="cc-empty__lead">
               Upload your résumé and I'll find today's freshest roles for you, tailor your CV to any job, and help you stand out. Free, with 5 fresh jobs a day.
             </p>
+            <p class="cc-empty__warn"><Icon name="info" size={16} /><small>AI suggestions can be wrong. Review everything before you send it.</small></p>
 
             <div class="cc-drop">
               <div class="cc-drop__zone">
