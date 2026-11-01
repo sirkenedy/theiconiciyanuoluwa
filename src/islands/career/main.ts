@@ -277,11 +277,9 @@ async function saveProfile(next: StoredProfile) {
 function renderResumeCard() {
   const text = $<HTMLElement>('.cc-resume__text');
   const btns = $<HTMLElement>('[data-resume-actions]');
-  const peek = $<HTMLElement>('[data-resume-name]');
   if (!stored) {
     text.replaceChildren(el('strong', undefined, 'No résumé yet'), el('span', undefined, "Upload one and I'll build your profile."));
     btns.replaceChildren(button('Upload résumé', 'btn btn--secondary cc-card__btn', pickFile));
-    peek.textContent = 'No résumé yet';
     return;
   }
   const state = el('span', stored.confirmed ? 'cc-resume__ok' : 'cc-resume__check', stored.confirmed ? 'Profile confirmed' : 'Check your profile');
@@ -290,7 +288,6 @@ function renderResumeCard() {
     button('Replace', 'btn btn--secondary cc-card__btn', pickFile),
     button('Edit profile', 'btn btn--secondary cc-card__btn', openProfileEditor),
   );
-  peek.textContent = stored.fileName;
 }
 
 async function openProfileEditor() {
@@ -1465,22 +1462,40 @@ async function loadUsage() {
   }
 }
 
-// ---------- phone bottom sheet ----------
+// ---------- phone menu panel (the rail, opened by the hamburger) ----------
 const phone = matchMedia('(max-width: 760px)');
-function setSheet(openSheet: boolean) {
+const menuBtn = $<HTMLButtonElement>('[data-rail-toggle]');
+const behindPanel = [$<HTMLElement>('.cc-head'), $<HTMLElement>('.cc-main')];
+function setSheet(openSheet: boolean, returnFocus = false) {
   rail.classList.toggle('is-open', openSheet);
-  for (const t of document.querySelectorAll('[data-rail-toggle]')) t.setAttribute('aria-expanded', String(openSheet));
-  railBody.inert = phone.matches && !openSheet;
+  menuBtn.setAttribute('aria-expanded', String(openSheet));
+  rail.inert = phone.matches && !openSheet;
+  // While the panel is open on a phone, everything behind it is out of reach, as in a modal.
+  for (const b of behindPanel) b.inert = phone.matches && openSheet;
   if (openSheet) railBody.querySelector<HTMLElement>('button, a')?.focus();
+  else if (returnFocus) menuBtn.focus();
 }
-for (const t of document.querySelectorAll('[data-rail-toggle]')) t.addEventListener('click', () => setSheet(!rail.classList.contains('is-open')));
-rail.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && rail.classList.contains('is-open')) {
-    setSheet(false);
-    $<HTMLElement>('.cc-peek').focus();
-  }
+menuBtn.addEventListener('click', () => setSheet(true));
+$<HTMLButtonElement>('[data-rail-close]').addEventListener('click', () => setSheet(false, true));
+$<HTMLElement>('[data-rail-scrim]').addEventListener('click', () => setSheet(false, true));
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && rail.classList.contains('is-open')) setSheet(false, true);
 });
 phone.addEventListener('change', () => setSheet(false));
+
+// On phones the layout follows the visible area (visualViewport), so the composer sits just above the keyboard.
+const vv = window.visualViewport;
+if (vv) {
+  const fitViewport = () => {
+    const on = phone.matches && vv.scale < 1.01;
+    cc.style.setProperty('--vv-h', on ? `${vv.height}px` : '');
+    cc.style.setProperty('--vv-top', on ? `${vv.offsetTop}px` : '');
+  };
+  vv.addEventListener('resize', fitViewport);
+  vv.addEventListener('scroll', fitViewport);
+  phone.addEventListener('change', fitViewport);
+  fitViewport();
+}
 
 // ---------- controls ----------
 /** The composer grows with what you type (up to ~6 lines, then scrolls). */

@@ -1,4 +1,4 @@
-/* Career Coach (/career): desktop rail + chat, phone bottom sheet. Tokens only (design/tokens.css). */
+/* Career Coach (/career): desktop rail + chat, phone menu panel. Tokens only (design/tokens.css). */
 
 .cc {
   display: grid;
@@ -67,7 +67,8 @@
   min-height: 0;
   border-right: 1px solid var(--line);
 }
-.cc-peek { display: none; }
+.cc-rail__top,
+.cc-scrim { display: none; }
 .cc-rail__body {
   display: flex;
   flex: 1;
@@ -293,6 +294,18 @@ a.cc-rail__portfolio { display: none; }
   letter-spacing: -0.03em;
 }
 .cc-empty__lead { max-width: 580px; margin: 0; color: var(--ink-muted); font-size: var(--fs-lead); }
+/* The AI warning lives under the composer on wider screens; on phones it shows once, here, on a new chat. */
+.cc-empty__warn {
+  display: none;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: var(--fs-meta);
+  text-align: left;
+}
+.cc-empty__warn svg { flex: none; }
+.cc-empty__warn small { font-size: var(--fs-meta); }
 
 .cc-drop {
   display: flex;
@@ -1023,66 +1036,81 @@ a.cc-job__btn::after { content: '↗'; margin-left: 6px; }
   a.cc-rail__portfolio { display: inline-flex; }
 }
 
-/* ---------- phone: one column, the rail becomes a bottom sheet ---------- */
+/* ---------- phone: one column; the rail opens from the hamburger as a side panel ---------- */
 @media (max-width: 760px) {
-  .cc { grid-template-columns: minmax(0, 1fr); }
+  /* Fills the visible area; main.ts sets --vv-top/--vv-h from visualViewport so the composer rides above the keyboard. */
+  .cc {
+    position: fixed;
+    inset: var(--vv-top, 0px) 0 auto;
+    height: var(--vv-h, 100dvh);
+    grid-template-columns: minmax(0, 1fr);
+  }
   .cc-head {
     display: flex;
     gap: var(--s-2);
-    padding: var(--s-3) var(--s-4);
+    padding: var(--s-2) var(--s-4);
   }
   .cc-head .mode { flex: 1; justify-content: center; }
   .cc-head .mode__opt { flex: 1; justify-content: center; padding-inline: var(--s-3); }
   .cc-menu { display: grid; }
   .cc-brand { display: none; }
-  .cc-scroll { padding: var(--s-5) var(--s-4) var(--s-4); }
-  .cc-dock { padding: var(--s-2) var(--s-4) calc(var(--peek) + var(--s-3)); }
-  .cc-empty__lead { font-size: var(--fs-body); }
-  .cc-drop__zone { padding: var(--s-4); }
-  .cc-drop__btn { width: 100%; justify-content: center; }
+  .cc-scroll { gap: var(--s-4); padding: var(--s-4) var(--s-4) var(--s-3); }
+  .cc-dock { padding: var(--s-2) var(--s-3) max(var(--s-3), env(safe-area-inset-bottom)); }
+  .cc-disclaimer { display: none; }
 
-  .cc { --peek: 56px; }
+  /* Compact empty state: the orb, greeting, warning, upload card and composer fit without scrolling. */
+  .cc-empty { gap: var(--s-3); }
+  .cc-empty .coach-orb--lg { --co: 56px; }
+  .cc-empty__title { font-size: var(--fs-h3); line-height: 1.15; letter-spacing: -0.02em; }
+  .cc-empty__lead { font-size: var(--fs-body); line-height: 1.45; }
+  .cc-empty__warn { display: flex; }
+  .cc-drop { gap: var(--s-2); padding: var(--s-2); }
+  .cc-drop__zone { gap: var(--s-3); padding: var(--s-3); }
+  .cc-drop__tile { width: 44px; height: 44px; }
+  .cc-drop__text { flex-basis: 160px; }
+  .cc-drop__btn { width: 100%; justify-content: center; }
+  .cc-consent-row { padding-right: var(--s-2); }
+  .cc-consent { padding-inline: var(--s-2); }
+
   .cc-rail {
     position: fixed;
-    inset: auto 0 0;
-    z-index: 30;
-    max-height: 85dvh;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    width: min(360px, 88vw);
     border: 0;
-    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    border-radius: 0 var(--r-xl) var(--r-xl) 0;
     background: var(--bg);
-    box-shadow: 0 -10px 30px var(--clay-drop);
-    transform: translateY(calc(100% - var(--peek)));
+    box-shadow: 10px 0 30px var(--clay-drop);
+    overflow: hidden;
+    transform: translateX(-110%);
     transition: transform var(--dur-3) var(--ease-out);
   }
   .cc-rail.is-open { transform: none; }
-  .cc-peek {
-    display: grid;
-    grid-template-columns: 1fr auto;
+  .cc-rail__top {
+    display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: var(--s-2);
-    min-height: var(--peek);
-    padding: var(--s-3) var(--s-4) var(--s-2);
-    border: 0;
-    border-radius: inherit;
-    background: var(--surface);
-    color: var(--ink);
-    font: inherit;
-    font-size: var(--fs-label);
-    cursor: pointer;
+    padding: var(--s-3) var(--s-4) 0 var(--s-5);
   }
-  .cc-peek__handle {
-    grid-column: 1 / -1;
-    justify-self: center;
-    width: 44px;
-    height: 5px;
-    border-radius: var(--r-pill);
-    background: var(--line);
+  .cc-rail__title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--fs-body);
+    font-weight: 800;
   }
-  .cc-peek__file,
-  .cc-peek__lock { display: flex; align-items: center; gap: 6px; }
-  .cc-peek__file { font-weight: 700; }
-  .cc-peek__lock { color: var(--ink-muted); }
-  .cc-rail__body { padding: var(--s-4); }
+  .cc-rail__body { padding: var(--s-3) var(--s-4) max(var(--s-4), env(safe-area-inset-bottom)); }
+  .cc-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    background: var(--clay-drop);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-2) var(--ease-out);
+  }
+  .cc-rail.is-open + .cc-scrim { opacity: 1; pointer-events: auto; }
 }
 @media (max-width: 400px) {
   .cc-actions { display: none; }

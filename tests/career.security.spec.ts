@@ -235,17 +235,18 @@ test('"Delete everything" clears chats but keeps the device, so today\'s usage s
   await expect(page.locator('[data-usage="messages"] [data-left]')).toHaveText('9 of 10 left');
 });
 
-test('phone: the rail is a bottom sheet that opens and closes', async ({ page }) => {
+test('phone: the rail is a panel the hamburger opens and Escape closes (no peek bar)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openCareer(page);
-  const peek = page.locator('.cc-peek');
-  await expect(peek).toBeVisible();
+  const menu = page.getByRole('button', { name: 'Chats, résumé and usage' });
+  await expect(page.locator('.cc-peek')).toHaveCount(0);
   await expect(page.locator('[data-new-chat]')).not.toBeInViewport();
-  await peek.click();
+  await menu.click();
   await expect(page.locator('[data-new-chat]')).toBeInViewport();
-  await expect(peek).toHaveAttribute('aria-expanded', 'true');
+  await expect(menu).toHaveAttribute('aria-expanded', 'true');
   await page.keyboard.press('Escape');
-  await expect(peek).toHaveAttribute('aria-expanded', 'false');
+  await expect(menu).toHaveAttribute('aria-expanded', 'false');
+  await expect(menu).toBeFocused();
 });
 
 test('isolation: "/" never requests Career Coach code, even after the chat island loads', async ({ page }) => {
