@@ -1,10 +1,11 @@
 ---
-const rays = Array.from({ length: 8 }, (_, i) => i * 45);
+// Eight rays; each one's angle comes from its position (no inline styles, so it works under a strict CSP).
+const rays = Array.from({ length: 8 });
 ---
 
 <button class="theme-toggle" type="button" data-theme-toggle aria-label="Colour theme">
   <span class="tt-rays" aria-hidden="true">
-    {rays.map((deg) => <span class="tt-ray" style={`--a:${deg}deg`}></span>)}
+    {rays.map(() => <span class="tt-ray"></span>)}
   </span>
   <span class="tt-orb" aria-hidden="true">
     <span class="tt-sphere clay-sphere clay--butter"></span>
@@ -64,6 +65,14 @@ const rays = Array.from({ length: 8 }, (_, i) => i * 45);
     transition: transform var(--dur-3) var(--ease-spring);
   }
   .tt-rays { position: relative; }
+  .tt-ray:nth-child(1) { --a: 0deg; }
+  .tt-ray:nth-child(2) { --a: 45deg; }
+  .tt-ray:nth-child(3) { --a: 90deg; }
+  .tt-ray:nth-child(4) { --a: 135deg; }
+  .tt-ray:nth-child(5) { --a: 180deg; }
+  .tt-ray:nth-child(6) { --a: 225deg; }
+  .tt-ray:nth-child(7) { --a: 270deg; }
+  .tt-ray:nth-child(8) { --a: 315deg; }
   .tt-ray {
     position: absolute;
     left: 50%;

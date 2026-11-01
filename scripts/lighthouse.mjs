@@ -6,6 +6,9 @@ import { chromium } from '@playwright/test';
 import { startServer } from './serve-static.mjs';
 
 const RUNS = Number(process.env.LH_RUNS) || 3;
+// /career registers a device on load: give it the in-memory Upstash fake (as production has Redis), no secrets needed.
+const fakeRedis = (process.env.LH_PATH ?? '/').startsWith('/career') ? await (await import('../tests/fake-upstash.mjs')).startFakeUpstash() : null;
+if (fakeRedis) Object.assign(process.env, { UPSTASH_REDIS_REST_URL: fakeRedis.url, UPSTASH_REDIS_REST_TOKEN: (await import('../tests/fake-upstash.mjs')).FAKE_TOKEN });
 const server = await startServer(4322);
 const url = `http://localhost:${server.address().port}${process.env.LH_PATH ?? '/'}`;
 const chrome = await chromeLauncher.launch({
@@ -26,6 +29,7 @@ try {
 } finally {
   chrome.kill();
   server.close();
+  fakeRedis?.server.close();
 }
 
 mkdirSync('reports', { recursive: true });

@@ -1,0 +1,74 @@
+---
+import Avatar from './Avatar.astro';
+
+// "Ask about {name} | Career Coach": two real links (static HTML, never injected), shared by the hero's twin card and
+// the /career header. Switching is a cross-document navigation, morphed by a View Transition (src/styles/base.css).
+interface Props {
+  current: 'twin' | 'coach';
+  firstName: string;
+  /** The page's one switch that takes part in the View Transition. */
+  morph?: boolean;
+}
+const { current, firstName, morph = false } = Astro.props;
+---
+
+<nav class:list={['mode', { 'mode--morph': morph }]} aria-label="Chat mode">
+  <a class="mode__opt" href="/" aria-current={current === 'twin' ? 'page' : undefined}>
+    <Avatar size={22} />
+    <span class="mode__long">Ask about {firstName}</span>
+    <span class="mode__short">About {firstName}</span>
+  </a>
+  <a class="mode__opt" href="/career" aria-current={current === 'coach' ? 'page' : undefined}>
+    <span class="mode__orb clay-sphere clay--lilac" aria-hidden="true"></span>
+    <span class="mode__long">Career Coach</span>
+    <span class="mode__short">Coach</span>
+  </a>
+</nav>
+
+<style>
+  .mode {
+    display: inline-flex;
+    gap: var(--s-1);
+    padding: var(--s-1);
+    border-radius: var(--r-pill);
+    background: var(--surface);
+    box-shadow: var(--ledge-sm) var(--line);
+  }
+  .mode--morph { view-transition-name: chat-mode; }
+  .mode__opt {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+    min-height: var(--tap);
+    padding: 0 var(--s-4) 0 var(--s-2);
+    border-radius: var(--r-pill);
+    color: var(--ink);
+    font-size: var(--fs-label);
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background-color var(--dur-1) var(--ease-out);
+  }
+  .mode__opt:hover { background: var(--bg); }
+  .mode__opt[aria-current='page'] {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+  }
+  .mode__orb {
+    display: block;
+    width: 22px;
+    height: 22px;
+    flex: none;
+    font-size: var(--fs-meta);
+  }
+  .mode__short { display: none; }
+  @media (max-width: 480px) {
+    .mode__long { display: none; }
+    .mode__short { display: inline; }
+  }
+  @media (max-width: 400px) {
+    .mode :global(.avatar),
+    .mode__orb { display: none; }
+    .mode__opt { padding-inline: var(--s-3); }
+  }
+</style>

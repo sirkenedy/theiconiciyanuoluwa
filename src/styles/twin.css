@@ -342,3 +342,78 @@ span.mini-chip { cursor: default; }
     touch-action: none;
   }
 }
+
+/* "Ask about … | Career Coach" inside the docked panel (phones open Harnie here, not in the hero card). */
+.twin-mode {
+  display: flex;
+  gap: var(--s-1);
+  margin: 0 var(--s-4) var(--s-2);
+  padding: var(--s-1);
+  border-radius: var(--r-pill);
+  background: var(--bg);
+}
+.twin-mode a {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: var(--tap);
+  border-radius: var(--r-pill);
+  color: var(--ink);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  text-decoration: none;
+}
+.twin-mode a[aria-current='page'] { background: var(--btn-primary-bg); color: var(--btn-primary-fg); }
+
+/* Desktop: a bubble beside the orb offers Harnie and the career coach. It shows on arrival, then on hover or focus. */
+.twin-peek {
+  position: absolute;
+  right: 76px;
+  bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s-2);
+}
+.twin-peek__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--tap);
+  padding: 0 var(--s-4);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-label);
+  font-weight: 700;
+  white-space: nowrap;
+  text-decoration: none;
+  box-shadow: var(--ledge-sm) var(--lilac-ledge), 0 10px 20px var(--clay-drop);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(14px) scale(0.92);
+  transform-origin: right center;
+  transition:
+    opacity var(--dur-2) var(--ease-out),
+    transform var(--dur-3) var(--ease-spring),
+    visibility 0s var(--dur-2);
+}
+.twin-peek__item--coach { background: var(--lilac-hi); color: var(--on-pastel); box-shadow: var(--ledge-sm) var(--lilac-ledge), 0 10px 20px var(--clay-drop); }
+.twin-peek__item svg { width: 16px; height: 16px; }
+.twin-dock.is-peek .twin-peek__item,
+.twin-dock:focus-within .twin-peek__item {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 0s;
+}
+@media (hover: hover) {
+  .twin-dock:hover .twin-peek__item { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+  .twin-peek__item:hover { transform: translateY(-2px); }
+}
+.twin-dock.is-peek .twin-peek__item:nth-child(2),
+.twin-dock:focus-within .twin-peek__item:nth-child(2) { transition-delay: 70ms; }
+@media (max-width: 760px) { .twin-peek { display: none; } }

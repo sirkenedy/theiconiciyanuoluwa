@@ -1,0 +1,516 @@
+[
+  {
+    "company": "Stripe",
+    "ats": "greenhouse",
+    "token": "stripe",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Airbnb",
+    "ats": "greenhouse",
+    "token": "airbnb",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Figma",
+    "ats": "greenhouse",
+    "token": "figma",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Discord",
+    "ats": "greenhouse",
+    "token": "discord",
+    "regions": [
+      "us"
+    ],
+    "active": true
+  },
+  {
+    "company": "Dropbox",
+    "ats": "greenhouse",
+    "token": "dropbox",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "GitLab",
+    "ats": "greenhouse",
+    "token": "gitlab",
+    "regions": [
+      "remote"
+    ],
+    "active": true
+  },
+  {
+    "company": "Coinbase",
+    "ats": "greenhouse",
+    "token": "coinbase",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Robinhood",
+    "ats": "greenhouse",
+    "token": "robinhood",
+    "regions": [
+      "us"
+    ],
+    "active": true
+  },
+  {
+    "company": "Reddit",
+    "ats": "greenhouse",
+    "token": "reddit",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Instacart",
+    "ats": "greenhouse",
+    "token": "instacart",
+    "regions": [
+      "us"
+    ],
+    "active": true
+  },
+  {
+    "company": "Pinterest",
+    "ats": "greenhouse",
+    "token": "pinterest",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Duolingo",
+    "ats": "greenhouse",
+    "token": "duolingo",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Asana",
+    "ats": "greenhouse",
+    "token": "asana",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Cloudflare",
+    "ats": "greenhouse",
+    "token": "cloudflare",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Datadog",
+    "ats": "greenhouse",
+    "token": "datadog",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Airtable",
+    "ats": "greenhouse",
+    "token": "airtable",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Gusto",
+    "ats": "greenhouse",
+    "token": "gusto",
+    "regions": [
+      "us"
+    ],
+    "active": true
+  },
+  {
+    "company": "Brex",
+    "ats": "greenhouse",
+    "token": "brex",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Twilio",
+    "ats": "greenhouse",
+    "token": "twilio",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Lyft",
+    "ats": "greenhouse",
+    "token": "lyft",
+    "regions": [
+      "us"
+    ],
+    "active": true
+  },
+  {
+    "company": "Flexport",
+    "ats": "greenhouse",
+    "token": "flexport",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Chime",
+    "ats": "greenhouse",
+    "token": "chime",
+    "regions": [
+      "us"
+    ],
+    "active": true
+  },
+  {
+    "company": "Anthropic",
+    "ats": "greenhouse",
+    "token": "anthropic",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Andela",
+    "ats": "ashby",
+    "token": "andela",
+    "regions": [
+      "africa",
+      "remote"
+    ],
+    "active": true
+  },
+  {
+    "company": "Flutterwave",
+    "ats": "greenhouse",
+    "token": "flutterwave",
+    "regions": [
+      "africa"
+    ],
+    "active": false
+  },
+  {
+    "company": "Moniepoint",
+    "ats": "greenhouse",
+    "token": "moniepoint",
+    "regions": [
+      "africa"
+    ],
+    "active": true
+  },
+  {
+    "company": "Paystack",
+    "ats": "greenhouse",
+    "token": "paystack",
+    "regions": [
+      "africa"
+    ],
+    "active": false
+  },
+  {
+    "company": "Chipper Cash",
+    "ats": "greenhouse",
+    "token": "chippercash",
+    "regions": [
+      "africa"
+    ],
+    "active": false
+  },
+  {
+    "company": "Kuda",
+    "ats": "greenhouse",
+    "token": "kuda",
+    "regions": [
+      "africa"
+    ],
+    "active": false
+  },
+  {
+    "company": "Wave",
+    "ats": "lever",
+    "token": "wave",
+    "regions": [
+      "africa"
+    ],
+    "active": false
+  },
+  {
+    "company": "Yoco",
+    "ats": "lever",
+    "token": "yoco",
+    "regions": [
+      "africa"
+    ],
+    "active": false
+  },
+  {
+    "company": "Mono",
+    "ats": "ashby",
+    "token": "mono",
+    "regions": [
+      "africa"
+    ],
+    "active": false
+  },
+  {
+    "company": "Paga",
+    "ats": "lever",
+    "token": "paga",
+    "regions": [
+      "africa"
+    ],
+    "active": false
+  },
+  {
+    "company": "Spotify",
+    "ats": "lever",
+    "token": "spotify",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Plaid",
+    "ats": "ashby",
+    "token": "plaid",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Palantir",
+    "ats": "lever",
+    "token": "palantir",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Wealthsimple",
+    "ats": "ashby",
+    "token": "wealthsimple",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Kraken",
+    "ats": "ashby",
+    "token": "kraken.com",
+    "regions": [
+      "remote"
+    ],
+    "active": true
+  },
+  {
+    "company": "Mistral AI",
+    "ats": "lever",
+    "token": "mistral",
+    "regions": [
+      "eu"
+    ],
+    "active": true
+  },
+  {
+    "company": "Ashby",
+    "ats": "ashby",
+    "token": "ashby",
+    "regions": [
+      "remote"
+    ],
+    "active": true
+  },
+  {
+    "company": "Notion",
+    "ats": "ashby",
+    "token": "notion",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Ramp",
+    "ats": "ashby",
+    "token": "ramp",
+    "regions": [
+      "us"
+    ],
+    "active": true
+  },
+  {
+    "company": "Linear",
+    "ats": "ashby",
+    "token": "linear",
+    "regions": [
+      "remote"
+    ],
+    "active": true
+  },
+  {
+    "company": "Vercel",
+    "ats": "ashby",
+    "token": "vercel",
+    "regions": [
+      "remote"
+    ],
+    "active": true
+  },
+  {
+    "company": "OpenAI",
+    "ats": "ashby",
+    "token": "openai",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Deel",
+    "ats": "ashby",
+    "token": "deel",
+    "regions": [
+      "remote"
+    ],
+    "active": true
+  },
+  {
+    "company": "Supabase",
+    "ats": "ashby",
+    "token": "supabase",
+    "regions": [
+      "remote"
+    ],
+    "active": true
+  },
+  {
+    "company": "PostHog",
+    "ats": "ashby",
+    "token": "posthog",
+    "regions": [
+      "remote"
+    ],
+    "active": true
+  },
+  {
+    "company": "Replit",
+    "ats": "ashby",
+    "token": "replit",
+    "regions": [
+      "us"
+    ],
+    "active": true
+  },
+  {
+    "company": "Cohere",
+    "ats": "ashby",
+    "token": "cohere",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Zapier",
+    "ats": "ashby",
+    "token": "zapier",
+    "regions": [
+      "remote"
+    ],
+    "active": true
+  },
+  {
+    "company": "Retool",
+    "ats": "ashby",
+    "token": "retool",
+    "regions": [
+      "us"
+    ],
+    "active": false
+  },
+  {
+    "company": "Mercury",
+    "ats": "ashby",
+    "token": "mercury",
+    "regions": [
+      "us"
+    ],
+    "active": true
+  },
+  {
+    "company": "Perplexity",
+    "ats": "ashby",
+    "token": "perplexity",
+    "regions": [
+      "global"
+    ],
+    "active": true
+  },
+  {
+    "company": "Runway",
+    "ats": "ashby",
+    "token": "runway",
+    "regions": [
+      "us"
+    ],
+    "active": true
+  },
+  {
+    "company": "Lattice",
+    "ats": "greenhouse",
+    "token": "lattice",
+    "regions": [
+      "us"
+    ],
+    "active": true
+  },
+  {
+    "company": "Multiverse",
+    "ats": "ashby",
+    "token": "multiverse",
+    "regions": [
+      "uk"
+    ],
+    "active": true
+  }
+]

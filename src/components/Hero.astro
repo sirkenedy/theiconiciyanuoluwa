@@ -4,6 +4,7 @@ import portrait from '../assets/portrait.png';
 import Avatar from './Avatar.astro';
 import ClayObject from './ClayObject.astro';
 import TwinOrb from './TwinOrb.astro';
+import ModeSwitch from './ModeSwitch.astro';
 import Icon from './Icon.astro';
 import Text from './Text.astro';
 import { isPlaceholder } from '../lib/resume-parse.ts';
@@ -52,6 +53,7 @@ const answerCss = faq
         <h2 id="twin-title" class="twin__title">Ask Harnie, my AI twin <span class="twin__sub">· answers from my résumé</span></h2>
         <span class="twin__dots" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
       </div>
+      <ModeSwitch current="twin" firstName={firstName} morph />
       <fieldset class="twin__chips">
         <legend class="sr-only">Pick a question</legend>
         {

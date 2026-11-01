@@ -1,6 +1,8 @@
 // Serves the Vercel static output with CDN-like compression and caching, since `astro preview`
 // isn't supported by @astrojs/vercel. Used by `npm run preview`, Lighthouse and Playwright.
 // /api/react and /api/twin answer as a deployment without Redis or an API key; use `npm run dev` for the real routes.
+// Career Coach (/career, /api/device/*, /api/career/*) runs through the built Vercel function itself, so its CSP
+// headers and request signing are tested as deployed (point UPSTASH_REDIS_REST_* at a Redis, or the test fake).
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -8,11 +10,11 @@ import { brotliCompressSync, constants } from 'node:zlib';
 
 const ROOT = new URL('../.vercel/output/static/', import.meta.url).pathname;
 const TYPES = {
-  '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json',
+  '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json',
   '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.pdf': 'application/pdf', '.txt': 'text/plain; charset=utf-8',
   '.xml': 'application/xml', '.png': 'image/png', '.avif': 'image/avif', '.webp': 'image/webp',
 };
-const COMPRESSIBLE = new Set(['.html', '.css', '.js', '.json', '.svg', '.txt', '.xml']);
+const COMPRESSIBLE = new Set(['.html', '.css', '.js', '.mjs', '.json', '.svg', '.txt', '.xml']);
 
 async function resolveFile(urlPath) {
   const clean = normalize(decodeURIComponent(urlPath.split('?')[0])).replace(/^(\.\.[/\\])+/, '');
@@ -26,8 +28,18 @@ async function resolveFile(urlPath) {
   return null;
 }
 
+// Same routing as .vercel/output/config.json: on-demand pages build their images at runtime through /_image.
+// /career itself is on demand; /career/privacy is a static file (Vercel serves files first, so must we).
+const ON_DEMAND = /^\/(career\/?(\?|$)|api\/device\/|api\/career\/|_image\?)/;
+let renderFn;
+const render = async (req, res) => {
+  renderFn ??= (await import(new URL('../.vercel/output/functions/_render.func/dist/server/entry.mjs', import.meta.url))).default;
+  return renderFn(req, res);
+};
+
 export function startServer(port = Number(process.env.PORT) || 4321) {
   const server = createServer(async (req, res) => {
+    if (ON_DEMAND.test(req.url ?? '')) return render(req, res);
     // Server routes don't exist in the static output; answer like a deployment without Redis configured.
     if (req.url?.startsWith('/api/twin')) {
       if (req.method === 'HEAD') return res.writeHead(204).end();

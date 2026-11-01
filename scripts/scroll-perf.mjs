@@ -51,7 +51,14 @@ const interactAt = async (key, selector, action) => {
 for (let i = 0; i < 400; i++) {
   await page.mouse.wheel(0, 90);
   await page.waitForTimeout(16);
-  await interactAt('chip', 'label[for="twin-q-2"]', () => page.locator('label[for="twin-q-2"]').click());
+  // Phones have no inline chat card: the FAQ chip is tapped in the floating Harnie panel (answered locally, no API).
+  if (i === 12 && !done.has('chip')) {
+    done.add('chip');
+    await page.locator('.twin-launcher').first().click();
+    await page.locator('.twin-panel .twin-starter').first().click();
+    await page.waitForTimeout(400);
+    await page.keyboard.press('Escape');
+  }
   await interactAt('details', '#exp-3 summary', () => page.locator('#exp-3 summary').click());
   await interactAt('reaction', '[data-rx="post-1:love"]', () => page.locator('[data-rx="post-1:love"]').click());
   await interactAt('theme', '#blog .post', () => page.locator('[data-theme-toggle]').click());

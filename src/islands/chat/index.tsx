@@ -54,5 +54,6 @@ export function start() {
   card.querySelector('[data-twin-stop]')?.addEventListener('click', stop);
 
 
-  new IntersectionObserver(([entry]) => setState({ cardVisible: entry.isIntersecting })).observe(card);
+  // The dock appears as soon as the card's header (Harnie's face and name) scrolls out of view.
+  new IntersectionObserver(([entry]) => setState({ cardVisible: entry.isIntersecting })).observe(card.querySelector('.twin__head') ?? card);
 }

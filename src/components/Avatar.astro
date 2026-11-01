@@ -1,10 +1,13 @@
 ---
-import { Picture } from 'astro:assets';
-import avatar from '../assets/portrait-avatar.png';
+import avif from '../assets/portrait-avatar-104.avif?url';
+import webp from '../assets/portrait-avatar-104.webp?url';
 
-// Small round portrait (nav, hero badge, résumé card, footer). Decorative: the name always sits next to it.
+// Small round portrait (nav, hero badge, mode switch, résumé card, footer). Decorative: the name always sits next to it.
+// One pre-built 104 px file (≈3 KB), not an Astro <Picture>: on-demand pages like /career would otherwise resize it per
+// request through /_image. Sizes are classes, not inline styles, so it renders under /career's strict CSP.
+type Size = 22 | 30 | 32 | 36 | 52;
 interface Props {
-  size: number;
+  size: Size;
   class?: string;
   /** Above the fold (nav, hero): load straight away. */
   eager?: boolean;
@@ -12,8 +15,11 @@ interface Props {
 const { size, class: className, eager = false } = Astro.props;
 ---
 
-<span class:list={['avatar', className]} style={`--av:${size}px`} aria-hidden="true">
-  <Picture src={avatar} formats={['avif', 'webp']} fallbackFormat="webp" widths={[size * 2]} sizes={`${size}px`} width={size} height={size} alt="" loading={eager ? 'eager' : 'lazy'} decoding="async" />
+<span class:list={['avatar', `avatar--${size}`, className]} aria-hidden="true">
+  <picture>
+    <source srcset={avif} type="image/avif" />
+    <img src={webp} width={size} height={size} alt="" loading={eager ? 'eager' : 'lazy'} decoding="async" />
+  </picture>
 </span>
 
 <style>
@@ -26,6 +32,11 @@ const { size, class: className, eager = false } = Astro.props;
     border-radius: 50%;
     background: var(--lilac);
   }
+  .avatar--22 { --av: 22px; }
+  .avatar--30 { --av: 30px; }
+  .avatar--32 { --av: 32px; }
+  .avatar--36 { --av: 36px; }
+  .avatar--52 { --av: 52px; }
   .avatar :global(img) {
     display: block;
     width: 100%;

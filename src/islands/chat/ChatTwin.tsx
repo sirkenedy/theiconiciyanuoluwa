@@ -80,7 +80,16 @@ function Starters() {
     <div class="twin-starters">
       <p class="twin-starters__hint">Ask about my work, or start here:</p>
       {twinData.faq.map((f) => (
-        <button key={f.q} type="button" class="twin-starter" onClick={() => askLocal(f.q, f.a)}>
+        <button
+          key={f.q}
+          type="button"
+          class="twin-starter"
+          onClick={() => {
+            askLocal(f.q, f.a);
+            // The starters are replaced by the conversation: keep focus in the panel (on its input), not on <body>.
+            requestAnimationFrame(() => document.getElementById('twin-panel-input')?.focus());
+          }}
+        >
           {f.q}
         </button>
       ))}
@@ -241,12 +250,14 @@ function Composer({ inputRef }: { inputRef: { current: HTMLInputElement | null }
   );
 }
 
-/** Floating orb + non-modal panel: always on phones, elsewhere once there is a conversation and the hero card is out of view. */
+/** Floating orb + non-modal panel: always on phones; elsewhere once the hero card's header is out of view
+ * (or the conversation moved into the panel). On arrival a bubble offers Harnie and the career coach, then tucks away. */
 export function Dock() {
   const s = useStore();
   const phone = usePhone();
-  const docked = phone || (s.messages.length > 0 && (!s.cardVisible || !s.inlineActive));
+  const docked = phone || !s.cardVisible || (s.messages.length > 0 && !s.inlineActive);
   const [shown, setShown] = useState(docked);
+  const [peek, setPeek] = useState(false);
   const launcher = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -275,6 +286,13 @@ export function Dock() {
     const delta = avatarDelta();
     if (delta) launcher.current.animate({ transform: [delta, 'none'] }, { duration: 750, easing: SPRING });
   }, [shown]);
+
+  useEffect(() => {
+    if (!shown || !docked || phone) return;
+    setPeek(true);
+    const t = setTimeout(() => setPeek(false), 6000);
+    return () => clearTimeout(t);
+  }, [shown, docked, phone]);
 
   useLayoutEffect(() => {
     if (!s.open) return;
@@ -308,6 +326,14 @@ export function Dock() {
     launcher.current?.focus();
   };
 
+  // Escape closes the panel wherever focus is (a tapped starter or the page itself), not only inside it.
+  useEffect(() => {
+    if (!s.open) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [s.open]);
+
   // Mobile bottom sheet: drag the handle down to dismiss.
   const drag = useRef<{ y: number; dy: number } | null>(null);
   const onHandleDown = (e: PointerEvent) => {
@@ -329,7 +355,7 @@ export function Dock() {
 
   if (!shown) return null;
   return (
-    <div class={`twin-dock${s.open ? ' is-open' : ''}`}>
+    <div class={`twin-dock${s.open ? ' is-open' : ''}${peek && !s.open ? ' is-peek' : ''}`}>
       {s.open && (
         <div
           ref={panel}
@@ -338,7 +364,6 @@ export function Dock() {
           role="dialog"
           aria-modal="false"
           aria-labelledby="twin-panel-title"
-          onKeyDown={(e) => e.key === 'Escape' && close()}
         >
           <span class="twin-panel__handle" aria-hidden="true" onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={onHandleUp} />
           <div class="twin-panel__head">
@@ -348,6 +373,10 @@ export function Dock() {
               <Glyph d="M6 6l12 12M18 6L6 18" />
             </button>
           </div>
+          <nav class="twin-mode" aria-label="Chat mode">
+            <a href="/" aria-current="page">Ask about {twinData.firstName}</a>
+            <a href="/career">Career Coach</a>
+          </nav>
           <div ref={body} class="twin-panel__body twin-log" role="log" aria-live="off" aria-label="Conversation with Harnie">
             {s.messages.length ? <Conversation /> : <Starters />}
           </div>
@@ -373,6 +402,17 @@ export function Dock() {
         <Orb state={s.orb} size={phone ? 40 : 64} />
         {phone && <span class="twin-launcher__label">Ask Harnie</span>}
       </button>
+      {!phone && !s.open && (
+        <nav class="twin-peek" aria-label="Chat with Harnie or the career coach">
+          <button type="button" class="twin-peek__item" onClick={() => setState({ open: true })}>
+            Ask Harnie about {twinData.firstName}
+          </button>
+          <a class="twin-peek__item twin-peek__item--coach" href="/career">
+            Ami, the career coach
+            <Glyph d="M5 12h14M13 6l6 6-6 6" />
+          </a>
+        </nav>
+      )}
     </div>
   );
 }

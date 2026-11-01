@@ -1,5 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
+import { ogAltFor } from '../lib/text';
+import PortfolioScripts from '../components/PortfolioScripts.astro';
 import ClayObject from '../components/ClayObject.astro';
 import Footer from '../components/Footer.astro';
 import Header from '../components/Header.astro';
@@ -8,7 +10,7 @@ import resume from '../content/resume.json';
 const { identity } = resume;
 ---
 
-<Base title={`Page not found — ${identity.name}`} description="This page missed its landing pad." noindex>
+<Base ogAlt={ogAltFor(identity)} title={`Page not found — ${identity.name}`} description="This page missed its landing pad." noindex>
   <Header brand={identity.name.split(' ')[0]} home={false} />
   <main id="main" tabindex="-1" class="container lost">
     <div id="top" class="lost__scene" aria-hidden="true">
@@ -26,6 +28,7 @@ const { identity } = resume;
     </div>
   </main>
   <Footer name={identity.name} email={identity.email} linkedin={identity.linkedin} instagram={identity.instagram} />
+  <PortfolioScripts />
 </Base>
 
 <style>

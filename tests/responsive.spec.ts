@@ -15,6 +15,8 @@ const PAGES = [
   { name: 'home', path: '/' },
   { name: 'resume', path: '/resume/' },
   { name: '404', path: '/missing-page' },
+  { name: 'career', path: '/career' },
+  { name: 'career-privacy', path: '/career/privacy' },
 ];
 const SECTIONS = ['top', 'about', 'journey', 'blog', 'resume', 'contact'];
 const SHOTS = process.env.QA_SHOTS !== '0';
@@ -73,12 +75,23 @@ async function audit(page: Page): Promise<string[]> {
       if (visible(el) && parseFloat(getComputedStyle(el).fontSize) < 16) problems.push(`input font ${getComputedStyle(el).fontSize} (iOS zooms): ${label(el)}`);
     }
 
-    // 5. Overlapping interactive elements (ignoring nesting).
+    // 5. Overlapping interactive elements (ignoring nesting). Only the part a scroll container actually shows counts:
+    // content scrolled out of an overflow:auto panel (e.g. /career's chat log) isn't under the composer.
+    const shown = (el: Element) => {
+      let r = el.getBoundingClientRect();
+      let { left, top, right, bottom } = r;
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        if (!/auto|scroll|hidden|clip/.test(getComputedStyle(p).overflowY + getComputedStyle(p).overflowX)) continue;
+        r = p.getBoundingClientRect();
+        left = Math.max(left, r.left); top = Math.max(top, r.top); right = Math.min(right, r.right); bottom = Math.min(bottom, r.bottom);
+      }
+      return { left, top, right, bottom };
+    };
     for (let i = 0; i < interactive.length; i++) {
       for (let j = i + 1; j < interactive.length; j++) {
         const a = interactive[i], b = interactive[j];
         if (a.contains(b) || b.contains(a)) continue;
-        const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+        const ra = shown(a), rb = shown(b);
         const w = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
         const h = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
         if (w > 1 && h > 1) problems.push(`overlap: ${label(a)} × ${label(b)}`);
@@ -133,9 +146,10 @@ async function shoot(page: Page, file: string, sections: boolean) {
   if (!SHOTS) return;
   await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
   // content-visibility skips painting off-screen sections, which a full-page capture would show as blank.
-  const style = await page.addStyleTag({ content: '.cv-auto{content-visibility:visible!important}' });
+  // /career's CSP refuses injected styles (as it should); it has no .cv-auto sections anyway.
+  const style = await page.addStyleTag({ content: '.cv-auto{content-visibility:visible!important}' }).catch(() => null);
   await page.screenshot({ path: `${DIR}/${file}.jpg`, fullPage: true, type: 'jpeg', quality: 70 });
-  await style.evaluate((el) => (el as Element).remove());
+  await style?.evaluate((el) => (el as Element).remove());
   if (!sections) return;
   for (const id of SECTIONS) {
     await page.evaluate((id) => {

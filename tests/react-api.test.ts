@@ -10,7 +10,10 @@ const counters = new Map<string, number>();
 let failing = false;
 let server: Server;
 
-function run([cmd, key, value]: string[]) {
+const breakdown = new Map<string, number>();
+function run([cmd, key, value, ...rest]: string[]) {
+  if (cmd === 'INCRBY') return counters.set(key, (counters.get(key) ?? 0) + Number(value)).get(key);
+  if (cmd === 'HINCRBY') return breakdown.set(value, (breakdown.get(value) ?? 0) + Number(rest[0])).get(value);
   const set = sets.get(key) ?? new Set<string>();
   sets.set(key, set);
   switch (cmd) {
@@ -73,13 +76,20 @@ test('GET returns a count for every allowed key, cacheable at the edge', async (
   assert.match(res.headers.get('cache-control') ?? '', /s-maxage=15/);
 });
 
-test('one reaction per visitor per type; toggling off removes it', async () => {
+test('one reaction per network per type: a new browser id from the same place adds nothing; toggling off removes it', async () => {
   configure();
-  assert.deepEqual((await (await post({ visitor: A, changes: [{ key: 'site:love', on: true }] })).json()).counts, { 'site:love': 1 });
-  assert.deepEqual((await (await post({ visitor: A, changes: [{ key: 'site:love', on: true }] })).json()).counts, { 'site:love': 1 });
-  assert.deepEqual((await (await post({ visitor: B, changes: [{ key: 'site:love', on: true }] })).json()).counts, { 'site:love': 2 });
-  const batch = await (await post({ visitor: A, changes: [{ key: 'site:love', on: false }, { key: 'post-2:insight', on: true }, { key: 'site:love', on: true }, { key: 'site:love', on: false }] })).json();
+  breakdown.clear();
+  counters.delete('rx:total');
+  const one = '203.0.113.21';
+  const two = '203.0.113.22';
+  assert.deepEqual((await (await post({ visitor: A, changes: [{ key: 'site:love', on: true }] }, one)).json()).counts, { 'site:love': 1 });
+  assert.deepEqual((await (await post({ visitor: B, changes: [{ key: 'site:love', on: true }] }, one)).json()).counts, { 'site:love': 1 }, 'private window / cleared storage');
+  assert.deepEqual((await (await post({ visitor: B, changes: [{ key: 'site:love', on: true }] }, two)).json()).counts, { 'site:love': 2 });
+  const batch = await (await post({ visitor: A, changes: [{ key: 'site:love', on: false }, { key: 'post-2:insight', on: true }, { key: 'site:love', on: true }, { key: 'site:love', on: false }] }, one)).json();
   assert.deepEqual(batch.counts, { 'site:love': 1, 'post-2:insight': 1 });
+  // For the owner: rx:total and the rx:breakdown hash follow real changes only.
+  assert.equal(counters.get('rx:total'), 2);
+  assert.deepEqual(Object.fromEntries(breakdown), { 'site:love': 1, 'post-2:insight': 1 });
 });
 
 test('rejects unknown keys, bad visitor ids and oversized batches', async () => {

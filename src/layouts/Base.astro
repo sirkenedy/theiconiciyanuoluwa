@@ -5,23 +5,22 @@ import '../styles/base.css';
 import '../styles/motion.css';
 import '../styles/twin.css';
 import { darkTokens, lightTokens } from '../lib/tokens';
-import { heroLines } from '../lib/text';
-import resume from '../content/resume.json';
 
 interface Props {
   title: string;
   description: string;
   /** Pages that must not be indexed (the 404). */
   noindex?: boolean;
+  /** Alt text for the shared /og.png card. Passed in, so the layout never imports the résumé (on-demand pages would ship it). */
+  ogAlt: string;
 }
-const { title, description, noindex = false } = Astro.props;
+const { title, description, noindex = false, ogAlt } = Astro.props;
 
 // theme-color must be a literal; it comes from the tokens so they stay the single source.
 const bgLight = lightTokens.bg;
 const bgDark = darkTokens.bg;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const ogImage = new URL('/og.png', Astro.site);
-const ogAlt = `${heroLines(resume.identity.hero).join(' ')} — ${resume.identity.name}, ${resume.identity.headline}`;
 // Prerender likely next pages on hover (Chromium); other browsers ignore this.
 const speculation = JSON.stringify({ prerender: [{ where: { href_matches: ['/blog/*', '/resume/'] }, eagerness: 'moderate' }] });
 ---
@@ -63,8 +62,5 @@ const speculation = JSON.stringify({ prerender: [{ where: { href_matches: ['/blo
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <slot />
-    <script>
-      import '../islands/main.ts';
-    </script>
   </body>
 </html>

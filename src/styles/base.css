@@ -234,3 +234,8 @@ main { overflow-x: clip; }
   }
   .btn:hover, .btn:active, .card, .card:hover, .tilt, .rx:hover, .rx:active { transform: none; }
 }
+
+/* Switching between Harnie and Career Coach is a cross-document navigation; the mode switch morphs across. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+}

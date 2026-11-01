@@ -1,5 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
+import { ogAltFor } from '../lib/text';
+import PortfolioScripts from '../components/PortfolioScripts.astro';
 import ClayObject from '../components/ClayObject.astro';
 import Footer from '../components/Footer.astro';
 import Header from '../components/Header.astro';
@@ -18,7 +20,7 @@ const certLink = (line: string) => line.match(/https?:\/\/\S+$/)?.[0];
 const certText = (line: string) => line.replace(/\s+—\s+https?:\/\/\S+$/, '');
 ---
 
-<Base title={`Résumé — ${identity.name}`} description={`${identity.name}: ${identity.headline}. ${identity.one_liner}`}>
+<Base ogAlt={ogAltFor(identity)} title={`Résumé — ${identity.name}`} description={`${identity.name}: ${identity.headline}. ${identity.one_liner}`}>
   <Header brand={identity.name.split(' ')[0]} home={false} />
   <main id="main" tabindex="-1" class="container cv">
     <header id="top" class="cv__head">
@@ -123,6 +125,7 @@ const certText = (line: string) => line.replace(/\s+—\s+https?:\/\/\S+$/, '');
     </section>
   </main>
   <Footer name={identity.name} email={identity.email} linkedin={identity.linkedin} instagram={identity.instagram} />
+  <PortfolioScripts />
 </Base>
 
 <style>

@@ -17,9 +17,11 @@
     "lh": "node scripts/lighthouse.mjs",
     "test:a11y": "playwright test",
     "perf:scroll": "node scripts/scroll-perf.mjs",
-    "test:api": "node --test tests/react-api.test.ts tests/twin-api.test.ts",
+    "test:api": "node --test tests/react-api.test.ts tests/twin-api.test.ts tests/career-api.test.ts tests/career-ai.test.ts tests/jobs.test.ts tests/tailor.test.ts tests/career-limits.test.ts",
     "test:unit": "node --test tests/twin-unit.test.ts",
     "test:twin": "node tests/twin.eval.ts",
+    "test:career-eval": "node tests/career.eval.ts",
+    "reset:local-usage": "node scripts/reset-local-usage.ts",
     "test:responsive": "playwright test tests/responsive.spec.ts"
   },
   "dependencies": {
@@ -28,6 +30,11 @@
     "@astrojs/sitemap": "3.7.4",
     "@astrojs/vercel": "9.0.5",
     "astro": "5.18.2",
+    "docx": "9.12.0",
+    "dompurify": "3.4.17",
+    "mammoth": "1.13.0",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.4.299",
     "preact": "10.29.8"
   },
   "devDependencies": {

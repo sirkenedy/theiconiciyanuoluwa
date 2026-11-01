@@ -32,7 +32,10 @@ const closure = (entries, seen = new Set()) => {
 };
 const initialFiles = closure([...html.matchAll(/<script[^>]*\bsrc="(\/[^"]+\.js)"/g)].map((m) => m[1]));
 const jsFiles = [...initialFiles].map((f) => readFileSync(join(STATIC, f)));
-const chatEntry = [...walk(join(STATIC, '_astro'))].map((f) => '/' + relative(STATIC, f)).find((f) => /\/index\.[\w-]+\.js$/.test(f));
+// Several lazy chunks are named index.*.js (the chat island, Career Coach's docx/pdf libraries): find the chat by its code.
+const chatEntry = [...walk(join(STATIC, '_astro'))]
+  .map((f) => '/' + relative(STATIC, f))
+  .find((f) => /\/index\.[\w-]+\.js$/.test(f) && readFileSync(join(STATIC, f), 'utf8').includes('askChip'));
 const chatFiles = chatEntry ? [...closure([chatEntry])].filter((f) => !initialFiles.has(f)) : [];
 const chatGz = chatFiles.reduce((n, f) => n + gz(readFileSync(join(STATIC, f))), 0);
 const cssInline = inline('style');
@@ -62,7 +65,14 @@ const withoutPaths = (text) =>
   (siteHost ? text.split(siteHost).join('') : text)
     .replace(/(?:file:\/\/)?\/(?:Users|home|private|tmp|var|vercel)\/[^"'`\s)]*/g, '')
     .replace(/\\?"\/[\w./-]+\.(?:pdf|woff2|txt|js|css|svg|html|png|avif|webp)\\?"/g, '""');
+// /career renders per request and shows the owner's display name (src/content/owner.json, name only): that page
+// module may contain it. Every API route and shared chunk must not.
+const DISPLAY_ONLY = /[\\/]pages[\\/]career(\.astro)?\.mjs$/;
+// When more than one page imports owner.json, the bundler splits it into its own chunk: allowed only while it holds
+// nothing but the display name (no email, links or anything else from the résumé).
+const ownerOnly = (f) => /[\\/]chunks[\\/]owner_[\w-]+\.mjs$/.test(f) && !/@|https?:|linkedin|instagram/i.test(readFileSync(f, 'utf8')) && readFileSync(f, 'utf8').length < 400;
 const nameHits = serverFiles.filter((f) => {
+  if (DISPLAY_ONLY.test(f) || ownerOnly(f)) return false;
   const text = withoutPaths(readFileSync(f, 'utf8')).toLowerCase();
   return nameParts.some((p) => text.includes(p.toLowerCase()));
 });
@@ -71,7 +81,7 @@ const rows = [
   ['Initial JS (gzip)', '≤ 30 KB', kb(jsGz), jsGz <= 30 * KB],
   ['CSS (gzip, inlined)', '≤ 22 KB', kb(cssGz), cssGz <= 22 * KB],
   ['HTML document (gzip)', '—', kb(htmlGz), true],
-  ['Chat island (gzip, lazy: idle or intent)', '≤ 25 KB, not in initial graph', chatEntry ? `${kb(chatGz)} (${chatFiles.length} files)` : 'missing', !!chatEntry && chatGz <= 25 * KB && !html.includes('chat')],
+  ['Chat island (gzip, lazy: idle or intent)', '≤ 25 KB, not in initial graph', chatEntry ? `${kb(chatGz)} (${chatFiles.length} files)` : 'missing', !!chatEntry && chatGz <= 25 * KB && !html.includes(chatEntry)],
   ['Motion fallback chunk (gzip, lazy)', '≤ 3 KB, not in initial HTML', fallback ? `${kb(gz(readFileSync(fallback)))}${html.includes('motion-fallback') ? ' — referenced by HTML!' : ''}` : 'missing', !!fallback && gz(readFileSync(fallback)) <= 3 * KB && !html.includes('motion-fallback')],
   ['Font files', '2 WOFF2', `${fonts.length} (${kb(fontBytes)})`, fonts.length === 2],
   ['Preloaded fonts', 'display only', preloadedFonts.length === 1 ? 'Bricolage only' : `${preloadedFonts.length}`, preloadedFonts.length === 1],

@@ -1,0 +1,37 @@
+# Hourly Career Coach job ingest (career-mode.md §3.3a): fetches the free sources that are due (Himalayas daily,
+# Remotive every 6 h, the rest hourly) and stores the last 48 h in Upstash Redis. /api/career/jobs only reads Redis.
+# Scheduled runs can be delayed by GitHub under load; nothing depends on minute-exact timing.
+name: Ingest jobs
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Fetch every source now, ignoring each one's polling cadence
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ingest-jobs
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # No npm install: the script uses only Node built-ins and files in this repo.
+      - run: node scripts/ingest-jobs.ts ${{ inputs.force && '--force' || '' }}
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          HIMALAYAS_API_KEY: ${{ secrets.HIMALAYAS_API_KEY }}

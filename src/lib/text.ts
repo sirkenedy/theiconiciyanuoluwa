@@ -21,3 +21,7 @@ export const heroLines = (hero: string) => {
   const lines = hero.split('|').map((s) => s.trim()).filter(Boolean);
   return lines.length ? lines : ['[hero line]']; // content-check: fallback
 };
+
+/** Alt text for /og.png: the hero line, then who it is. */
+export const ogAltFor = (identity: { hero: string; name: string; headline: string }) =>
+  `${heroLines(identity.hero).join(' ')} — ${identity.name}, ${identity.headline}`;

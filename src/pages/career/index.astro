@@ -1,0 +1,197 @@
+---
+import Base from '../../layouts/Base.astro';
+import Avatar from '../../components/Avatar.astro';
+import Icon, { type IconName } from '../../components/Icon.astro';
+import ModeSwitch from '../../components/ModeSwitch.astro';
+import ThemeToggle from '../../components/ThemeToggle.astro';
+import owner from '../../content/owner.json';
+import { DAILY_LIMITS } from '../../lib/career/limits';
+import '../../styles/career.css';
+
+// Rendered per request: src/middleware.ts adds a fresh CSP nonce to every response.
+export const prerender = false;
+
+const { name, firstName } = owner;
+// Read at request time (this page renders on demand), so changing the key in Vercel needs no rebuild.
+const turnstileKey = process.env.PUBLIC_TURNSTILE_SITE_KEY ?? '';
+
+const STARTERS: { key: string; icon: IconName; tone: string; title: string; text: string }[] = [
+  { key: 'upload', icon: 'upload', tone: 'peach', title: 'Upload my résumé', text: "I'll read it and build your profile." },
+  { key: 'jobs', icon: 'search', tone: 'mint', title: 'Find jobs for me', text: '5 fresh roles a day, matched to you.' },
+  { key: 'tailor', icon: 'wand', tone: 'lilac', title: 'Tailor my résumé', text: 'Rewrite it for a specific job description.' },
+  { key: 'improve', icon: 'sparkle', tone: 'butter', title: 'Make my résumé stronger', text: 'An expert critique and a sharper version.' },
+];
+const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] = [
+  { key: 'messages', label: 'Messages', tone: 'lilac' },
+  { key: 'jobs', label: 'Fresh jobs', tone: 'mint' },
+  { key: 'tailored', label: 'Tailored résumés', tone: 'peach' },
+  { key: 'letters', label: 'Cover letters', tone: 'butter' },
+];
+---
+
+<Base ogAlt={`${name}'s portfolio and Ami, the career coach`} title={`Ami, your career coach — ${name}`} description="A free AI career coach: upload your résumé, get 5 fresh, well-matched jobs a day, and tailor your résumé to each one. Everything stays on your device.">
+  <div class="cc" data-cc>
+    <header class="cc-head">
+      <button class="cc-icon-btn cc-menu" type="button" data-rail-toggle aria-controls="cc-rail" aria-expanded="false" aria-label="Chats and résumé">
+        <Icon name="menu" size={20} />
+      </button>
+      <a class="cc-brand" href="/"><Avatar size={32} eager /><span class="cc-brand__name">{firstName}</span></a>
+      <ModeSwitch current="coach" firstName={firstName} morph />
+      <div class="cc-actions">
+        <ThemeToggle />
+        <a class="btn btn--secondary cc-portfolio" href="/">Portfolio</a>
+      </div>
+    </header>
+
+    <aside id="cc-rail" class="cc-rail" aria-label="Chats, résumé and usage" data-rail>
+      <button class="cc-peek" type="button" data-rail-toggle aria-controls="cc-rail" aria-expanded="false">
+        <span class="cc-peek__handle" aria-hidden="true"></span>
+        <span class="cc-peek__file"><Icon name="file" size={16} /><span data-resume-name>No résumé yet</span></span>
+        <span class="cc-peek__lock"><Icon name="lock" size={14} />On this device</span>
+      </button>
+
+      <div class="cc-rail__body">
+        <button class="btn btn--primary cc-new" type="button" data-new-chat><Icon name="plus" size={18} />New chat</button>
+
+        <h2 class="label cc-rail__label">Chats</h2>
+        <ul class="cc-chats" role="list" data-chats></ul>
+        <p class="cc-chats__empty" data-chats-empty>Your chats will appear here.</p>
+
+        <section class="cc-card" aria-labelledby="cc-resume-title">
+          <h2 id="cc-resume-title" class="label cc-card__label">Your résumé</h2>
+          <div class="cc-resume">
+            <span class="cc-resume__tile tile--peach"><Icon name="file" size={20} /></span>
+            <span class="cc-resume__text"><strong>No résumé yet</strong><span>Upload one and I'll build your profile.</span></span>
+          </div>
+          <div class="cc-card__btns" data-resume-actions>
+            <button class="btn btn--secondary cc-card__btn" type="button" data-start="upload">Upload résumé</button>
+          </div>
+        </section>
+
+        <section class="cc-card" aria-labelledby="cc-usage-title" aria-busy="true" data-usage-loading>
+          <h2 id="cc-usage-title" class="label cc-card__label">Today · resets at midnight</h2>
+          <ul class="cc-usage" role="list">
+            {
+              USAGE.map((u) => (
+                <li class="cc-usage__row" data-usage={u.key}>
+                  <span class="cc-usage__name">{u.label}</span>
+                  <span class="cc-usage__left" data-left><span class="sr-only">Loading</span></span>
+                  <span class={`cc-meter cc-meter--${u.tone}`} aria-hidden="true"><span class="cc-meter__fill" data-fill></span></span>
+                </li>
+              ))
+            }
+          </ul>
+          <p class="cc-usage__note" data-usage-note hidden></p>
+        </section>
+
+        <div class="cc-rail__foot">
+          <p class="cc-lock"><Icon name="lock" size={14} />Saved only on this device, encrypted · <a href="/career/privacy">Privacy</a></p>
+          <button class="cc-link" type="button" data-delete>Delete everything</button>
+          <div class="cc-confirm" data-delete-confirm hidden>
+            <p>Delete every chat, your résumé and your documents from this device? This can't be undone. Today's limits stay as they are.</p>
+            <div class="cc-confirm__btns">
+              <button class="btn btn--primary" type="button" data-delete-yes>Delete everything</button>
+              <button class="btn btn--secondary" type="button" data-delete-no>Cancel</button>
+            </div>
+          </div>
+          <a class="cc-link cc-rail__portfolio" href="/">Back to the portfolio</a>
+        </div>
+      </div>
+    </aside>
+
+    <main id="main" class="cc-main" tabindex="-1">
+      <h1 class="sr-only">Ami, your career coach</h1>
+      <p class="cc-welcome" data-welcome role="status" hidden>
+        <span class="coach-orb coach-orb--sm" aria-hidden="true"><span class="coach-orb__eyes"><span></span><span></span></span></span>
+        <span><strong>Welcome back.</strong> Picking up where you left off.</span>
+      </p>
+      <div class="cc-breather" data-breather role="status" hidden>
+        <span class="coach-orb coach-orb--sm coach-orb--asleep" aria-hidden="true"><span class="coach-orb__eyes"><span></span><span></span></span></span>
+        <span><strong>Taking a breather until tomorrow.</strong> Today's free coaching is used up. Your chats and résumé are saved on this device, and <a href="/">Ask about {firstName}</a> still works.</span>
+      </div>
+      <div class="cc-log" data-log>
+        <div class="cc-scroll" data-scroll>
+
+
+          <section class="cc-empty" data-empty aria-labelledby="cc-hello">
+            <span class="coach-orb coach-orb--lg" aria-hidden="true"><span class="coach-orb__eyes"><span></span><span></span></span></span>
+            <h2 id="cc-hello" class="cc-empty__title">Hi, I'm Ami, your career coach.</h2>
+            <p class="cc-empty__lead">
+              Upload your résumé and I'll find today's freshest roles for you, tailor your CV to any job, and help you stand out. Free, with 5 fresh jobs a day.
+            </p>
+
+            <div class="cc-drop">
+              <div class="cc-drop__zone">
+                <span class="cc-drop__tile" aria-hidden="true"><Icon name="upload" size={24} /></span>
+                <span class="cc-drop__text"><strong>Drop your résumé here</strong><span>PDF or DOCX, up to 5 MB. It's read in your browser.</span></span>
+                <label class="btn btn--primary cc-drop__btn">Choose file<input class="sr-only" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" data-file /></label>
+              </div>
+              <div class="cc-consent-row">
+                <label class="cc-consent">
+                  <input class="sr-only" type="checkbox" data-consent />
+                  <span class="cc-consent__box" aria-hidden="true"></span>
+                  <span><strong>Stays on your device.</strong> Sent to the AI only to answer you · not stored on our servers · delete anytime.</span>
+                </label>
+                <a class="cc-consent-link" href="/career/privacy">How it works</a>
+              </div>
+            </div>
+
+            <ul class="cc-starters" role="list">
+              {
+                STARTERS.map((s) => (
+                  <li>
+                    <button class="cc-starter" type="button" data-start={s.key}>
+                      <span class={`cc-starter__tile tile--${s.tone}`} aria-hidden="true"><Icon name={s.icon} size={20} /></span>
+                      <span class="cc-starter__title">{s.title}</span>
+                      <span class="cc-starter__text">{s.text}</span>
+                    </button>
+                  </li>
+                ))
+              }
+            </ul>
+          </section>
+
+          <ol class="cc-msgs" role="list" data-msgs aria-label="Conversation"></ol>
+        </div>
+      </div>
+
+      <div class="cc-dock">
+        <form class="cc-composer" data-composer>
+          <button class="cc-icon-btn cc-attach" type="button" data-attach aria-label="Attach your résumé"><Icon name="clip" size={18} /></button>
+          <input type="file" accept=".pdf,.docx" data-file hidden />
+          <label class="sr-only" for="cc-input">Message Ami</label>
+          <textarea id="cc-input" class="cc-composer__input" name="q" rows="1" maxlength="2000" autocomplete="off" placeholder="Ask anything about your job search…" enterkeyhint="enter" aria-describedby="cc-input-hint"></textarea>
+          <span id="cc-input-hint" class="sr-only">Enter sends. Shift and Enter adds a new line.</span>
+          <button class="cc-send" type="submit" aria-label="Send"><Icon name="arrow-right" size={18} /></button>
+        </form>
+        <p class="cc-disclaimer"><small>AI suggestions can be wrong. Review everything before you send it.</small></p>
+      </div>
+      <p class="sr-only" role="status" data-status></p>
+
+      <aside class="cc-preview" data-preview aria-label="Your document" hidden>
+        <div class="cc-preview__bar">
+          <div class="cc-toggle" role="group" aria-label="Version" data-toggle>
+            <button type="button" aria-pressed="false" data-view="before">Before</button>
+            <button type="button" aria-pressed="true" data-view="tailored">Tailored</button>
+          </div>
+          <p class="cc-preview__hint"><Icon name="pen" size={14} />Click any line to edit</p>
+          <button class="cc-icon-btn cc-preview__close" type="button" data-preview-close aria-label="Close the preview"><Icon name="close" size={18} /></button>
+        </div>
+        <article class="cc-doc" data-doc></article>
+        <div class="cc-preview__actions">
+          <button class="btn btn--primary cc-preview__dl" type="button" data-dl="docx"><Icon name="download" size={18} />Download DOCX</button>
+          <button class="btn btn--secondary cc-preview__dl" type="button" data-dl="pdf"><Icon name="download" size={18} />Download PDF</button>
+        </div>
+        <p class="cc-preview__status" data-dl-status role="status"></p>
+        <p class="cc-preview__file"><span data-doc-file></span> · ATS-safe, one column</p>
+      </aside>
+    </main>
+  </div>
+
+  {/* Turnstile is the one third party here (CSP: challenges.cloudflare.com only). It appears only if Cloudflare needs a click. */}
+  {turnstileKey && <div class="cc-turnstile" data-turnstile-sitekey={turnstileKey}></div>}
+  {turnstileKey && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>}
+  <script>
+    import '../../islands/career/main.ts';
+  </script>
+</Base>

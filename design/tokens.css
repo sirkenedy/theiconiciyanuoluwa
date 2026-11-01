@@ -31,6 +31,13 @@
   /* ---- Inverse band (Journey, footer) ---- */
   --inverse-bg:      #2b2230;
   --inverse-surface: #3a2f40;
+
+  /* ---- Document preview (Career Coach): a printed page stays white in both themes, like the file it becomes ---- */
+  --doc-paper: #ffffff;
+  --doc-ink:   #222222;  /* 15.9:1 on paper */
+  --doc-muted: #555555;  /* 7.5:1 on paper */
+  --doc-rule:  #dddddd;
+  --doc-mark:  #ece6ff;  /* changed-line highlight (lilac); ink on it 13.8:1 */
   --inverse-ink:     #ffffff;
   --inverse-muted:   #e3d9e8;
 

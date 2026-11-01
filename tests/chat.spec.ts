@@ -218,3 +218,32 @@ for (const theme of ['light', 'dark'] as const) {
     expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([]);
   });
 }
+
+test('desktop: the floating Harnie button appears once the chat card header scrolls away, before any chat, with a career coach link', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await expect(page.locator('.twin-launcher')).toHaveCount(0); // the card itself is on screen
+  await page.evaluate(() => scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+  const launcher = page.locator('.twin-launcher');
+  await expect(launcher).toBeVisible();
+  const peek = page.getByRole('navigation', { name: 'Chat with Harnie or the career coach' });
+  await expect(peek.getByRole('link', { name: /career coach/ })).toHaveAttribute('href', '/career');
+  await expect(peek.getByRole('button', { name: /Ask Harnie/ })).toBeVisible(); // shown on arrival
+  await launcher.click();
+  await expect(page.locator('.twin-panel .twin-mode a[href="/career"]')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
+  await expect(page.locator('.twin-launcher')).toHaveCount(0); // back in the hero: the card is the chat again
+});
+
+test('phone: after tapping a starter in the panel, focus stays in the panel and Escape still closes it', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.evaluate(() => scrollTo({ top: 600, behavior: 'instant' }));
+  await page.locator('.twin-launcher').first().click();
+  await page.locator('.twin-panel .twin-starter').first().click();
+  await expect(page.locator('#twin-panel-input')).toBeFocused();
+  await page.locator('body').click({ position: { x: 5, y: 5 } }).catch(() => {});
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.twin-panel')).toHaveCount(0);
+});
