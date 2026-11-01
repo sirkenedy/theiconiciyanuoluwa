@@ -319,29 +319,59 @@ span.mini-chip { cursor: default; }
   font-size: var(--fs-meta);
   font-weight: 700;
 }
+/* Title + the one-line AI notice (phones) and the "Close" label (phones). */
+.twin-panel__titles { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.twin-panel__sub,
+.twin-panel__close-text,
+.twin-starters__note { display: none; }
+.twin-panel__sub { margin: 0; color: var(--ink-subtle); font-size: var(--fs-meta); }
+.twin-starters__note {
+  flex-basis: 100%;
+  flex-direction: column;
+  margin: 0 0 var(--s-2);
+  color: var(--ink-subtle);
+  font-size: var(--fs-meta);
+}
+.twin-starters__note small { font-size: inherit; }
+.twin-starters__note a {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  margin-block: calc((var(--tap) - 1.4em) / -2);
+  color: inherit;
+}
+/* Phones: Harnie opens full screen, the input pinned to the bottom (above the keyboard), "Close" back to the site. */
 @media (max-width: 760px) {
   .twin-panel {
-    left: 0;
-    right: 0;
+    inset: var(--kb-top, 0px) 0 var(--kb, 0px);
     width: 100%;
-    /* --kb is the on-screen keyboard's height (src/islands/chat/ChatTwin.tsx, from visualViewport). */
-    bottom: var(--kb, 0px);
-    height: min(70dvh, calc(100dvh - var(--kb, 0px) - var(--s-4)));
-    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    height: auto;
+    border-radius: 0;
+    box-shadow: none;
     transform-origin: bottom center;
-    padding-bottom: env(safe-area-inset-bottom);
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
   }
-  .twin-panel__handle {
-    display: block;
-    align-self: center;
-    width: 44px;
-    height: 5px;
-    margin-top: var(--s-2);
+  .twin-panel__head { padding: var(--s-2) var(--s-3) var(--s-2) var(--s-4); }
+  .twin-panel__sub { display: block; }
+  .twin-panel__close {
+    grid-auto-flow: column;
+    gap: 6px;
+    width: auto;
+    padding: 0 var(--s-4) 0 var(--s-3);
     border-radius: var(--r-pill);
-    background: var(--line);
-    touch-action: none;
+    color: var(--ink);
+    font: inherit;
+    font-size: var(--fs-label);
+    font-weight: 700;
   }
+  .twin-panel__close-text { display: inline; }
+  .twin-starters__note { display: flex; }
+  .twin-panel__body .handoff { margin-top: var(--s-2); }
+  .twin-panel__foot { padding: var(--s-2) var(--s-3) max(var(--s-3), env(safe-area-inset-bottom)); }
+  .twin-panel__foot .twin-form__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
+:root.twin-modal { overflow: hidden; }
 
 /* "Ask about … | Career Coach" inside the docked panel (phones open Harnie here, not in the hero card). */
 .twin-mode {
