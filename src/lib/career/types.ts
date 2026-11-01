@@ -70,6 +70,11 @@ export type RankedJob = import('../jobs/types.ts').Job & { fit: number; why: str
 export const MIN_FIT = 55;
 
 /** Compact job context for the chat: what's on screen, so "why is X the top match?" can be answered. */
+/** Jobs the visitor saved (any time, any chat). */
+export const SavedJobsSchema = z
+  .array(z.object({ title: z.string().max(200), company: z.string().max(200), location: z.string().max(200), fit: z.number().int().min(0).max(100), saved: z.boolean(), source: z.string().max(40) }))
+  .max(25);
+
 /** Jobs shown in the last 7 days (any chat), newest first, with when "Open job" was clicked. Times are "YYYY-MM-DD HH:MM" UTC. */
 const stamp = z.string().regex(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
 export const RecentJobsSchema = z
@@ -113,6 +118,10 @@ export const MATCH_KINDS = ['strong', 'added', 'missing'] as const;
 export const ToolCallSchema = z.discriminatedUnion('name', [
   z.object({ name: z.literal('find_jobs'), input: z.object({ anywhere: z.boolean().optional() }) }),
   z.object({
+    name: z.literal('prep_guide'),
+    input: z.object({ job: z.enum(['pasted', 'current', 'none']), instructions: z.string().max(1000).nullable().optional(), title: z.string().max(200).nullable().optional(), company: z.string().max(200).nullable().optional() }),
+  }),
+  z.object({
     name: z.literal('make_document'),
     input: z.object({
       kind: z.enum(['tailor', 'letter', 'both', 'improve']),
@@ -127,8 +136,24 @@ export type ToolCall = z.infer<typeof ToolCallSchema>;
 export const CHAT_TOOLS = [
   {
     name: 'find_jobs',
-    description: 'Show the visitor fresh job cards matched to their profile (title, fit, apply link). Use when they ask to find, show or get jobs, roles or openings for themselves. Not for advice about job hunting.',
+    description: 'Show the visitor NEW job cards matched to their profile (title, fit, apply link). Use when they ask to find, show or get new jobs, roles or openings for themselves. Not for jobs they have already seen, saved or opened (answer those from <recent_jobs> and <saved_jobs>), and not for advice about job hunting.',
     input_schema: { type: 'object', properties: { anywhere: { type: 'boolean', description: 'true only if they ask for remote roles anywhere / outside their area' } }, additionalProperties: false },
+  },
+  {
+    name: 'prep_guide',
+    description:
+      'Build a detailed, downloadable interview preparation guide for a job: likely questions with answer outlines from their real experience, what the interviewer is testing, gaps and how to address them, questions to ask, and anything else they asked for. Use whenever they ask for interview prep, a prep guide, likely questions or a study plan for an interview.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        job: { type: 'string', enum: ['pasted', 'current', 'none'], description: 'as for make_document: the job description pasted in this conversation, the job in <job>, or none' },
+        instructions: { type: ['string', 'null'], description: 'everything they asked for about the guide, in their own words, so it can be followed exactly: length or schedule ("a 3-day plan"), focus ("payments questions"), exclusions ("no behavioural questions"), level of detail, format' },
+        title: { type: ['string', 'null'] },
+        company: { type: ['string', 'null'] },
+      },
+      required: ['job'],
+      additionalProperties: false,
+    },
   },
   {
     name: 'make_document',
@@ -148,6 +173,40 @@ export const CHAT_TOOLS = [
     },
   },
 ] as const;
+
+// ---- interview prep guides (Sonnet + web research) ----
+/** A flexible guide: the visitor's instructions decide its shape (a 3-day plan, no behavioural questions, …). */
+const GuideItemSchema = z.object({
+  kind: z.enum(['text', 'bullets', 'question', 'step']),
+  title: clip(300).nullable(),
+  text: clip(2500).nullable(),
+  bullets: upTo(clip(500), 12),
+  why: clip(600).nullable(),
+  answer: upTo(clip(600), 8),
+});
+export const GuideSchema = z.object({
+  title: clip(200),
+  subtitle: clip(300),
+  note: clip(500),
+  sections: upTo(z.object({ heading: clip(160), intro: clip(1500).nullable(), items: upTo(GuideItemSchema, 40) }), 16, 1),
+  sources: upTo(z.object({ title: clip(200), url: clip(500) }), 12),
+});
+export type Guide = z.infer<typeof GuideSchema>;
+const strArr = { type: 'array', items: str } as const;
+export const GUIDE_JSON_SCHEMA = obj({
+  title: str,
+  subtitle: str,
+  note: str,
+  sections: {
+    type: 'array',
+    items: obj({
+      heading: str,
+      intro: nullable(str),
+      items: { type: 'array', items: obj({ kind: { type: 'string', enum: ['text', 'bullets', 'question', 'step'] }, title: nullable(str), text: nullable(str), bullets: strArr, why: nullable(str), answer: strArr }) },
+    }),
+  },
+  sources: { type: 'array', items: obj({ title: str, url: str }) },
+});
 
 export const AnalysisSchema = z.object({
   role: clip(400).nullable(),

@@ -69,7 +69,7 @@ test('a correctly signed request is accepted', async () => {
   const res = await usage({ request: req('GET', path, await signed(d, 'GET', path)), url: new URL(ORIGIN + path) } as never);
   assert.equal(res.status, 200);
   const body = await res.json();
-  assert.deepEqual(body.used, { messages: 0, jobs: 0, tailored: 0, letters: 0 });
+  assert.deepEqual(body.used, { messages: 0, jobs: 0, tailored: 0, letters: 0, guides: 0 });
 });
 
 test('replay: the exact same signed request twice → second is rejected', async () => {

@@ -184,3 +184,57 @@ test('usage panel shows a loading skeleton until Upstash answers, then real coun
   await expect(card).not.toHaveAttribute('aria-busy', 'true');
   await expect(card.locator('[data-usage="messages"] [data-left]')).toHaveText('20 of 20 left');
 });
+
+test('drafts: unsent text stays with its own chat, survives a reload, and is cleared once sent', async ({ page }) => {
+  await page.goto('/career');
+  await expect(page.locator('[data-usage-ready]')).toHaveCount(1);
+  const input = page.locator('#cc-input');
+  for (const q of ['First chat question', 'Second chat question']) {
+    if (q.startsWith('Second')) await page.locator('[data-new-chat]').click();
+    await input.fill(q);
+    await input.press('Enter');
+    await expect(page.locator('.cc-msg--coach:not(.is-live) .cc-msg__text').last()).toContainText('Lead with outcomes');
+  }
+  const chats = page.locator('[data-conv]');
+  await expect(chats).toHaveCount(2);
+  await input.fill('Help me generate a preparatory guide as well');
+  await chats.nth(1).click(); // the other chat
+  await expect(input).toHaveValue('');
+  await chats.nth(0).click(); // back
+  await expect(input).toHaveValue('Help me generate a preparatory guide as well');
+  await page.reload();
+  await expect(input).toHaveValue('Help me generate a preparatory guide as well');
+  await input.fill('Sent now');
+  await input.press('Enter');
+  await expect(page.locator('.cc-msg--user .cc-msg__text').last()).toHaveText('Sent now');
+  await chats.nth(1).click();
+  await chats.nth(0).click();
+  await expect(input).toHaveValue('');
+});
+
+test('while Ami replies the send arrow is a spinner; a second message waits in the box (not lost) until she is done', async ({ page }) => {
+  await page.goto('/career');
+  await expect(page.locator('[data-usage-ready]')).toHaveCount(1);
+  let release!: () => void;
+  const held = new Promise<void>((r) => (release = r));
+  await page.route('**/api/career/chat', async (route) => {
+    await held;
+    await route.continue();
+  });
+  const input = page.locator('#cc-input');
+  const sendBtn = page.locator('.cc-send');
+  await input.fill('First question');
+  await input.press('Enter');
+  await expect(page.locator('[data-cc]')).toHaveAttribute('data-busy', '');
+  await expect(sendBtn).toHaveAttribute('aria-label', /Ami is replying/);
+  await input.fill('Second question');
+  await input.press('Enter');
+  await expect(input).toHaveValue('Second question'); // kept, not sent, not lost
+  await expect(page.locator('.cc-msg--user')).toHaveCount(1);
+  release();
+  await expect(page.locator('.cc-msg--coach:not(.is-live) .cc-msg__text').last()).toContainText('Lead with outcomes');
+  await expect(page.locator('[data-cc]')).not.toHaveAttribute('data-busy', '');
+  await expect(sendBtn).toHaveAttribute('aria-label', 'Send');
+  await input.press('Enter');
+  await expect(page.locator('.cc-msg--user')).toHaveCount(2);
+});

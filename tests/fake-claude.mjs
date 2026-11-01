@@ -80,6 +80,10 @@ export function startFakeClaude(port = 0) {
       }
       const params = JSON.parse(body);
       requests.push(params);
+      // Like the real API: Sonnet 5.5 rejects thinking "disabled" (it takes "between_tools").
+      if (/sonnet-5/.test(params.model) && params.thinking?.type === 'disabled') {
+        return res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'To turn thinking off on this model, send "thinking": {"type": "between_tools"} instead of {"type": "disabled"}.' } }));
+      }
       const usage = { input_tokens: 50, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
       const message = (text) => ({ id: 'msg_fake', type: 'message', role: 'assistant', model: params.model, content: [{ type: 'text', text }], stop_reason: 'end_turn', stop_sequence: null, usage });
 
@@ -90,7 +94,24 @@ export function startFakeClaude(port = 0) {
         const results = list.map((j, i) => ({ jobId: j.jobId, fit: state.fits[i] ?? 30, why: [`Matches your ${j.title} focus`, 'Relevant recent experience'], gaps: i % 2 ? [] : ['Asks for SQL: add it if you have used it'] }));
         return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(message(JSON.stringify({ results }))));
       }
+      // Prep research (Sonnet + web search): a short cited note, with the searches billed in usage.
+      if (params.tools?.some((t) => t.type?.startsWith('web_search'))) {
+        const cited = { type: 'text', text: 'Sample Pay builds checkout and payments tools for schools; its values page stresses customer obsession.', citations: [{ type: 'web_search_result_location', url: 'https://samplepay.test/about', title: 'About Sample Pay', cited_text: 'customer obsession', encrypted_index: 'x' }] };
+        return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ...message(''), content: [cited], usage: { ...usage, server_tool_use: { web_search_requests: 2 } } }));
+      }
       const props = params.output_config?.format?.schema?.properties ?? {};
+      // Prep guide: follows <instructions> ("3-day" → Day sections; "no behavioural" → none), answers from the résumé.
+      if (props.sections) {
+        const sent = params.messages[0].content;
+        const ask = (sent.match(/<instructions>([\s\S]*?)<\/instructions>/)?.[1] ?? '').toLowerCase();
+        const q = (title) => ({ kind: 'question', title, text: null, bullets: [], why: 'They test product judgement.', answer: ['Use the checkout redesign: Redesigned the checkout flow used daily by thousands.', 'Say what you learned.'] });
+        const sections = /3-day|three-day/.test(ask)
+          ? [1, 2, 3].map((d) => ({ heading: `Day ${d}`, intro: null, items: [{ kind: 'step', title: `Day ${d} focus`, text: 'Practise two questions aloud.', bullets: [], why: null, answer: [] }] }))
+          : [{ heading: 'Product sense', intro: null, items: [q('How would you improve checkout for schools?')] }, ...(/no behaviou?ral/.test(ask) ? [] : [{ heading: 'Behavioural', intro: null, items: [q('Tell me about a conflict with engineering.')] }])];
+        const guide = { title: 'Interview prep: Product Manager, Payments', subtitle: 'Sample Pay', note: 'These are likely questions predicted from the posting and public information, not reported by past candidates.', sections, sources: [] };
+        if (params.stream) return streamText(res, params, [JSON.stringify(guide)]);
+        return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(message(JSON.stringify(guide))));
+      }
       if (props.match) {
         const improve = params.messages[0].content.includes('task = "improve_analyze"');
         const analysis = state.analysis ?? { role: improve ? null : 'Product Manager, Payments', company: improve ? null : 'Sample Pay', match: [{ kind: 'strong', text: 'Strong: checkout design, experimentation, fintech' }, { kind: 'added', text: 'Added keywords: discovery, roadmap, A/B testing' }, { kind: 'missing', text: 'Missing: SQL. Not added because it isn’t in your résumé.' }], questions: state.questions };
@@ -154,6 +175,8 @@ function routeLike(params) {
   if (/^i('| a)?m eligible/.test(line)) return { name: 'make_document', input: { kind: 'tailor', job: 'pasted', title: 'Senior Product Manager', company: 'Sample Pay' } };
   if (/NOT-A-JOB/.test(text)) return { say: "That looks like a résumé, not a job description. Paste the job description and I'll tailor your résumé to it." };
   if (/\?\s*$/.test(line) && /^(should|how|what|why|is|do|does|which)\b/.test(line)) return null;
+  if (/\b(prep|interview|likely questions|study plan)\b/.test(line) && !/\?\s*$/.test(line)) return { name: 'prep_guide', input: { job: pasted.length >= 200 ? 'pasted' : 'current', instructions: line, title: null, company: null } };
+  if (/\b(seen|saved|past)\b/.test(line)) return { say: 'From your saved and recent jobs: Product Manager, Payments at Sample Pay.' };
   if (/\b(find|show|get|any|search)\b.*\b(jobs?|roles?|openings?)\b/.test(line)) return { name: 'find_jobs', input: { anywhere: /anywhere/.test(line) } };
   const cv = /\b(cv|r[eé]s?u?m[eé]?s?)\b/.test(line);
   const letter = /cover letter/.test(line);

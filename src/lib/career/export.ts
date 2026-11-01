@@ -1,6 +1,6 @@
 // DOCX (docx) and PDF (pdf-lib) downloads in one ATS-safe template: single column, real text, standard headings,
 // system-safe fonts (career-mode.md §3.4). Generated in the browser; both libraries load only when a download is clicked.
-import type { LetterDoc, ResumeDoc } from './document.ts';
+import type { Doc, GuideDoc, LetterDoc } from './document.ts';
 import type { TailoredResume } from './types.ts';
 
 type Block = { kind: 'name' | 'contact' | 'heading' | 'role' | 'bullet' | 'text'; text: string; right?: string };
@@ -35,7 +35,29 @@ function letterBlocks(d: LetterDoc): Block[] {
   ];
 }
 
-export const blocksFor = (doc: ResumeDoc | LetterDoc) => (doc.kind === 'resume' ? resumeBlocks(doc.tailored, doc.contact) : letterBlocks(doc));
+/** A prep guide as the same plain, readable blocks: title, sections, questions in bold, outlines as bullets. */
+function guideBlocks(d: GuideDoc): Block[] {
+  const g = d.guide;
+  const out: Block[] = [{ kind: 'name', text: g.title }, { kind: 'contact', text: g.subtitle }];
+  if (g.note) out.push({ kind: 'text', text: g.note });
+  for (const s of g.sections) {
+    out.push({ kind: 'heading', text: s.heading });
+    if (s.intro) out.push({ kind: 'text', text: s.intro });
+    s.items.forEach((item, i) => {
+      if (item.title) out.push({ kind: 'role', text: item.kind === 'question' || item.kind === 'step' ? `${i + 1}. ${item.title}` : item.title });
+      if (item.why) out.push({ kind: 'text', text: `Why they ask: ${item.why}` });
+      if (item.text) out.push({ kind: 'text', text: item.text });
+      for (const b of [...item.bullets, ...item.answer]) out.push({ kind: 'bullet', text: b });
+    });
+  }
+  if (g.sources.length) {
+    out.push({ kind: 'heading', text: 'Sources' });
+    for (const s of g.sources) out.push({ kind: 'bullet', text: `${s.title}: ${s.url}` });
+  }
+  return out;
+}
+
+export const blocksFor = (doc: Doc) => (doc.kind === 'resume' ? resumeBlocks(doc.tailored, doc.contact) : doc.kind === 'letter' ? letterBlocks(doc) : guideBlocks(doc));
 
 export async function toDocx(blocks: Block[]): Promise<Blob> {
   const { AlignmentType, BorderStyle, Document, LevelFormat, Packer, Paragraph, TabStopType, TextRun } = await import('docx');

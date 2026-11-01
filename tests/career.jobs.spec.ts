@@ -189,3 +189,23 @@ test('Ami knows every job shown in the last 7 days, in any chat, and which ones 
   expect(recent).toHaveLength(5); // from the other chat
   expect(recent.filter((j) => j.opened).map((j) => j.title)).toEqual([openedTitle]);
 });
+
+test('"get me all jobs I have seen" in a new chat: answered from saved and recent jobs, never a new search', async ({ page, request }) => {
+  await withProfile(page);
+  await page.locator('.cc-suggest').getByRole('button', { name: 'Find jobs for me' }).click();
+  const cards = page.locator('.cc-job');
+  await expect(cards).toHaveCount(5);
+  await cards.first().getByRole('button', { name: 'Save' }).click();
+  await expect(cards.first().locator('.cc-job__save')).toHaveAttribute('aria-pressed', 'true');
+  await request.post(`${CLAUDE}/__reset`);
+  await page.locator('[data-new-chat]').click();
+  await page.locator('#cc-input').fill('get me all jobs i have seen in the past');
+  await page.locator('#cc-input').press('Enter');
+  await expect(page.locator('.cc-msg--coach:not(.is-live) .cc-msg__text').last()).toContainText('From your saved and recent jobs');
+  await expect(page.locator('.cc-job')).toHaveCount(0); // no new cards
+  const reqs = (await (await request.get(`${CLAUDE}/__requests`)).json()) as { stream?: boolean; messages: { content: unknown }[] }[];
+  expect(reqs.some((r) => JSON.stringify(r.messages).includes('rank_jobs'))).toBe(false);
+  const newest = String(reqs.filter((r) => r.stream).at(-1)!.messages.at(-1)!.content);
+  expect(newest).toMatch(/<saved_jobs>\[\{"title":"Product Manager, Payments"/);
+  expect(newest).toContain('<recent_jobs>');
+});

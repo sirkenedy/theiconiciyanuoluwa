@@ -1,6 +1,6 @@
 // Tailored documents on the device: the "before" version from the confirmed profile, which lines changed, the contact
 // line (rebuilt locally from the original résumé, because email and phone are never sent to the model), file names.
-import type { Flag, Profile, TailoredResume } from './types.ts';
+import type { Flag, Guide, Profile, TailoredResume } from './types.ts';
 
 export type ResumeDoc = {
   id: string;
@@ -16,7 +16,9 @@ export type ResumeDoc = {
   createdAt: number;
 };
 export type LetterDoc = { id: string; kind: 'letter'; title: string; fileBase: string; name: string; contact: string; letter: string; flags: Flag[]; createdAt: number };
-export type Doc = ResumeDoc | LetterDoc;
+/** An interview prep guide (Sonnet + research), shown as a styled page and downloadable as PDF or DOCX. */
+export type GuideDoc = { id: string; kind: 'guide'; title: string; fileBase: string; guide: Guide; flags: Flag[]; createdAt: number };
+export type Doc = ResumeDoc | LetterDoc | GuideDoc;
 
 export function profileToResume(p: Profile): TailoredResume {
   return {
@@ -63,7 +65,7 @@ const slug = (s: string | null | undefined) =>
     .slice(0, 40);
 
 /** firstname-lastname-resume-company-role (career-mode.md §3.4). */
-export function fileBase(name: string | null, what: 'resume' | 'cover-letter', company?: string | null, role?: string | null) {
+export function fileBase(name: string | null, what: 'resume' | 'cover-letter' | 'interview-prep', company?: string | null, role?: string | null) {
   return [slug(name) || 'my', what, slug(company), slug(role)].filter(Boolean).join('-');
 }
 

@@ -5,7 +5,7 @@ import { plausibleDay } from '../../../lib/career/limits.ts';
 import { take } from '../../../lib/career/quota.ts';
 import { breather, overBudget, recordSpend } from '../../../lib/career/spend.ts';
 import { SSE_HEADERS, TagSplitter, frame, parseSuggest } from '../../../lib/career/stream.ts';
-import { CHAT_TOOLS, ChatJobsSchema, JobInputSchema, LIMITS_INPUT, RecentJobsSchema, ToolCallSchema } from '../../../lib/career/types.ts';
+import { CHAT_TOOLS, ChatJobsSchema, JobInputSchema, LIMITS_INPUT, RecentJobsSchema, SavedJobsSchema, ToolCallSchema } from '../../../lib/career/types.ts';
 import { KEY } from '../../../lib/jobs/store.ts';
 import { rejected, verifySigned } from '../../../lib/career/verify.ts';
 import { clientIp, pipeline, redisConfig } from '../../../lib/redis.ts';
@@ -25,7 +25,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
   if (!check) return json({ error: 'unavailable' }, 503);
   if (!check.ok) return rejected(check);
 
-  let body: { task?: unknown; messages?: unknown; profile?: unknown; jobs?: unknown; recent?: unknown; job?: unknown; summary?: unknown; day?: unknown; today?: unknown; want?: unknown };
+  let body: { task?: unknown; messages?: unknown; profile?: unknown; jobs?: unknown; recent?: unknown; saved?: unknown; job?: unknown; summary?: unknown; day?: unknown; today?: unknown; want?: unknown };
   try {
     body = JSON.parse(check.body);
   } catch {
@@ -39,11 +39,12 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
   const jobs = body.jobs == null ? [] : ChatJobsSchema.safeParse(body.jobs).data;
   // Every job shown on this device in the last 7 days (newest first, with "Open job" clicks), kept on the device.
   const recent = body.recent == null ? [] : RecentJobsSchema.safeParse(body.recent).data;
+  const saved = body.saved == null ? [] : SavedJobsSchema.safeParse(body.saved).data;
   const turns = cleanTurns(body.messages, task === 'chat' ? LIMITS_INPUT.turns : LIMITS_INPUT.summarize, {
     userMax: LIMITS_INPUT.message,
     assistantMax: LIMITS_INPUT.answer,
   });
-  if (!turns || !plausibleDay(day) || (body.profile != null && !profile) || !jobs || !recent) return json({ error: 'invalid' }, 400);
+  if (!turns || !plausibleDay(day) || (body.profile != null && !profile) || !jobs || !recent || !saved) return json({ error: 'invalid' }, 400);
   if (task === 'chat' && turns.at(-1)!.role !== 'user') return json({ error: 'invalid' }, 400);
   if (!process.env.ANTHROPIC_API_KEY) return json({ error: 'unavailable' }, 503);
   if (await overBudget(redis)) return breather();
@@ -63,7 +64,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
     }
     job = { title: jobIn.data.title, company: jobIn.data.company, description: description.slice(0, 6000) };
   }
-  const ctx = context({ task, profile, job, jobs, recent: task === 'chat' ? recent : [], summary, today: isoDay(body.today) });
+  const ctx = context({ task, profile, job, jobs, recent: task === 'chat' ? recent : [], saved: task === 'chat' ? saved : [], summary, today: isoDay(body.today) });
 
   if (task === 'summarize') {
     const transcript = turns.map((t) => `${t.role === 'user' ? 'Visitor' : 'Coach'}: ${t.content}`).join('\n\n');

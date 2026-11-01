@@ -1,10 +1,10 @@
 // Per device per day, plus per IP per day so minting new devices doesn't reset anything (career-mode.md §7).
 // DAILY_LIMITS are shown in the usage panel; uploads, summaries and searches are counted but not displayed.
-export const DAILY_LIMITS = { messages: 20, jobs: 10, tailored: 4, letters: 4 } as const;
+export const DAILY_LIMITS = { messages: 20, jobs: 10, tailored: 4, letters: 4, guides: 2 } as const;
 // `searches` = live job searches (Adzuna/Jooble): they spend shared API allowances, so they're few.
 export const DEVICE_LIMITS = { ...DAILY_LIMITS, uploads: 3, summaries: 2, searches: 3 } as const;
 /** Per network per day: 2 devices' worth, so a shared office or home network still works, but deleting and starting again gains at most one extra allowance. */
-export const IP_LIMITS: Record<keyof typeof DEVICE_LIMITS, number> = { messages: 40, jobs: 20, tailored: 8, letters: 8, uploads: 6, summaries: 4, searches: 6 };
+export const IP_LIMITS: Record<keyof typeof DEVICE_LIMITS, number> = { messages: 40, jobs: 20, tailored: 8, letters: 8, guides: 4, uploads: 6, summaries: 4, searches: 6 };
 
 export type UsageKind = keyof typeof DAILY_LIMITS;
 export type CountedKind = keyof typeof DEVICE_LIMITS;

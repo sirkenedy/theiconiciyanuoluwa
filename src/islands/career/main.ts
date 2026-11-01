@@ -5,8 +5,8 @@ import { ParseError, readResume, withoutContacts } from '../../lib/career/parse.
 import { readEvents } from '../../lib/career/stream.ts';
 import { loadPurifier, renderModelText } from '../../lib/career/render.ts';
 import { REMOTE } from '../../lib/career/constants.ts';
-import type { Analysis, Answer, ChatTurn, Flag, Profile, RankedJob, StoredProfile, WriteResult } from '../../lib/career/types.ts';
-import { changedKeys, contactLine, fileBase, getLine, profileToResume, setLine, type Doc, type LetterDoc, type ResumeDoc } from '../../lib/career/document.ts';
+import type { Analysis, Answer, ChatTurn, Flag, Guide, Profile, RankedJob, StoredProfile, WriteResult } from '../../lib/career/types.ts';
+import { changedKeys, contactLine, fileBase, getLine, profileToResume, setLine, type Doc, type GuideDoc, type LetterDoc, type ResumeDoc } from '../../lib/career/document.ts';
 import { clearData, openVault, persistStorage, type Vault } from '../../lib/vault.ts';
 
 /** `docOpen: false` = the visitor closed the preview (the document stays; "Show the résumé" reopens it).
@@ -22,6 +22,8 @@ type Conversation = {
   docId?: string;
   docOpen?: boolean;
   job?: NonNullable<Task['job']>;
+  /** Text typed but not sent in this chat: it comes back when they return to it. */
+  draft?: string;
 };
 /** `then: 'letter'` = "Résumé + cover letter": the letter is written as soon as the résumé is done. */
 type Task = { mode: 'tailor' | 'improve'; then?: 'letter'; tone?: string; job?: { jobId?: string; title?: string; company?: string; description?: string } };
@@ -33,7 +35,7 @@ type Message = {
   role: 'user' | 'coach';
   text: string;
   at: number;
-  kind?: 'profile' | 'note' | 'jobs' | 'match' | 'tailored' | 'letter';
+  kind?: 'profile' | 'note' | 'jobs' | 'match' | 'tailored' | 'letter' | 'guide';
   suggest?: string[];
   jobs?: RankedJob[];
   left?: number;
@@ -65,6 +67,7 @@ const NOTES = {
 
   jobsNeedProfile: 'Upload your résumé first, so I can match jobs to your experience.',
   jobsLimit: `You've seen today's ${DAILY_LIMITS.jobs} fresh jobs. New ones arrive after midnight.`,
+  limitGuides: `You've made today's ${DAILY_LIMITS.guides} interview prep guides. New ones after midnight.`,
   searchLimit: "You've used today's live job searches. The jobs I found are saved, and new ones arrive every hour.",
   jobsWarming: "I'm gathering today's jobs from the job boards right now. Ask again in a minute.",
   devices: "Today's free allowance for this network is used up, and deleting your data doesn't reset it. Ami will be back after midnight.",
@@ -127,6 +130,14 @@ let conversations: Conversation[] = [];
 let messages: Message[] = [];
 let stored: StoredProfile | null = null;
 let busy = false;
+/** While Ami works, the send arrow becomes a spinner and sending waits (the text stays in the box). */
+function setBusy(on: boolean) {
+  busy = on;
+  cc.toggleAttribute('data-busy', on);
+  const send = document.querySelector<HTMLButtonElement>('.cc-send');
+  send?.setAttribute('aria-label', on ? 'Ami is replying: send when she is done' : 'Send');
+  send?.setAttribute('aria-disabled', String(on));
+}
 let saved = new Set<string>();
 
 const uid = () => crypto.randomUUID();
@@ -437,6 +448,11 @@ async function markOpened(id: string) {
   await vault.put('meta', 'opened', opened);
 }
 
+/** Every job the visitor saved (any time), for "my saved jobs" and the like. */
+async function savedJobsContext() {
+  return (await vault.list<RankedJob>('savedJobs')).slice(0, 25).map((j) => ({ title: j.title.slice(0, 200), company: j.company.slice(0, 200), location: j.location.slice(0, 200), fit: j.fit, saved: true, source: j.attribution.label.replace(/^via /, '').slice(0, 40) }));
+}
+
 /** Every job shown in the last 7 days, in any chat, newest first, and whether "Open job" was clicked: for Ami's answers. */
 async function recentJobs() {
   const since = Date.now() - 7 * 86_400_000;
@@ -492,7 +508,7 @@ async function findJobs(more = false, opts: { anywhere?: boolean; userText?: str
     await note(NOTES.jobsNeedProfile);
     return;
   }
-  busy = true;
+  setBusy(true);
   try {
     if (!opts.silent) await add({ role: 'user', text: userText });
     setOrb('searching');
@@ -535,7 +551,7 @@ async function findJobs(more = false, opts: { anywhere?: boolean; userText?: str
     announce(`${intro} ${data.jobs.length} job${data.jobs.length > 1 ? 's' : ''}. ${data.left} of ${DAILY_LIMITS.jobs} left today.`);
     setOrb('done');
   } finally {
-    busy = false;
+    setBusy(false);
     loadUsage();
   }
 }
@@ -690,7 +706,7 @@ async function startBoth(job: NonNullable<Task['job']>, userText: string | null,
 async function startTailor(task: Task, userText: string | null) {
   if (busy) return;
   if (!stored) return userText === null ? undefined : needProfile(userText);
-  busy = true;
+  setBusy(true);
   try {
     if (userText !== null) await add({ role: 'user', text: userText });
     await rememberJob(task.job);
@@ -706,11 +722,11 @@ async function startTailor(task: Task, userText: string | null) {
     const m = await add({ role: 'coach', text: '', kind: 'match', task, analysis, answers: analysis.questions.length ? undefined : null });
     setOrb('done');
     if (!analysis.questions.length) {
-      busy = false;
+      setBusy(false);
       await write(m);
     } else msgsEl.querySelector<HTMLTextAreaElement>(`[data-id="${m.id}"] textarea`)?.focus();
   } finally {
-    busy = false;
+    setBusy(false);
     loadUsage();
   }
 }
@@ -764,7 +780,7 @@ function matchBlock(m: Message) {
 
 async function write(m: Message) {
   if (busy || !stored) return;
-  busy = true;
+  setBusy(true);
   let next = false;
   try {
     const task = m.task!;
@@ -812,7 +828,7 @@ async function write(m: Message) {
     setOrb('done');
     next = task.then === 'letter' && !!task.job;
   } finally {
-    busy = false;
+    setBusy(false);
     loadUsage();
   }
   if (next) await startLetter(m.task!.job!, null, m.task!.tone);
@@ -823,7 +839,7 @@ async function write(m: Message) {
 async function startLetter(job: NonNullable<Task['job']>, userText: string | null, tone?: string) {
   if (busy) return;
   if (!stored) return userText === null ? undefined : needProfile(userText);
-  busy = true;
+  setBusy(true);
   try {
     if (userText !== null) await add({ role: 'user', text: userText });
     await rememberJob(job);
@@ -869,7 +885,58 @@ async function startLetter(job: NonNullable<Task['job']>, userText: string | nul
     await openDoc(doc.id);
     setOrb('done');
   } finally {
-    busy = false;
+    setBusy(false);
+    loadUsage();
+  }
+}
+
+/** An interview prep guide for a job, shaped by the visitor's own instructions ("3-day plan, no behavioural"). */
+async function startGuide(job: NonNullable<Task['job']>, instructions: string) {
+  if (busy || !stored) return;
+  setBusy(true);
+  try {
+    await rememberJob(job);
+    setOrb('thinking');
+    const live = liveNode('Preparing your interview guide…');
+    const res = await deviceFetch('/api/career/prep-guide', jsonBody({ profile: stored.profile, resume: resumeForAI(), job, instructions, day: localDay(), today: localDay() })).catch(() => null);
+    if (!res?.ok || !res.body) {
+      live.li.remove();
+      setOrb('error');
+      const err = res ? ((await res.clone().json().catch(() => ({}))) as { error?: string; kind?: string }) : {};
+      if (err.error === 'limit' && err.kind === 'guides') return note(NOTES.limitGuides);
+      return failNote(res, 'messages');
+    }
+    let out: { guide: Guide; flags: Flag[] } | null = null;
+    for await (const { event, data } of readEvents(res)) {
+      if (event === 'progress') {
+        const p = data as { text: string; chars?: number };
+        setOrb('streaming');
+        live.p.textContent = p.chars ? `${p.text} ${Math.min(99, Math.round(p.chars / 250))}%` : p.text;
+      } else if (event === 'result') out = data as { guide: Guide; flags: Flag[] };
+    }
+    live.li.remove();
+    if (!out) {
+      setOrb('error');
+      return note(NOTES.error);
+    }
+    const name = stored.profile.identity.name ?? '';
+    const d: GuideDoc = {
+      id: uid(),
+      kind: 'guide',
+      title: ['Interview prep', job.title, job.company].filter(Boolean).join(' · '),
+      fileBase: fileBase(name, 'interview-prep', job.company, job.title),
+      guide: out.guide,
+      flags: out.flags,
+      createdAt: Date.now(),
+    };
+    await vault.put('documents', d.id, d);
+    const outline = out.guide.sections.map((sec) => sec.heading).join('; ');
+    await add({ role: 'coach', text: outline.slice(0, 400), kind: 'guide', docId: d.id, flags: out.flags });
+    await openDoc(d.id);
+    announce('Your interview prep guide is ready.');
+    setOrb('done');
+  } finally {
+    setBusy(false);
     loadUsage();
   }
 }
@@ -879,9 +946,9 @@ const FLAG_LABEL: Record<Flag['kind'], string> = { number: 'number', name: 'name
 function resultBlock(m: Message) {
   const box = el('div', 'cc-result');
   const flags = m.flags ?? [];
-  const what = m.kind === 'letter' ? 'Your cover letter is ready.' : m.critique?.length ? 'Your stronger résumé is ready. Every highlighted line changed.' : 'Your tailored résumé is ready. Every highlighted line changed.';
+  const what = m.kind === 'guide' ? 'Your interview prep guide is ready.' : m.kind === 'letter' ? 'Your cover letter is ready.' : m.critique?.length ? 'Your stronger résumé is ready. Every highlighted line changed.' : 'Your tailored résumé is ready. Every highlighted line changed.';
   if (!flags.length) {
-    box.append(el('p', 'cc-result__lead', `${what} Nothing was invented: numbers come only from your résumé${m.kind === 'letter' ? '' : ' and your answers'}.`));
+    box.append(el('p', 'cc-result__lead', m.kind === 'guide' ? `${what} The answer outlines use only your real experience.` : `${what} Nothing was invented: numbers come only from your résumé${m.kind === 'letter' ? '' : ' and your answers'}.`));
   } else {
     box.append(el('p', 'cc-result__lead', what));
     const warn = el('div', 'cc-flags');
@@ -941,7 +1008,8 @@ const DOWNLOAD = 'M12 4v11M7 10l5 5 5-5M5 20h14';
 function docCard(m: Message) {
   const id = m.docId!;
   const letter = m.kind === 'letter';
-  const what = letter ? 'cover letter' : 'résumé';
+  const guide = m.kind === 'guide';
+  const what = guide ? 'prep guide' : letter ? 'cover letter' : 'résumé';
   const card = el('div', 'cc-doccard');
   card.dataset.docCard = id;
   if (Date.now() - m.at < 5000) card.classList.add('is-new');
@@ -953,7 +1021,7 @@ function docCard(m: Message) {
   const text = el('span', 'cc-doccard__text');
   const sub = el('span', 'cc-doccard__sub', 'Ready to download');
   const cta = el('span', 'cc-doccard__cta');
-  text.append(el('span', 'cc-doccard__kind', letter ? 'Cover letter' : m.critique?.length ? 'Stronger résumé' : 'Tailored résumé'), sub, cta);
+  text.append(el('span', 'cc-doccard__kind', guide ? 'Interview prep guide' : letter ? 'Cover letter' : m.critique?.length ? 'Stronger résumé' : 'Tailored résumé'), sub, cta);
   const dot = el('span', 'cc-doccard__dot');
   dot.setAttribute('aria-hidden', 'true');
   open.append(sheet, text, dot);
@@ -973,7 +1041,7 @@ function docCard(m: Message) {
   card.append(open, dl, status);
   syncCard(card);
   vault.get<Doc>('documents', id).then((d) => {
-    const title = d?.title.replace(/^(Cover letter|Stronger résumé|Tailored résumé)( · )?/, '');
+    const title = d?.title.replace(/^(Cover letter|Stronger résumé|Tailored résumé|Interview prep)( · )?/, '');
     if (title) sub.textContent = title;
   });
   return card;
@@ -1041,6 +1109,66 @@ async function openDoc(id: string) {
   if (!wide.matches) preview.scrollIntoView({ block: 'start' });
 }
 
+/** The guide as a clean, readable page (the same content the PDF gets). Flagged phrases are underlined. */
+function guideNodes(g: Guide, flagged: string[]): Node[] {
+  const para = (cls: string, text: string) => {
+    const p = el('p', cls);
+    p.append(editableText(text, flagged));
+    return p;
+  };
+  const nodes: Node[] = [el('h2', 'cc-doc__name', g.title), el('p', 'cc-doc__contact', g.subtitle)];
+  if (g.note) nodes.push(el('p', 'cc-guide__note', g.note));
+  for (const s of g.sections) {
+    const sec = el('section', 'cc-doc__section cc-guide__section');
+    sec.append(el('h3', 'cc-doc__h', s.heading));
+    if (s.intro) sec.append(para('cc-guide__intro', s.intro));
+    const numbered = s.items.some((i) => i.kind === 'question' || i.kind === 'step');
+    const list = el(numbered ? 'ol' : 'div', 'cc-guide__items');
+    for (const item of s.items) {
+      const box = el(numbered ? 'li' : 'div', `cc-guide__item cc-guide__item--${item.kind}`);
+      if (item.title) box.append(el(item.kind === 'question' ? 'h4' : 'p', 'cc-guide__title', item.title));
+      if (item.why) box.append(para('cc-guide__why', `Why they ask: ${item.why}`));
+      if (item.text) box.append(para('cc-guide__text', item.text));
+      const points = [...item.bullets, ...item.answer];
+      if (points.length) {
+        const ul = el('ul', 'cc-guide__points');
+        for (const b of points) {
+          const li = el('li');
+          li.append(editableText(b, flagged));
+          ul.append(li);
+        }
+        if (item.answer.length) box.append(el('p', 'cc-guide__label', 'A strong answer'));
+        box.append(ul);
+      }
+      list.append(box);
+    }
+    sec.append(list);
+    nodes.push(sec);
+  }
+  if (g.sources.length) {
+    const sec = el('section', 'cc-doc__section');
+    const ul = el('ul', 'cc-guide__sources');
+    for (const src of g.sources) {
+      const li = el('li');
+      li.append(link(src.title, src.url, 'cc-guide__source'));
+      ul.append(li);
+    }
+    sec.append(el('h3', 'cc-doc__h', 'Sources'), ul);
+    nodes.push(sec);
+  }
+  return nodes;
+}
+
+/** Plain text with any flagged phrase underlined (read-only). */
+function editableText(text: string, flagged: string[]): Node {
+  const hit = flagged.find((f) => f && text.includes(f));
+  if (!hit) return document.createTextNode(text);
+  const span = el('span');
+  const [before, ...after] = text.split(hit);
+  span.append(document.createTextNode(before), el('mark', 'cc-doc__flag', hit), document.createTextNode(after.join(hit)));
+  return span;
+}
+
 function editable(text: string, key: string, changed: boolean, flagged: string[]) {
   const span = el('span', 'cc-doc__line', text);
   span.dataset.key = key;
@@ -1061,6 +1189,15 @@ function renderDoc() {
   $<HTMLElement>('.cc-preview__hint').hidden = view !== 'tailored';
   $<HTMLElement>('[data-doc-file]').textContent = `${doc.fileBase}.docx`;
   const nodes: Node[] = [];
+  $<HTMLElement>('[data-print]').hidden = doc.kind !== 'guide';
+  $<HTMLElement>('[data-dl="docx"]').hidden = doc.kind === 'guide';
+  if (doc.kind === 'guide') {
+    $<HTMLElement>('.cc-preview__hint').hidden = true;
+    $<HTMLElement>('[data-doc-file]').textContent = `${doc.fileBase}.pdf`;
+    docEl.setAttribute('aria-label', 'Interview prep guide');
+    docEl.replaceChildren(...guideNodes(doc.guide, doc.flags.map((f) => f.text)));
+    return;
+  }
   if (doc.kind === 'letter') {
     nodes.push(el('h2', 'cc-doc__name', doc.name), el('p', 'cc-doc__contact', doc.contact));
     doc.letter.split(/\n{2,}/).forEach((para, i) => {
@@ -1155,12 +1292,19 @@ docEl.addEventListener('input', (e) => {
     if (!doc) return;
     if (doc.kind === 'letter') {
       doc.letter = [...docEl.querySelectorAll<HTMLElement>('[data-key^="p."]')].map((s) => s.textContent?.trim() ?? '').filter(Boolean).join('\n\n');
-    } else if (getLine(doc.tailored, span.dataset.key!) !== undefined) {
+    } else if (doc.kind === 'resume' && getLine(doc.tailored, span.dataset.key!) !== undefined) {
       doc.tailored = setLine(doc.tailored, span.dataset.key!, span.textContent?.trim() ?? '');
     }
     await vault.put('documents', doc.id, doc);
     announce('Saved.');
   }, 400);
+});
+
+// Print / Save as PDF: the browser's own PDF of the styled guide (print styles show only the document).
+$<HTMLButtonElement>('[data-print]').addEventListener('click', () => {
+  document.documentElement.dataset.printing = '';
+  window.print();
+  delete document.documentElement.dataset.printing;
 });
 
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-dl]')) {
@@ -1212,7 +1356,7 @@ function messageNode(m: Message) {
     li.append(matchBlock(m));
     return li;
   }
-  if (m.kind === 'tailored' || m.kind === 'letter') {
+  if (m.kind === 'tailored' || m.kind === 'letter' || m.kind === 'guide') {
     li.append(resultBlock(m));
     return li;
   }
@@ -1312,11 +1456,23 @@ function editMessage(m: Message, content: HTMLElement, bar: HTMLElement) {
 // tool (ToolCallSchema) when the phrasing was unusual or text was pasted: the browser then runs that tool's flow.
 type ToolCall =
   | { name: 'find_jobs'; input: { anywhere?: boolean } }
+  | { name: 'prep_guide'; input: { job: 'pasted' | 'current' | 'none'; instructions?: string | null; title?: string | null; company?: string | null } }
   | { name: 'make_document'; input: { kind: 'tailor' | 'letter' | 'both' | 'improve'; job: 'pasted' | 'current' | 'none'; title?: string | null; company?: string | null; tone?: string | null } };
 
 /** Runs the tool Ami picked. The visitor's message is already in the chat, so no second "you" message is added. */
 async function runTool(tool: ToolCall, userText: string) {
   if (tool.name === 'find_jobs') return findJobs(false, { anywhere: !!tool.input.anywhere, silent: true });
+  if (tool.name === 'prep_guide') {
+    if (!stored) return note(NOTES.jobsNeedProfile.replace('match jobs to', 'work from'));
+    const { job: from, instructions, title: t, company: co } = tool.input;
+    const posting = from === 'pasted' ? latestPasted(userText) : null;
+    const job = posting ? { description: posting, ...(t ? { title: t } : {}), ...(co ? { company: co } : {}) } : from !== 'none' ? current()?.job : undefined;
+    if (!job) {
+      await note('Paste the job description below and I\'ll build your prep guide for it.');
+      return jobPanel();
+    }
+    return startGuide(job, instructions ?? '');
+  }
   const { kind, job: source, title, company, tone } = tool.input;
   if (!stored) return note(NOTES.jobsNeedProfile.replace('match jobs to', 'work from'));
   if (kind === 'improve') return startTailor({ mode: 'improve' }, null);
@@ -1368,7 +1524,7 @@ function intentOf(text: string): 'jobs' | 'both' | 'tailor' | 'letter' | 'improv
   const polite = /^(can|could|would) you\b/.test(t);
   // "Find jobs for me", "show me roles", "any openings for me?": the jobs tool. Advice questions ("how do I find a job?") stay chat.
   const ask = t.replace(LEAD_RE, '');
-  if (JOBS_RE.test(ask) && !/\b(how|why|what|when|where|should|tips?|advice|interview|cover letter|r[eé]sum[eé]|cv)\b/.test(ask) && /^(find|show|search|get|look(?:ing)? for|any|got any|are there|give me|send me|fetch|list)\b/.test(ask)) return 'jobs';
+  if (JOBS_RE.test(ask) && !/\b(how|why|what|when|where|should|tips?|advice|interview|cover letter|r[eé]sum[eé]|cv|seen|saw|saved?|viewed|opened|applied|past|previous|earlier|history|before|again|last)\b/.test(ask) && /^(find|show|search|get|look(?:ing)? for|any|got any|are there|give me|send me|fetch|list)\b/.test(ask)) return 'jobs';
   if (/\?\s*$/.test(t) && !polite) return null;
   const verb = t.replace(LEAD_RE, '');
   if (/^(tailor|customi[sz]e|adapt|target|align|write|draft|create|generate|make|do|prepare)\b/.test(verb) && RESUME_RE.test(verb) && /\bcover letter\b/.test(verb) && /\b(and|both|plus|with)\b|\+/.test(verb)) return 'both';
@@ -1444,7 +1600,16 @@ function renderMessages() {
 const saveState = () => vault.put('meta', 'state', state);
 const saveConversation = (c: Conversation) => vault.put('conversations', c.id, c);
 
-async function open(id: string | null, { restoreScroll = false } = {}) {
+/** Opening a chat is queued: quick clicks never interleave (one switch can't undo the next one's draft). */
+let opening: Promise<void> = Promise.resolve();
+function open(id: string | null, opts: { restoreScroll?: boolean } = {}): Promise<void> {
+  opening = opening.then(() => openNow(id, opts)).catch(() => {});
+  return opening;
+}
+
+async function openNow(id: string | null, { restoreScroll = false } = {}) {
+  const typed = input.value;
+  await saveDraft(); // keep what was typed with the chat it was typed in
   state.current = id;
   messages = id ? (await vault.byConversation<Message>(id)).sort((a, b) => a.at - b.at) : [];
   welcome.hidden = true;
@@ -1454,7 +1619,28 @@ async function open(id: string | null, { restoreScroll = false } = {}) {
   // A saved position restores exactly; otherwise (or if it was at the end) land on the newest message.
   await showDoc(c?.docOpen === false ? null : (c?.docId ?? null));
   log.scrollTop = !messages.length ? 0 : restoreScroll && c?.scrollTop != null ? c.scrollTop : log.scrollHeight;
+  const draft = c ? (c.draft ?? '') : ((await vault.get<{ text: string }>('meta', 'newDraft'))?.text ?? '');
+  // Typing while the chat opened wins over the saved draft.
+  if (input.value === typed) input.value = draft;
+  draftFor = id;
+  fit();
   await saveState();
+}
+
+/** Each chat keeps its own unsent text (a new chat without messages yet keeps one too). `draftFor`: the chat whose
+ * draft is in the box (undefined until the first chat opens, so the empty box at start-up never overwrites a draft). */
+let draftTimer = 0;
+let draftFor: string | null | undefined;
+async function saveDraft() {
+  clearTimeout(draftTimer);
+  if (draftFor === undefined) return;
+  const text = input.value;
+  const c = draftFor ? conversations.find((x) => x.id === draftFor) : null;
+  if (c) {
+    if ((c.draft ?? '') === text) return;
+    c.draft = text;
+    await saveConversation(c);
+  } else await vault.put('meta', 'newDraft', { text });
 }
 
 async function add(part: Pick<Message, 'role' | 'text'> & Partial<Message>) {
@@ -1465,6 +1651,7 @@ async function add(part: Pick<Message, 'role' | 'text'> & Partial<Message>) {
     c = { id: uid(), title: title.length > 42 ? `${title.slice(0, 40).trimEnd()}…` : title, createdAt: now, updatedAt: now, scrollTop: null };
     conversations.unshift(c);
     state.current = c.id;
+    if (draftFor === null) draftFor = c.id; // the new chat's box now belongs to the chat just created
     await saveState();
   }
   const m: Message = { id: uid(), conv: c.id, at: Date.now(), ...part };
@@ -1505,6 +1692,7 @@ function transcript(): ChatTurn[] {
         return coach(`(I analysed ${m.task?.mode === 'improve' ? 'their résumé against their target role' : `the job${a?.role ? ` ${a.role}` : ''}${a?.company ? ` at ${a.company}` : ''}`}: ${(a?.match ?? []).map((x) => x.text).join('; ')}.${qa ? ` Their answers: ${qa}.` : ''})`);
       }
       if (m.kind === 'tailored') return coach(`(I built ${m.critique?.length ? 'a stronger résumé' : 'a tailored résumé'}${m.ats ? `, keyword match ${m.ats.before} → ${m.ats.after}` : ''}. Changes: ${(m.changes ?? []).map((c) => `${c.section}: ${c.why}`).join('; ') || 'none listed'}.${m.flags?.length ? ` Flagged to check: ${m.flags.map((f) => f.text).join(', ')}.` : ''})`);
+      if (m.kind === 'guide') return coach(`(I made an interview prep guide${m.text ? `: ${m.text}` : ''}.)`);
       if (m.kind === 'letter') return coach(`(I wrote a cover letter${m.flags?.length ? `; flagged to check: ${m.flags.map((f) => f.text).join(', ')}` : ''}.)`);
       return null;
     })
@@ -1539,7 +1727,7 @@ async function errorNote(res: Response, kind: 'messages' | 'uploads') {
 async function ask(text: string, want?: 'document') {
   const q = text.trim().slice(0, CHAT_MAX);
   if (!q || busy) return;
-  busy = true;
+  setBusy(true);
   try {
     await add({ role: 'user', text: q });
     const c = current()!;
@@ -1565,6 +1753,7 @@ async function ask(text: string, want?: 'document') {
         profile: stored?.profile ?? null,
         jobs: shownJobs(),
         recent: await recentJobs().catch(() => []),
+        saved: await savedJobsContext().catch(() => []),
         // The job this chat is about, so "the role above" means something. Long pasted descriptions are trimmed.
         job: c.job ? { ...c.job, description: c.job.description?.slice(0, 6000) } : undefined,
         summary: c.summary ?? '',
@@ -1610,7 +1799,7 @@ async function ask(text: string, want?: 'document') {
     setOrb(failed ? 'error' : 'done');
     summarizeIfDue(c);
   } finally {
-    busy = false;
+    setBusy(false);
     loadUsage();
     // Ami picked a tool: run its flow now that this request is done (it sets its own busy state).
     const next = pendingTool;
@@ -1697,7 +1886,7 @@ async function profileFrom(text: string, fileName: string) {
 
 async function upload(file: File) {
   if (busy) return;
-  busy = true;
+  setBusy(true);
   try {
     await add({ role: 'user', text: `Uploaded ${file.name}` });
     setOrb('reading');
@@ -1718,7 +1907,7 @@ async function upload(file: File) {
     reading.remove();
     await profileFrom(text, file.name);
   } finally {
-    busy = false;
+    setBusy(false);
   }
 }
 
@@ -1808,11 +1997,15 @@ const fit = () => {
   input.style.height = 'auto';
   input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
 };
-form.addEventListener('submit', (e) => {
+form.addEventListener('submit', async (e) => {
   e.preventDefault();
+  // Still replying: the spinner on the send arrow says so, and the text stays in the box until she's done.
+  if (busy || !input.value.trim()) return;
+  await opening; // a chat that's still opening ("New chat" then a quick message) gets the message
   const q = input.value;
   input.value = '';
   fit();
+  saveDraft(); // sent: nothing left to keep
   send(q);
 });
 // Enter sends; Shift+Enter (or an IME composing text) adds a new line.
@@ -1823,6 +2016,10 @@ input.addEventListener('keydown', (e) => {
   }
 });
 input.addEventListener('input', fit);
+input.addEventListener('input', () => {
+  clearTimeout(draftTimer);
+  draftTimer = window.setTimeout(saveDraft, 400);
+});
 input.addEventListener('input', () => {
   if (!busy && ['idle', 'typing', 'done', 'error', undefined].includes(cc.dataset.orb)) setOrb(input.value ? 'typing' : 'idle');
 });

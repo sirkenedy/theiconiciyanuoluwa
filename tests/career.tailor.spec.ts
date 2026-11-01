@@ -421,7 +421,7 @@ test('fixed phrases run tools with no AI call; an unusual phrasing goes to Ami, 
   await page.locator('#cc-input').press('Enter');
   await expect(page.locator('.cc-match')).toBeVisible();
   const sent = (await (await request.get(`${CLAUDE}/__requests`)).json()) as { tools?: unknown[]; messages: { content: string }[] }[];
-  expect(sent[0].tools?.length).toBe(2); // Ami routed it...
+  expect(sent[0].tools?.length).toBe(3); // Ami routed it...
   expect(sent[1].messages[0].content).toContain('task = "tailor_analyze"'); // ...to tailoring, for the job above
   expect(sent[1].messages[0].content).toContain('SQL is a plus');
 
@@ -505,4 +505,30 @@ test('a question while a document is pending is still answered (not forced into 
   await expect(page.locator('.cc-msg--coach:not(.is-live) .cc-msg__text').last()).toContainText('Lead with outcomes');
   const sent = (await (await request.get(`${CLAUDE}/__requests`)).json()) as { tool_choice?: unknown }[];
   expect(sent.some((r) => r.tool_choice)).toBe(false);
+});
+
+test('interview prep: "prep me…, a 3-day plan" builds a guide that follows it; styled preview, PDF download, print', async ({ page, request }) => {
+  await withProfile(page);
+  await page.evaluate(() => document.querySelector<HTMLButtonElement>('.cc-starter[data-start="tailor"]')!.click());
+  await page.getByLabel('Job description').fill(JD);
+  await page.getByRole('button', { name: 'Letter only' }).click();
+  await expect(page.locator('.cc-doccard')).toHaveCount(1);
+  await page.locator('#cc-input').fill('prep me for the interview with a 3-day plan');
+  await page.locator('#cc-input').press('Enter');
+  const card = page.locator('.cc-doccard').filter({ hasText: 'Interview prep guide' });
+  await expect(card).toBeVisible();
+  const doc = page.locator('[data-doc]');
+  await expect(doc.locator('.cc-doc__h')).toHaveText(['Day 1', 'Day 2', 'Day 3', 'Sources']); // the researched page is cited
+  await expect(doc.locator('.cc-guide__source')).toHaveAttribute('href', 'https://samplepay.test/about');
+  await expect(doc.locator('.cc-guide__note')).toContainText('not reported by past candidates');
+  await expect(page.getByRole('button', { name: 'Print / Save as PDF' })).toBeVisible();
+  await expect(page.locator('[data-dl="docx"]')).toBeHidden();
+  const [pdf] = await Promise.all([page.waitForEvent('download'), page.locator('[data-dl="pdf"]').click()]);
+  expect(pdf.suggestedFilename()).toMatch(/interview-prep.*\.pdf$/);
+  const sent = (await (await request.get(`${CLAUDE}/__requests`)).json()) as { model?: string; messages: { content: string }[] }[];
+  const write = sent.find((r) => String(r.messages[0].content).includes('task = "prep_guide"'))!;
+  expect(write.model).toBe('claude-sonnet-5-5');
+  expect(write.messages[0].content).toContain('SQL is a plus'); // the job from earlier in the chat
+  expect(write.messages[0].content).toContain('<instructions>prep me for the interview with a 3-day plan</instructions>');
+  await expect(page.locator('[data-usage="guides"] [data-left]')).toHaveText('1 of 2 left');
 });

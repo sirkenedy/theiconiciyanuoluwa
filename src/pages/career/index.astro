@@ -26,6 +26,7 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
   { key: 'jobs', label: 'Fresh jobs', tone: 'mint' },
   { key: 'tailored', label: 'Tailored résumés', tone: 'peach' },
   { key: 'letters', label: 'Cover letters', tone: 'butter' },
+  { key: 'guides', label: 'Interview prep guides', tone: 'lilac' },
 ];
 ---
 
@@ -182,6 +183,7 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
         <div class="cc-preview__actions">
           <button class="btn btn--primary cc-preview__dl" type="button" data-dl="docx"><Icon name="download" size={18} />Download DOCX</button>
           <button class="btn btn--secondary cc-preview__dl" type="button" data-dl="pdf"><Icon name="download" size={18} />Download PDF</button>
+          <button class="btn btn--secondary cc-preview__dl" type="button" data-print hidden>Print / Save as PDF</button>
         </div>
         <p class="cc-preview__status" data-dl-status role="status"></p>
         <p class="cc-preview__file"><span data-doc-file></span> · ATS-safe, one column</p>

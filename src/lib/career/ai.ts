@@ -5,6 +5,10 @@ import { CAREER_PROMPT } from '../../content/career-prompt.ts';
 import { ProfileSchema, type ChatTurn, type Profile } from './types.ts';
 
 export const MODEL = 'claude-haiku-5-5';
+/** Interview prep guides only: deeper reasoning and writing, with live web research. */
+export const GUIDE_MODEL = 'claude-sonnet-5-5';
+/** "No thinking": Haiku takes `disabled`; Sonnet 5.5 rejects that and takes `between_tools` (no thinking before replying). */
+export const noThinking = (model: string): Anthropic.ThinkingConfigParam => (model === GUIDE_MODEL ? { type: 'between_tools' } : { type: 'disabled' });
 
 let client: Anthropic | null = null;
 export const anthropic = () => (client ??= new Anthropic({ maxRetries: 1 }));
@@ -24,6 +28,7 @@ export function context(parts: {
   answers?: { question: string; answer: string }[];
   jobs?: unknown[];
   recent?: unknown[];
+  saved?: unknown[];
   summary?: string;
   today: string;
 }) {
@@ -36,6 +41,7 @@ export function context(parts: {
     parts.answers?.length ? `  <answers>${asData(JSON.stringify(parts.answers))}</answers>` : '',
     parts.jobs?.length ? `  <jobs>${asData(JSON.stringify(parts.jobs))}</jobs>` : '',
     parts.recent?.length ? `  <recent_jobs>${asData(JSON.stringify(parts.recent))}</recent_jobs>` : '',
+    parts.saved?.length ? `  <saved_jobs>${asData(JSON.stringify(parts.saved))}</saved_jobs>` : '',
     parts.summary ? `  <summary>${asData(parts.summary)}</summary>` : '',
     `  <today>${parts.today}</today>`,
     '</context>',
@@ -77,12 +83,12 @@ export async function structured<T>(
   schema: Record<string, unknown>,
   validate: { safeParse(v: unknown): { success: true; data: T } | { success: false; error: { issues: { path: (string | number)[]; code: string }[] } } },
   messages: Anthropic.MessageParam[],
-  opts: { label: string; maxTokens: number; signal: AbortSignal; timeoutMs?: number; onProgress?: (chars: number) => void; onUsage?: (u: Anthropic.Usage) => void },
+  opts: { label: string; maxTokens: number; signal: AbortSignal; timeoutMs?: number; model?: string; onProgress?: (chars: number) => void; onUsage?: (u: Anthropic.Usage) => void },
 ): Promise<T | null> {
   const history = [...messages];
   for (let attempt = 0; attempt < 2; attempt++) {
     const stream = anthropic().messages.stream(
-      { model: MODEL, max_tokens: opts.maxTokens, thinking: { type: 'disabled' }, output_config: { effort: 'low', format: { type: 'json_schema', schema } }, system: SYSTEM, messages: history },
+      { model: opts.model ?? MODEL, max_tokens: opts.maxTokens, thinking: noThinking(opts.model ?? MODEL), output_config: { effort: 'low', format: { type: 'json_schema', schema } }, system: SYSTEM, messages: history },
       { signal: AbortSignal.any([opts.signal, AbortSignal.timeout(opts.timeoutMs ?? 25_000)]) },
     );
     let chars = 0;

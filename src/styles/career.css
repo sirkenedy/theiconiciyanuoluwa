@@ -1136,3 +1136,48 @@ a.cc-job__btn::after { content: '↗'; margin-left: 6px; }
 @media (max-width: 400px) {
   .cc-actions { display: none; }
 }
+
+/* ---------- interview prep guide (styled page; the same content goes to the PDF) ---------- */
+.cc-guide__note { padding: var(--s-2) var(--s-3); border-radius: 4px; background: var(--doc-mark); color: var(--doc-ink); }
+.cc-guide__section { gap: var(--s-2); }
+.cc-guide__intro { color: var(--doc-muted); }
+.cc-guide__items { display: flex; flex-direction: column; gap: var(--s-3); margin: 0; padding-left: 1.4em; }
+div.cc-guide__items { padding-left: 0; }
+.cc-guide__item { display: flex; flex-direction: column; gap: 4px; }
+.cc-guide__item::marker { font-weight: 700; }
+.cc-doc .cc-guide__title { margin: 0; font-size: 1.05em; font-weight: 700; line-height: 1.4; }
+.cc-guide__why { color: var(--doc-muted); font-style: italic; }
+.cc-guide__label { color: var(--doc-muted); font-size: 0.85em; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.cc-guide__points { padding-left: 1.2em; }
+.cc-guide__sources { overflow-wrap: anywhere; }
+.cc-guide__source { color: inherit; text-underline-offset: 3px; }
+.cc-doc .cc-doc__flag { background: none; color: inherit; text-decoration: underline wavy var(--peach-deep); }
+
+/* "Print / Save as PDF": only the guide, on plain paper. */
+@media print {
+  :root[data-printing] body * { visibility: hidden; }
+  :root[data-printing] [data-doc],
+  :root[data-printing] [data-doc] * { visibility: visible; }
+  :root[data-printing] [data-doc] { position: absolute; inset: 0 auto auto 0; width: 100%; padding: 0; box-shadow: none; background: var(--doc-paper); color: var(--doc-ink); font-size: 11pt; }
+  :root[data-printing] .cc-guide__item { break-inside: avoid; }
+}
+.cc-preview__dl[hidden] { display: none; }
+
+/* Ami is replying: the send arrow becomes a spinner; sending waits until she's done. */
+.cc-send { position: relative; }
+.cc-send::after {
+  content: '';
+  position: absolute;
+  inset: 11px;
+  border: 2.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  opacity: 0;
+}
+[data-cc][data-busy] .cc-send { cursor: progress; opacity: 0.85; }
+[data-cc][data-busy] .cc-send svg { opacity: 0; }
+[data-cc][data-busy] .cc-send::after { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-cc][data-busy] .cc-send::after { animation: ccSpin 0.8s linear infinite; }
+}
+@keyframes ccSpin { to { transform: rotate(360deg); } }
