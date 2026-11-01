@@ -22,7 +22,7 @@ export type Job = {
   snippet: string;
 };
 
-/** A fetched job plus its full description (stored separately, 48 h). */
+/** A fetched job plus its full description (stored separately, for the source's window). */
 export type Fetched = { job: Job; description: string };
 
 export const SOURCES: Record<SourceId, { name: string; everyMinutes: number; windowMs?: number }> = {
@@ -35,7 +35,10 @@ export const SOURCES: Record<SourceId, { name: string; everyMinutes: number; win
   jobicy: { name: 'Jobicy', everyMinutes: 60 }, // never more than once an hour
 };
 
-export const WINDOW_MS = 48 * 3600_000;
+/** Only recent roles: nothing posted (or last updated) more than a month ago. */
+export const WINDOW_MS = 30 * 24 * 3600_000;
+/** Descriptions are stored trimmed: enough for tailoring and cover letters, small enough for the free Upstash plan. */
+export const MAX_DESCRIPTION = 8000;
 // Job boards see the site's address (how to reach us), never the owner's name.
 export const USER_AGENT = 'career-coach/1.0 (+https://theiconiciyanuoluwa.com/career)';
 

@@ -4,7 +4,7 @@
 import { pipeline, type Redis } from '../redis.ts';
 import { BOARDS, SourceError, himalayas, jobicy, remotive } from './sources.ts';
 import { INDEX_TTL_S, KEY, MAX_PER_SOURCE, dedupeKey, parseIndex } from './store.ts';
-import { SOURCES, WINDOW_MS, type Company, type Fetched, type SourceId } from './types.ts';
+import { MAX_DESCRIPTION, SOURCES, WINDOW_MS, type Company, type Fetched, type SourceId } from './types.ts';
 
 export type IngestOptions = {
   redis: Redis | null; // null with `dry`
@@ -17,17 +17,19 @@ export type IngestOptions = {
   concurrency?: number;
   pauseMs?: number;
   log?: (line: string) => void;
+  /** Fetch only these sources (the live fallback uses the three job feeds: one request each). */
+  only?: SourceId[];
 };
 export type IngestReport = { commands: number; jobs: number; sources: Partial<Record<SourceId, string>> };
 
 export async function ingest(o: IngestOptions): Promise<IngestReport> {
   const { companies, force = false, dry = false, concurrency = 1, pauseMs = 250, log = () => {} } = o;
   const now = Date.now();
-  const ids = Object.keys(SOURCES) as SourceId[];
+  const ids = (Object.keys(SOURCES) as SourceId[]).filter((s) => !o.only || o.only.includes(s));
   const report: IngestReport = { commands: 0, jobs: 0, sources: {} };
   const run = async (cmds: (string | number)[][]) => {
     report.commands += cmds.length;
-    return dry ? cmds.map(() => null) : pipeline(o.redis!, cmds);
+    return dry ? cmds.map(() => null) : pipeline(o.redis!, cmds, 20_000);
   };
   const late = () => o.deadline !== undefined && Date.now() >= o.deadline;
   /** Live runs stop waiting for a slow source 5 s after the deadline (its request is abandoned, not the run). */
@@ -108,7 +110,7 @@ export async function ingest(o: IngestOptions): Promise<IngestReport> {
       let batch: (string | number)[][] = [];
       let bytes = 0;
       for (const { job, description } of fresh) {
-        batch.push(['SET', KEY.description(job.id), description, 'EX', Math.ceil((SOURCES[source].windowMs ?? WINDOW_MS) / 1000)]);
+        batch.push(['SET', KEY.description(job.id), description.slice(0, MAX_DESCRIPTION), 'EX', Math.ceil((SOURCES[source].windowMs ?? WINDOW_MS) / 1000)]);
         bytes += description.length * 2;
         if (bytes > 600_000) {
           await run(batch);

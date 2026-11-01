@@ -51,13 +51,13 @@ beforeEach(() => {
 
 // ---------- sources: honest labels, untouched apply links, the 48 h window ----------
 
-test('Greenhouse: first_published → "posted"; only re-touched → "updated"; older dropped; entity-escaped HTML decoded', async () => {
+test('Greenhouse: first_published → "posted"; only re-touched → "updated"; older than a month dropped; entity-escaped HTML decoded', async () => {
   mockSources({
     'https://boards-api.greenhouse.io/': {
       jobs: [
         { id: 1, title: 'PM', first_published: iso(20), updated_at: iso(5), location: { name: 'Remote - Africa' }, absolute_url: 'https://co.test/jobs/1', content: '&lt;p&gt;Own the &lt;strong&gt;roadmap&lt;/strong&gt; &amp;amp; launches&lt;/p&gt;' },
-        { id: 2, title: 'Designer', first_published: iso(60 * 24 * 30), updated_at: iso(90), location: { name: 'Lagos' }, absolute_url: 'https://co.test/jobs/2' },
-        { id: 3, title: 'Old', first_published: iso(60 * 24 * 30), updated_at: iso(60 * 50), absolute_url: 'https://co.test/jobs/3' },
+        { id: 2, title: 'Designer', first_published: iso(60 * 24 * 31), updated_at: iso(90), location: { name: 'Lagos' }, absolute_url: 'https://co.test/jobs/2' },
+        { id: 3, title: 'Old', first_published: iso(60 * 24 * 31), updated_at: iso(60 * 24 * 31), absolute_url: 'https://co.test/jobs/3' },
       ],
     },
   });
@@ -239,7 +239,7 @@ function liveSources() {
     'https://boards-api.greenhouse.io/': (url) => ({ jobs: [{ id: Number(url.length), title: 'Product Manager', first_published: at, updated_at: at, location: { name: 'Remote' }, absolute_url: `https://co.test/gh/${url.length}`, content: '&lt;p&gt;Own the roadmap&lt;/p&gt;' }] }),
     'https://api.lever.co/': () => [],
     'https://api.ashbyhq.com/': () => ({ jobs: [] }),
-    'https://himalayas.app/jobs/api': () => ({ jobs: [], nextCursor: null }),
+    'https://himalayas.app/jobs/api': () => ({ jobs: [{ title: 'Product Manager', companyName: 'Feed Co', pubDate: Math.floor((Date.now() - 3600_000) / 1000), expiryDate: Math.floor((Date.now() + 86_400_000) / 1000), applicationLink: 'https://boards.greenhouse.io/feedco/jobs/1', guid: 'https://himalayas.app/companies/feedco/jobs/pm' }], nextCursor: null }),
     'https://remotive.com/api/remote-jobs': () => ({ jobs: [] }),
     'https://jobicy.com/api/v2/remote-jobs': () => ({ jobs: [] }),
   };
@@ -253,21 +253,17 @@ function liveSources() {
   return hits;
 }
 
-test('jobs: empty pool (ingest never ran) → fetched live, written to Redis, then ranked and served', async () => {
+test('jobs: empty pool (ingest never ran) → the three job feeds are fetched (not every board), saved, ranked and served', async () => {
   clearPool();
   const hits = liveSources();
   const d = await device('203.0.113.43');
   const out = await jobs(d, {}, '203.0.113.43');
-  assert.ok(hits['boards-api.greenhouse.io'] > 0, 'the job boards were fetched');
-  assert.ok(out.jobs.length > 0, 'jobs served from the live fetch');
-  assert.ok(typeof kv.get('jobs:idx:greenhouse') === 'string', 'the pool is now in Redis for everyone');
-  assert.ok(kv.get('jobs:last:greenhouse'), 'and marked fresh');
+  assert.ok(hits['himalayas.app'] > 0, 'the job feeds were fetched');
+  assert.equal(hits['boards-api.greenhouse.io'] ?? 0, 0, 'company boards are left to the hourly ingest');
+  assert.ok(out.jobs.length > 0, 'jobs served from the refreshed feeds');
+  assert.ok(typeof kv.get('jobs:idx:himalayas') === 'string', 'the pool is now in Redis for everyone');
+  assert.ok(kv.get('jobs:last:himalayas'), 'and marked fresh');
   assert.equal(kv.has('jobs:refresh:lock'), false, 'lock released');
-
-  const before = hits['boards-api.greenhouse.io'];
-  const d2 = await device('203.0.113.44');
-  await jobs(d2, {}, '203.0.113.44');
-  assert.equal(hits['boards-api.greenhouse.io'], before, 'a fresh pool is not fetched again');
 });
 
 test('jobs: someone else is already fetching an empty pool → "warming", no model call, nothing spent', async () => {
@@ -283,13 +279,15 @@ test('jobs: someone else is already fetching an empty pool → "warming", no mod
   }
 });
 
-test('jobs: a stale pool (ingest stopped > 3 h ago) is refreshed live, and the old jobs still count if a source fails', async () => {
+test('jobs: a stale pool (ingest stopped > 3 h ago) gets its feeds refreshed, and the saved jobs still count', async () => {
   await seedJobs(redisUrl);
   for (const s of ['greenhouse', 'lever', 'ashby', 'himalayas', 'remotive', 'jobicy']) kv.set(`jobs:last:${s}`, String(Date.now() - 4 * 3600_000));
   const hits = liveSources();
   const d = await device('203.0.113.46');
   const out = await jobs(d, {}, '203.0.113.46');
-  assert.ok(hits['boards-api.greenhouse.io'] > 0, 'refreshed');
-  assert.ok(out.jobs.length > 0);
-  assert.ok(Number(kv.get('jobs:last:greenhouse')) > Date.now() - 60_000);
+  // Each feed keeps its own cadence: Jobicy (hourly) is due after 4 h; Himalayas (daily) and Remotive (6 h) are not.
+  assert.ok(hits['jobicy.com'] > 0, 'due feeds refreshed');
+  assert.equal(hits['himalayas.app'] ?? 0, 0, 'feeds not yet due are left alone');
+  assert.ok(out.jobs.length > 0, 'the saved jobs still count');
+  assert.ok(Number(kv.get('jobs:last:jobicy')) > Date.now() - 60_000);
 });

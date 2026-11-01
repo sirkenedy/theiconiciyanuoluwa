@@ -16,8 +16,9 @@ export default defineConfig({
   site,
   output: 'static',
   integrations: [preact(), sitemap({ filter: (page) => !/\/404\/?$/.test(page) })],
-  // Writing a tailored résumé can take ~30–50 s on the Haiku-class model; 60 s is the Hobby plan's ceiling.
-  adapter: vercel({ maxDuration: 60 }),
+  // Tailoring takes ~30–50 s and a live job search (several job APIs, then ranking) can take longer. With Fluid Compute
+  // (on by default for Vercel projects) the Hobby plan allows up to 300 s; each route still has its own tighter budget.
+  adapter: vercel({ maxDuration: 300 }),
   build: { inlineStylesheets: 'always' },
   devToolbar: { enabled: false },
   // Dev only. Vite pre-bundles dependencies it finds by crawling from the pages; libraries that only lazy code imports

@@ -6,6 +6,7 @@ import owner from '../../content/owner.json';
 import resume from '../../content/resume.json';
 import { DAILY_LIMITS } from '../../lib/career/limits';
 import { ogAltFor } from '../../lib/text';
+import { searchConfigured } from '../../lib/jobs/search';
 
 // Static: no visitor data is involved in rendering this page.
 export const prerender = true;
@@ -20,6 +21,12 @@ const SOURCES = [
   { name: 'Remotive', url: 'https://remotive.com/api-documentation', note: 'remote jobs, shown at least 24 hours after posting' },
   { name: 'Jobicy', url: 'https://jobi.cy/apidocs', note: 'remote jobs; "Open job" goes to the Jobicy page' },
 ];
+// Live search sources are listed only when enabled and keyed (this page is built with the deployment's env).
+const ADZUNA = searchConfigured('adzuna');
+const JOOBLE = searchConfigured('jooble');
+if (ADZUNA) SOURCES.push({ name: 'Adzuna', url: 'https://developer.adzuna.com/', note: 'live search by role and place; "Open job" goes to the Adzuna listing' });
+if (JOOBLE) SOURCES.push({ name: 'Jooble', url: 'https://jooble.org/api/about', note: 'live search by role and place; "Open job" goes to the Jooble listing' });
+const live = [ADZUNA && 'Adzuna', JOOBLE && 'Jooble'].filter(Boolean).join(' and ');
 ---
 
 <Base title={`Ami (career coach) privacy — ${name}`} description="How Ami, the career coach, keeps your résumé and chats on your device, what is sent to the AI, which job sources it uses and how to delete everything." ogAlt={ogAltFor(identity)}>
@@ -44,6 +51,7 @@ const SOURCES = [
         <li>To answer you, the text it needs (your résumé or profile, a job description, your question) is sent to <a href="https://www.anthropic.com/legal/privacy" rel="noopener">Anthropic</a>'s Claude, a Haiku-class model. It is processed to write the answer; this site keeps no copy.</li>
         <li>Your <strong>email address and phone number are removed</strong> on your device before anything is sent. Downloaded résumés get them back from your own file, on your device.</li>
         <li>Your résumé file itself is read in your browser and never uploaded.</li>
+        {live && <li>When no saved job fits, Ami searches job sites ({live}) using only your target role, level and city or country. Never your name, contact details or résumé.</li>}
       </ul>
     </section>
 
@@ -64,7 +72,7 @@ const SOURCES = [
 
     <section aria-labelledby="p-jobs">
       <h2 id="p-jobs">Where jobs come from</h2>
-      <p>Only free, public sources, collected about once an hour. Every job card names its source with a link, and "Open job" goes to the page the source asks for. You apply yourself; nothing is submitted for you.</p>
+      <p>Only free, public sources: job feeds and company job boards collected about once an hour{live ? ', plus live searches when nothing saved fits' : ''}. Only roles from the last month are kept. New company boards are added automatically, but only from hiring systems that publish an official public job API; sites whose terms forbid automated access are never used. Every job card names its source with a link, and "Open job" goes to the page the source asks for. You apply yourself; nothing is submitted for you.</p>
       <ul class="privacy__sources">
         {SOURCES.map((s) => <li><a href={s.url} rel="noopener">{s.name}</a>: {s.note}</li>)}
       </ul>

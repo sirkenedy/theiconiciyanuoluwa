@@ -64,9 +64,8 @@ const NOTES = {
 
   jobsNeedProfile: 'Upload your résumé first, so I can match jobs to your experience.',
   jobsLimit: "You've seen today's 5 fresh jobs. New ones arrive after midnight.",
+  searchLimit: "You've used today's live job searches. The jobs I found are saved, and new ones arrive every hour.",
   jobsWarming: "I'm gathering today's jobs from the job boards right now. Ask again in a minute.",
-  jobsEmpty: "I couldn't reach the job boards just now. Try again in a few minutes; this didn't use any of today's jobs.",
-  jobsNone: "No strong matches right now (I only show jobs that fit 55% or better). New jobs arrive every hour; widening your target roles or location in your profile also helps.",
   devices: "Today's free allowance for this network is used up, and deleting your data doesn't reset it. Ami will be back after midnight.",
   upstream: "I couldn't finish reading that job just now. Try again in a moment: it didn't use up any of today's limits.",
   pasteJob: "Paste the job description below and I'll tailor your résumé to it, or write a cover letter.",
@@ -445,40 +444,52 @@ function searchingNode() {
   return li;
 }
 
-async function findJobs(more = false) {
+type JobsData = { jobs: RankedJob[]; left: number; more?: number; reason?: string; checked?: number; searched?: string[]; searchable?: boolean };
+const WIDEN = { anywhere: 'Search remote roles anywhere', roles: 'Edit my target roles' } as const;
+
+/** The shared pool first; if nothing there fits, a live search of job sites (streamed), saved for everyone. */
+async function findJobs(more = false, opts: { anywhere?: boolean; userText?: string } = {}) {
   if (busy) return;
+  const userText = opts.userText ?? (more ? 'Show me more' : 'Find jobs for me');
   if (!stored) {
-    await add({ role: 'user', text: 'Find jobs for me' });
+    await add({ role: 'user', text: userText });
     await note(NOTES.jobsNeedProfile);
     return;
   }
   busy = true;
   try {
-    await add({ role: 'user', text: more ? 'Show me more' : 'Find jobs for me' });
+    await add({ role: 'user', text: userText });
     setOrb('searching');
-    const searching = searchingNode();
-    msgsEl.append(searching);
-    log.scrollTop = log.scrollHeight;
-    const res = await deviceFetch('/api/career/jobs', jsonBody({ profile: stored.profile, day: localDay(), today: localDay(), count: 3, more })).catch(() => null);
-    searching.remove();
-    if (!res?.ok) {
-      setOrb('error');
-      await (res ? errorNote(res, 'messages') : note(NOTES.offline));
-      return;
+    let data: JobsData | null = null;
+    if (!opts.anywhere) {
+      const searching = searchingNode();
+      msgsEl.append(searching);
+      log.scrollTop = log.scrollHeight;
+      const res = await deviceFetch('/api/career/jobs', jsonBody({ profile: stored.profile, day: localDay(), today: localDay(), count: 3, more })).catch(() => null);
+      searching.remove();
+      if (!res?.ok) {
+        setOrb('error');
+        await (res ? errorNote(res, 'messages') : note(NOTES.offline));
+        return;
+      }
+      data = (await res.json()) as JobsData;
     }
-    const data = (await res.json()) as { jobs: RankedJob[]; left: number; more?: number; reason?: string };
+    if (!more && (!data || (!data.jobs.length && (data.reason === 'none' || data.reason === 'empty')))) {
+      data = await searchLive(!!opts.anywhere, data?.checked);
+    }
+    if (!data) return;
     if (!data.jobs.length) {
       setOrb('done');
-      await note(data.reason === 'limit' ? NOTES.jobsLimit : data.reason === 'warming' ? NOTES.jobsWarming : data.reason === 'empty' ? NOTES.jobsEmpty : NOTES.jobsNone);
-      if (data.reason === 'warming') suggestions(['Find jobs for me']);
-      return;
+      return noJobs(data);
     }
     const hour = data.jobs.filter((j) => j.time.kind !== 'updated' && Date.now() - j.time.at <= 3600_000).length;
     const intro = more
       ? 'A few more for you:'
-      : hour
-        ? `Here are today's freshest matches for you. ${hour === 1 ? 'One was' : `${hour} were`} posted within the last hour.`
-        : 'Here are the most recent strong matches for you.';
+      : data.searched
+        ? `I searched job sites for ${data.searched.join(' and ')}. Here are the strongest recent matches.`
+        : hour
+          ? `Here are today's freshest matches for you. ${hour === 1 ? 'One was' : `${hour} were`} posted within the last hour.`
+          : 'Here are the most recent strong matches for you.';
     const top = data.jobs[0];
     const suggest = [`Why is ${top.company} the top match?`, `Prep me for the ${top.title} interview`, 'What should I improve first?'].map((s) => s.slice(0, 60));
     // Older "Show more" buttons go: only the newest set of cards offers more.
@@ -491,6 +502,55 @@ async function findJobs(more = false) {
     busy = false;
     loadUsage();
   }
+}
+
+/** Streams the live search: each step shows in the searching card; returns the final cards (or null after a note). */
+async function searchLive(anywhere: boolean, checked?: number): Promise<JobsData | null> {
+  const searching = searchingNode();
+  const line = $<HTMLElement>('.cc-msg__text', searching);
+  line.textContent = checked ? `Nothing in today's ${checked} jobs fits you well, so I'm searching job sites now…` : 'Searching job sites for you now…';
+  msgsEl.append(searching);
+  log.scrollTop = log.scrollHeight;
+  try {
+    const res = await deviceFetch('/api/career/job-search', jsonBody({ profile: stored!.profile, day: localDay(), today: localDay(), count: 3, anywhere })).catch(() => null);
+    if (!res?.ok || !res.body || !res.headers.get('content-type')?.includes('event-stream')) {
+      if (res?.ok) return { ...((await res.json()) as JobsData), checked };
+      setOrb('error');
+      const err = res ? ((await res.clone().json().catch(() => ({}))) as { error?: string; kind?: string }) : {};
+      if (err.error === 'limit' && err.kind === 'searches') await note(NOTES.searchLimit);
+      else await (res ? errorNote(res, 'messages') : note(NOTES.offline));
+      return null;
+    }
+    let data: JobsData | null = null;
+    let failed = '';
+    for await (const { event, data: payload } of readEvents(res)) {
+      if (event === 'progress') line.textContent = (payload as { text: string }).text;
+      else if (event === 'result') data = payload as JobsData;
+      else if (event === 'error') failed = (payload as { code?: string }).code ?? 'upstream';
+    }
+    if (!data) {
+      setOrb('error');
+      await note(failed === 'breather' ? NOTES.offline : NOTES.error);
+      return null;
+    }
+    return { ...data, checked: data.checked ?? checked };
+  } finally {
+    searching.remove();
+  }
+}
+
+/** An honest "nothing fits": what was checked and searched, and two ways to widen it. */
+async function noJobs(data: JobsData) {
+  if (data.reason === 'limit') return note(NOTES.jobsLimit);
+  if (data.reason === 'warming') {
+    await note(NOTES.jobsWarming);
+    return suggestions(['Find jobs for me']);
+  }
+  const roles = stored?.profile.targetRoles.slice(0, 2).join(' or ') || 'your roles';
+  const checked = data.checked ? `I checked ${data.checked} recent ${data.checked === 1 ? 'job' : 'jobs'}` : "I couldn't find recent jobs";
+  const searched = data.searched?.length ? ` and searched job sites for ${data.searched.join(' and ')}` : '';
+  await add({ role: 'coach', text: `${checked}${searched}, but none fit ${roles} at 55% or better. Widening the search usually helps.`, kind: 'note', suggest: [WIDEN.anywhere, WIDEN.roles] });
+  suggestions([WIDEN.anywhere, WIDEN.roles]);
 }
 
 // ---------- tailor, improve, cover letter (career-mode.md §3.4–3.5) ----------
@@ -1130,9 +1190,14 @@ const RESUME_RE = /\b(cv|r[eé]s?u?m[eé]?s?)\b/i;
 const LEAD_RE = /^(?:(?:hi|hey|ok(?:ay)?|great|thanks|now|please|so|also|and|then)[,!. ]+|can you |could you |would you |help(?: me)?(?: to)? |i (?:want|need|would like) (?:you )?to )*/;
 
 /** Clear instructions run the tool straight away (questions still go to the chat, so they never spend a quota). */
-function intentOf(text: string): 'both' | 'tailor' | 'letter' | 'improve' | null {
+const JOBS_RE = /\b(jobs?|roles?|openings?|positions?|vacanc(?:y|ies)|opportunit(?:y|ies))\b/;
+
+function intentOf(text: string): 'jobs' | 'both' | 'tailor' | 'letter' | 'improve' | null {
   const t = text.trim().toLowerCase();
   const polite = /^(can|could|would) you\b/.test(t);
+  // "Find jobs for me", "show me roles", "any openings for me?": the jobs tool. Advice questions ("how do I find a job?") stay chat.
+  const ask = t.replace(LEAD_RE, '');
+  if (JOBS_RE.test(ask) && !/\b(how|why|what|when|where|should|tips?|advice|interview|cover letter|r[eé]sum[eé]|cv)\b/.test(ask) && /^(find|show|search|get|look(?:ing)? for|any|got any|are there|give me|send me|fetch|list)\b/.test(ask)) return 'jobs';
   if (/\?\s*$/.test(t) && !polite) return null;
   const verb = t.replace(LEAD_RE, '');
   if (/^(tailor|customi[sz]e|adapt|target|align|write|draft|create|generate|make|do|prepare)\b/.test(verb) && RESUME_RE.test(verb) && /\bcover letter\b/.test(verb) && /\b(and|both|plus|with)\b|\+/.test(verb)) return 'both';
@@ -1156,6 +1221,7 @@ async function send(text: string) {
   const q = text.trim();
   if (!q || busy) return;
   const intent = intentOf(q);
+  if (intent === 'jobs') return findJobs(false, { userText: q });
   if (intent === 'both' || intent === 'tailor' || intent === 'letter') return forThisJob(intent, q);
   if (intent === 'improve') return startTailor({ mode: 'improve' }, q);
   return ask(q);
@@ -1165,6 +1231,8 @@ async function send(text: string) {
 async function runSuggestion(s: string) {
   const t = s.toLowerCase();
   if (/^find (me )?jobs/.test(t)) return findJobs();
+  if (s === WIDEN.anywhere) return findJobs(false, { anywhere: true, userText: s });
+  if (s === WIDEN.roles) return openProfileEditor();
   if (/make my r[ée]sum[ée] stronger|improve my r[ée]sum[ée]/.test(t)) return startTailor({ mode: 'improve' }, 'Make my résumé stronger.');
   if (/tailor (my r[ée]sum[ée] )?to (a|this|the) (job|role)/.test(t)) return forThisJob('tailor', s);
   if (/write a cover letter/.test(t)) return forThisJob('letter', s);

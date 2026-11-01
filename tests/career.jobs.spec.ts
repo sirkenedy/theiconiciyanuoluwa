@@ -126,3 +126,50 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 }
+
+// ---------- live search (fake Adzuna/Jooble: tests/fake-jobsearch.mjs) ----------
+
+const SEARCH = 'http://127.0.0.1:4333';
+/** A pool with nothing for a designer (one backend role), freshly ingested, and no earlier live searches. */
+async function poolWithoutDesigners(request: import('@playwright/test').APIRequestContext) {
+  const backend = { id: 'greenhouse:sample:99', title: 'Backend Engineer', company: 'Sample Infra', location: 'Remote', remote: true, time: { kind: 'posted', at: Date.now() - 3600_000 }, applyUrl: 'https://jobs.sample.test/99', sourceUrl: 'https://board.sample.test/99', attribution: { source: 'Greenhouse', label: 'via Greenhouse' }, snippet: 'Go and Postgres services.' };
+  const sources = ['greenhouse', 'lever', 'ashby', 'himalayas', 'remotive', 'jobicy'];
+  await request.post('http://localhost:4329/pipeline', {
+    headers: { authorization: 'Bearer test-token' },
+    data: [...sources.map((s) => ['DEL', `jobs:idx:${s}`]), ['DEL', 'jobs:idx:search'], ['DEL', 'search:done'], ['SET', 'jobs:idx:greenhouse', JSON.stringify([backend])], ...sources.map((s) => ['SET', `jobs:last:${s}`, String(Date.now())])],
+  });
+}
+const designer = { identity: { name: 'Sample Candidate', headline: 'Product Designer', location: 'Toronto, Ontario, Canada' }, summary: 'Product designer.', experience: [{ id: 'exp-1', role: 'Product Designer', company: 'Example Fintech', dates: '2020 – Present', highlights: ['Redesigned checkout flow'] }], skills: [{ group: 'Design', items: ['Figma', 'User research'] }], education: ['B.A. Design'], certifications: [], targetRoles: ['Product Designer'], seniority: 'mid', location: 'Toronto, Ontario, Canada', remotePreference: 'hybrid', yearsExperience: 5 };
+
+test('nothing in the pool fits → a typed "find me jobs" runs a live search, streamed, and serves recent roles with pay', async ({ page, request }) => {
+  await poolWithoutDesigners(request);
+  await request.post(`${CLAUDE}/__profile`, { data: JSON.stringify(designer) });
+  await withProfile(page);
+  await page.locator('#cc-input').fill('Can you find me product designer roles?');
+  await page.locator('#cc-input').press('Enter');
+  const cards = page.locator('.cc-job');
+  await expect(cards).toHaveCount(3);
+  await expect(page.locator('.cc-msg--jobs').last()).toContainText('I searched job sites for Product Designer in Toronto');
+  await expect(cards.first()).toContainText('via Adzuna');
+  await expect(cards.first()).toContainText('CAD 95,000–120,000');
+  const calls = (await (await request.get(`${SEARCH}/__calls`)).json()) as { url: string; body: string }[];
+  const adzuna = calls.filter((c) => c.url.startsWith('/adzuna/')).at(-1)!;
+  expect(adzuna.url).toContain('/jobs/ca/search/1');
+  expect(adzuna.url).toContain('what=Product+Designer');
+  expect(adzuna.url).toContain('where=Toronto');
+  expect(JSON.stringify(calls)).not.toContain('Sample Candidate'); // only role, level and place leave the device
+  // The chat isn't spent: a typed job request is the jobs tool, not a chat message.
+  await expect(page.locator('[data-usage="messages"] [data-left]')).toHaveText('10 of 10 left');
+});
+
+test('no fit even after searching → says what was checked and searched, and offers to widen', async ({ page, request }) => {
+  await poolWithoutDesigners(request);
+  await withProfile(page); // the sample profile: Product Manager, remote, Lagos (Adzuna has no Nigeria site; Jooble finds nothing)
+  await page.locator('.cc-suggest').getByRole('button', { name: 'Find jobs for me' }).click();
+  const msg = page.locator('.cc-msg--note').last();
+  await expect(msg).toContainText('I checked 1 recent job and searched job sites for Product Manager');
+  await expect(msg).toContainText('none fit Product Manager at 55% or better');
+  await expect(page.locator('.cc-suggest').getByRole('button', { name: 'Search remote roles anywhere' })).toBeVisible();
+  await page.locator('.cc-suggest').getByRole('button', { name: 'Edit my target roles' }).click();
+  await expect(page.locator('.cc-profile [contenteditable], .cc-profile input, .cc-profile textarea').first()).toBeVisible();
+});

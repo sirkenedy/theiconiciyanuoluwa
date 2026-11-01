@@ -9,12 +9,13 @@ export function redisConfig(): Redis | null {
   return url && token ? { url: url.replace(/\/$/, ''), token } : null;
 }
 
-export async function pipeline(redis: Redis, commands: (string | number)[][]): Promise<unknown[]> {
+/** `timeoutMs`: 3 s suits small reads; bulk job writes and whole-pool reads pass more (they move hundreds of KB). */
+export async function pipeline(redis: Redis, commands: (string | number)[][], timeoutMs = 3000): Promise<unknown[]> {
   const res = await fetch(`${redis.url}/pipeline`, {
     method: 'POST',
     headers: { authorization: `Bearer ${redis.token}`, 'content-type': 'application/json' },
     body: JSON.stringify(commands),
-    signal: AbortSignal.timeout(3000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok) throw new Error(`redis ${res.status}`);
   const rows = (await res.json()) as { result?: unknown; error?: string }[];

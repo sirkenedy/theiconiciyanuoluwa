@@ -5,7 +5,11 @@
 import { readFileSync } from 'node:fs';
 import { redisConfig } from '../src/lib/redis.ts';
 import { ingest } from '../src/lib/jobs/ingest.ts';
-import type { Company } from '../src/lib/jobs/types.ts';
+import { boardKey, discover, discoveredBoards } from '../src/lib/jobs/discover.ts';
+import { SEARCH_COMPANIES, SEARCH_INDEX } from '../src/lib/jobs/live.ts';
+import { KEY, parseIndex } from '../src/lib/jobs/store.ts';
+import { SOURCES, type Company, type SourceId } from '../src/lib/jobs/types.ts';
+import { pipeline } from '../src/lib/redis.ts';
 
 const force = process.argv.includes('--force');
 const dry = process.argv.includes('--dry');
@@ -20,7 +24,23 @@ if (!redis && !dry) {
   process.exit(1);
 }
 
-const companies = JSON.parse(readFileSync('src/content/companies.json', 'utf8')) as Company[];
+// The hand-made list plus every board discovered so far (both fetched each hour).
+const listed = JSON.parse(readFileSync('src/content/companies.json', 'utf8')) as Company[];
+const found = redis ? await discoveredBoards(redis) : [];
+const known = new Set(listed.map((c) => boardKey(c.ats, c.token)));
+const companies = [...listed, ...found.filter((c) => !known.has(boardKey(c.ats, c.token)))];
+console.log(`boards: ${listed.filter((c) => c.active).length} listed + ${companies.length - listed.length} discovered`);
+
 const report = await ingest({ redis, companies, force, dry, log: (line) => console.warn(line) });
 for (const [source, line] of Object.entries(report.sources)) console.log(`${source.padEnd(10)} ${line}`);
 console.log(`${dry ? '[dry run] would use' : 'used'} ${report.commands} Redis commands`);
+
+// Discovery: hiring pages linked from the pool, and companies seen in live searches since the last run.
+if (redis && !dry) {
+  const ids = Object.keys(SOURCES) as SourceId[];
+  const [names, ...indexes] = (await pipeline(redis, [['SPOP', SEARCH_COMPANIES, 40], ...ids.map((s) => ['GET', KEY.index(s)]), ['GET', SEARCH_INDEX]], 20_000)) as [string[] | null, ...(string | null)[]];
+  const pool = indexes.flatMap(parseIndex);
+  const d = await discover(redis, pool, names ?? [], companies, (line) => console.log(line));
+  console.log(`discovery: ${d.checked} checked, ${d.added.length} added, ${d.skipped.length} skipped`);
+  for (const s of d.skipped) console.log(`  - ${s.key}: ${s.reason}${s.policy ? ' (policy)' : ''}`);
+}

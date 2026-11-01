@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 const PORT = 4323;
 const REDIS_PORT = 4329;
 const CLAUDE_PORT = 4331;
+const SEARCH_PORT = 4333;
 // A second Career Coach server: Cloudflare's official always-pass Turnstile test keys and a $0 budget (breather state).
 const LOCKED_PORT = 4325;
 const LOCKED_REDIS = 4330;
@@ -34,6 +35,11 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
+      command: `node tests/fake-jobsearch.mjs ${SEARCH_PORT}`,
+      port: SEARCH_PORT,
+      reuseExistingServer: !process.env.CI,
+    },
+    {
       command: `node tests/fake-upstash.mjs ${LOCKED_REDIS}`,
       port: LOCKED_REDIS,
       reuseExistingServer: !process.env.CI,
@@ -44,7 +50,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: `PORT=${PORT} ANTHROPIC_API_KEY=test-key ANTHROPIC_BASE_URL=http://127.0.0.1:${CLAUDE_PORT} UPSTASH_REDIS_REST_URL=http://localhost:${REDIS_PORT} UPSTASH_REDIS_REST_TOKEN=test-token node scripts/serve-static.mjs`,
+      command: `PORT=${PORT} ADZUNA_APP_ID=test ADZUNA_APP_KEY=test ADZUNA_API_URL=http://127.0.0.1:${SEARCH_PORT}/adzuna JOOBLE_API_KEY=test JOOBLE_API_URL=http://127.0.0.1:${SEARCH_PORT}/jooble ANTHROPIC_API_KEY=test-key ANTHROPIC_BASE_URL=http://127.0.0.1:${CLAUDE_PORT} UPSTASH_REDIS_REST_URL=http://localhost:${REDIS_PORT} UPSTASH_REDIS_REST_TOKEN=test-token node scripts/serve-static.mjs`,
       url: `http://localhost:${PORT}`,
       reuseExistingServer: !process.env.CI,
     },

@@ -512,5 +512,212 @@
       "uk"
     ],
     "active": true
+  },
+  {
+    "company": "Faire",
+    "ats": "greenhouse",
+    "token": "faire",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "1Password",
+    "ats": "ashby",
+    "token": "1password",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Hootsuite",
+    "ats": "greenhouse",
+    "token": "hootsuite",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Wattpad",
+    "ats": "lever",
+    "token": "wattpad",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Lightspeed",
+    "ats": "ashby",
+    "token": "lightspeedhq",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Thinkific",
+    "ats": "greenhouse",
+    "token": "thinkific",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Jobber",
+    "ats": "ashby",
+    "token": "jobber",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "KOHO",
+    "ats": "ashby",
+    "token": "koho",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Neo Financial",
+    "ats": "ashby",
+    "token": "neofinancial",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "PointClickCare",
+    "ats": "lever",
+    "token": "pointclickcare",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Benevity",
+    "ats": "ashby",
+    "token": "benevity",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Wave Financial",
+    "ats": "lever",
+    "token": "waveapps",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Ritual",
+    "ats": "greenhouse",
+    "token": "ritual",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Float",
+    "ats": "ashby",
+    "token": "float",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Shakepay",
+    "ats": "greenhouse",
+    "token": "shakepay",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Hopper",
+    "ats": "ashby",
+    "token": "hopper",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Unbounce",
+    "ats": "greenhouse",
+    "token": "unbounce",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Later",
+    "ats": "greenhouse",
+    "token": "later",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Visier",
+    "ats": "ashby",
+    "token": "visier",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Tealbook",
+    "ats": "lever",
+    "token": "tealbook",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Maple",
+    "ats": "ashby",
+    "token": "maple",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Rewind",
+    "ats": "ashby",
+    "token": "rewind",
+    "regions": [
+      "ca"
+    ],
+    "active": true
+  },
+  {
+    "company": "Plooto",
+    "ats": "lever",
+    "token": "plooto",
+    "regions": [
+      "ca"
+    ],
+    "active": true
   }
 ]

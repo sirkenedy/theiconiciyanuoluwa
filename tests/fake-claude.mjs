@@ -5,7 +5,8 @@
 // - other requests (the rolling summary) get a one-line summary
 // Every request body is recorded so tests can check exactly what would have been sent to Anthropic.
 // `node tests/fake-claude.mjs 4331` serves it; GET /__requests returns the log, POST /__reset clears it,
-// POST /__invent | /__honest switches the written résumé; state.analysis overrides the analyze reply.
+// POST /__invent | /__honest switches the written résumé; POST /__profile queues a profile reply; state.analysis overrides
+// the analyze reply.
 import { createServer } from 'node:http';
 
 export const SAMPLE_PROFILE = {
@@ -70,6 +71,11 @@ export function startFakeClaude(port = 0) {
       // Switch the written résumé between honest and invented output (the no-fabrication check's browser test).
       if (req.url === '/__invent' || req.url === '/__honest') {
         state.write = req.url === '/__invent' ? INVENTED_WRITE : HONEST_WRITE;
+        return res.writeHead(204).end();
+      }
+      // Queue the next profile the "model" extracts (a browser test needs a specific visitor).
+      if (req.url === '/__profile') {
+        state.profileReplies.push(body);
         return res.writeHead(204).end();
       }
       const params = JSON.parse(body);

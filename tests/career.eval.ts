@@ -20,7 +20,7 @@ const { default: Anthropic } = await import('@anthropic-ai/sdk');
 const { ECDSA, ECDSA_SIGN, HEADER, b64url, canonicalJwk, signingInput } = await import('../src/lib/career/signing.ts');
 const { localDay } = await import('../src/lib/career/limits.ts');
 const { checkResume, checkText } = await import('../src/lib/career/factcheck.ts');
-const { rank } = await import('../src/pages/api/career/jobs.ts');
+const { rank } = await import('../src/lib/jobs/serve.ts');
 type Profile = import('../src/lib/career/types.ts').Profile;
 type Job = import('../src/lib/jobs/types.ts').Job;
 
