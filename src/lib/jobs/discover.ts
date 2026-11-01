@@ -6,6 +6,7 @@
 //   boards:added   ats:token → { company, ats, token, foundAt, via }
 //   boards:skipped key       → { reason, policy, at }   (policy skips are permanent; others retried after 90 days)
 import { pipeline, type Redis } from '../redis.ts';
+import { countryPlace, inCountry } from './geo.ts';
 import { BOARDS } from './sources.ts';
 import { USER_AGENT, type Company, type Job } from './types.ts';
 
@@ -108,9 +109,23 @@ type Decision = { added: Company[]; skipped: { key: string; reason: string; poli
  * One discovery pass. `jobs` = everything in the pool (apply links), `searchCompanies` = company names from live
  * searches. `known` = boards already in companies.json. Checks at most MAX_CHECKS_PER_RUN new leads.
  */
-export async function discover(redis: Redis, jobs: Job[], searchCompanies: string[], known: Company[], log: (line: string) => void = () => {}): Promise<Decision> {
+export async function discover(
+  redis: Redis,
+  jobs: Job[],
+  searchCompanies: string[],
+  known: Company[],
+  log: (line: string) => void = () => {},
+  /** Companies to try for countries people searched from (src/lib/jobs/regions.ts): checked first. */
+  regionCompanies: { company: string; country: string }[] = [],
+): Promise<Decision> {
   const now = Date.now();
-  const leads = new Map<string, { ats: Ats; token: string; company: string; via: string } | { ats: null; tokens: string[]; company: string; via: string }>();
+  type NameLead = { ats: null; tokens: string[]; company: string; via: string; country?: string };
+  const leads = new Map<string, { ats: Ats; token: string; company: string; via: string } | NameLead>();
+  // Countries with demand go first: they are why this run matters most.
+  for (const { company, country } of regionCompanies) {
+    const tokens = guessTokens(company);
+    if (tokens.length) leads.set(`company:${tokens[0]}`, { ats: null, tokens, company, via: `demand from ${country.toUpperCase()}`, country });
+  }
   const policySkips = new Map<string, { reason: string; policy: boolean }>();
   for (const j of jobs) {
     for (const url of [j.applyUrl, j.sourceUrl]) {
@@ -122,7 +137,7 @@ export async function discover(redis: Redis, jobs: Job[], searchCompanies: strin
   }
   for (const company of searchCompanies) {
     const tokens = guessTokens(company);
-    if (tokens.length) leads.set(`company:${tokens[0]}`, { ats: null, tokens, company, via: 'live search' });
+    if (tokens.length && !leads.has(`company:${tokens[0]}`)) leads.set(`company:${tokens[0]}`, { ats: null, tokens, company, via: 'live search' });
   }
 
   const knownKeys = new Set(known.map((c) => boardKey(c.ats, c.token)));
@@ -158,14 +173,21 @@ export async function discover(redis: Redis, jobs: Job[], searchCompanies: strin
     out.checked++;
     let found: Company | null = null;
     let blocked = false;
+    let elsewhere = false;
+    const country = lead.ats === null ? lead.country : undefined;
     for (const [ats, token] of tries) {
       if (!(await robotsAllow(ats, robots))) {
         blocked = true;
         continue;
       }
-      const company: Company = { company: lead.company, ats, token, regions: [], active: true };
+      const company: Company = { company: lead.company, ats, token, regions: country ? [country] : [], active: true };
       try {
-        await BOARDS[ats](company, now); // throws on 404 (no such board) or an error
+        const rows = await BOARDS[ats](company, now); // throws on 404 (no such board) or an error
+        // A name guessed for a country must hire there: a same-named company elsewhere is not the one we want.
+        if (country && !rows.some((r) => inCountry(r.job.location, countryPlace(country)))) {
+          elsewhere = true;
+          continue;
+        }
         found = company;
         break;
       } catch {}
@@ -173,7 +195,10 @@ export async function discover(redis: Redis, jobs: Job[], searchCompanies: strin
     if (found) {
       out.added.push(found);
       log(`  + ${found.ats}/${found.token} (${found.company}, via ${lead.via})`);
-    } else out.skipped.push({ key, reason: blocked ? "the board API's robots.txt disallows it" : 'no public job board found', policy: blocked });
+    } else {
+      const reason = blocked ? "the board API's robots.txt disallows it" : elsewhere ? `board found, but no recent roles in ${country!.toUpperCase()}` : 'no public job board found';
+      out.skipped.push({ key, reason, policy: blocked });
+    }
   }
 
   const writes: (string | number)[][] = [];

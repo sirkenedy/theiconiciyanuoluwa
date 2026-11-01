@@ -3,6 +3,7 @@
 // level and place from the visitor's profile are sent, never their name or contact details. Results older than a month
 // are dropped. Remotive and Jobicy are not searched live: their terms cap how often they may be called.
 import type { Profile } from '../career/types.ts';
+import type { Place } from './geo.ts';
 import { SourceError } from './sources.ts';
 import { looksRemote, plainText, snippet } from './text.ts';
 import { USER_AGENT, WINDOW_MS, type Fetched } from './types.ts';
@@ -49,9 +50,10 @@ export function countryOf(place: string): { code: string; name: string } | null 
 const LEVEL_WORDS: Partial<Record<NonNullable<Profile['seniority']>, string>> = { junior: 'junior', senior: 'senior', lead: 'lead', principal: 'principal', intern: 'intern' };
 
 /** Up to two searches: the visitor's top target roles in their place (remote seekers: their whole country). */
-export function queriesFor(p: Profile, opts: { anywhere?: boolean } = {}): SearchQuery[] {
+export function queriesFor(p: Profile, opts: { anywhere?: boolean; place?: Place } = {}): SearchQuery[] {
   const roles = [...new Set((p.targetRoles.length ? p.targetRoles : [p.experience[0]?.role ?? p.identity.headline ?? '']).map((r) => r.trim()).filter(Boolean))].slice(0, 2);
-  const place = (p.location ?? p.identity.location ?? '').trim();
+  // No location on the résumé: search in the country the visitor's network is in.
+  const place = (p.location ?? p.identity.location ?? '').trim() || (opts.place?.from === 'network' ? (opts.place.name ?? '') : '');
   const country = countryOf(place);
   const remote = opts.anywhere || p.remotePreference === 'remote';
   const city = place.split(/[,·/]/)[0]?.trim() ?? '';

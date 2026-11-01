@@ -17,7 +17,7 @@ const turnstileKey = process.env.PUBLIC_TURNSTILE_SITE_KEY ?? '';
 
 const STARTERS: { key: string; icon: IconName; tone: string; title: string; text: string }[] = [
   { key: 'upload', icon: 'upload', tone: 'peach', title: 'Upload my résumé', text: "I'll read it and build your profile." },
-  { key: 'jobs', icon: 'search', tone: 'mint', title: 'Find jobs for me', text: '5 fresh roles a day, matched to you.' },
+  { key: 'jobs', icon: 'search', tone: 'mint', title: 'Find jobs for me', text: `${DAILY_LIMITS.jobs} fresh roles a day, matched to you.` },
   { key: 'tailor', icon: 'wand', tone: 'lilac', title: 'Tailor my résumé', text: 'Rewrite it for a specific job description.' },
   { key: 'improve', icon: 'sparkle', tone: 'butter', title: 'Make my résumé stronger', text: 'An expert critique and a sharper version.' },
 ];
@@ -29,7 +29,7 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
 ];
 ---
 
-<Base ogAlt={`${name}'s portfolio and Ami, the career coach`} title={`Ami, your career coach — ${name}`} description="A free AI career coach: upload your résumé, get 5 fresh, well-matched jobs a day, and tailor your résumé to each one. Everything stays on your device.">
+<Base ogAlt={`${name}'s portfolio and Ami, the career coach`} title={`Ami, your career coach — ${name}`} description={`A free AI career coach: upload your résumé, get ${DAILY_LIMITS.jobs} fresh, well-matched jobs a day, and tailor your résumé to each one. Everything stays on your device.`}>
   <div class="cc" data-cc>
     <header class="cc-head">
       <button class="cc-icon-btn cc-menu" type="button" data-rail-toggle aria-controls="cc-rail" aria-expanded="false" aria-label="Chats, résumé and usage">
@@ -117,7 +117,7 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
             <span class="coach-orb coach-orb--lg" aria-hidden="true"><span class="coach-orb__eyes"><span></span><span></span></span></span>
             <h2 id="cc-hello" class="cc-empty__title">Hi, I'm Ami, your career coach.</h2>
             <p class="cc-empty__lead">
-              Upload your résumé and I'll find today's freshest roles for you, tailor your CV to any job, and help you stand out. Free, with 5 fresh jobs a day.
+              Upload your résumé and I'll find today's freshest roles for you, tailor your CV to any job, and help you stand out. Free, with {DAILY_LIMITS.jobs} fresh jobs a day.
             </p>
             <p class="cc-empty__warn"><Icon name="info" size={16} /><small>AI suggestions can be wrong. Review everything before you send it.</small></p>
 
@@ -161,7 +161,7 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
           <button class="cc-icon-btn cc-attach" type="button" data-attach aria-label="Attach your résumé"><Icon name="clip" size={18} /></button>
           <input type="file" accept=".pdf,.docx" data-file hidden />
           <label class="sr-only" for="cc-input">Message Ami</label>
-          <textarea id="cc-input" class="cc-composer__input" name="q" rows="1" maxlength="2000" autocomplete="off" placeholder="Ask anything about your job search…" enterkeyhint="enter" aria-describedby="cc-input-hint"></textarea>
+          <textarea id="cc-input" class="cc-composer__input" name="q" rows="1" maxlength="15000" autocomplete="off" placeholder="Ask anything about your job search…" enterkeyhint="enter" aria-describedby="cc-input-hint"></textarea>
           <span id="cc-input-hint" class="sr-only">Enter sends. Shift and Enter adds a new line.</span>
           <button class="cc-send" type="submit" aria-label="Send"><Icon name="arrow-right" size={18} /></button>
         </form>

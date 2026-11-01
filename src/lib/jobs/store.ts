@@ -8,6 +8,9 @@ export const KEY = {
   description: (id: string) => `jobs:desc:${id}`, // plain text, kept for the source's window (48 h; Remotive 7 days)
   served: (deviceId: string) => `career:served:${deviceId}`, // job ids already shown to this device, 30 days
 };
+export const DEMAND = 'search:demand'; // country code → times nothing fit (hash), for the hourly board discovery
+export const DEMAND_LAST = 'search:demand:last'; // country code → ms of the latest
+export const demandRoles = (country: string) => `search:demand:roles:${country}`; // target roles asked for there
 export const INDEX_TTL_S = 50 * 3600; // Remotive's index is rewritten every 6 h, so the TTL never cuts its week short
 export const SERVED_TTL_S = 30 * 86_400;
 export const MAX_PER_SOURCE = 600;

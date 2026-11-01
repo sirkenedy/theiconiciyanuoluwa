@@ -24,7 +24,7 @@ type Conversation = {
   job?: NonNullable<Task['job']>;
 };
 /** `then: 'letter'` = "Résumé + cover letter": the letter is written as soon as the résumé is done. */
-type Task = { mode: 'tailor' | 'improve'; then?: 'letter'; job?: { jobId?: string; title?: string; company?: string; description?: string } };
+type Task = { mode: 'tailor' | 'improve'; then?: 'letter'; tone?: string; job?: { jobId?: string; title?: string; company?: string; description?: string } };
 /** `kind`: undefined = a real chat turn (sent as context); 'profile' = the "Searching as" strip; 'note' = a local notice;
  * 'jobs' = job cards (with the day's remaining count). */
 type Message = {
@@ -58,12 +58,13 @@ const loaded = (inside: HTMLElement) => {
   card?.removeAttribute('aria-busy');
 };
 let shownDoc: string | null = null; // the document in the preview, so its chat card stops pulsing
-const CONTEXT_TURNS = 6;
+/** Ami sees the whole chat (tool results as short notes); a rolling summary only covers chats longer than this. */
+const CONTEXT_TURNS = 40;
 const SUMMARIZE_EVERY = 10;
 const NOTES = {
 
   jobsNeedProfile: 'Upload your résumé first, so I can match jobs to your experience.',
-  jobsLimit: "You've seen today's 5 fresh jobs. New ones arrive after midnight.",
+  jobsLimit: `You've seen today's ${DAILY_LIMITS.jobs} fresh jobs. New ones arrive after midnight.`,
   searchLimit: "You've used today's live job searches. The jobs I found are saved, and new ones arrive every hour.",
   jobsWarming: "I'm gathering today's jobs from the job boards right now. Ask again in a minute.",
   devices: "Today's free allowance for this network is used up, and deleting your data doesn't reset it. Ami will be back after midnight.",
@@ -72,8 +73,8 @@ const NOTES = {
   urlOnly: "I can't open links (many job sites block it). Copy the job description text and paste it here instead.",
   jobExpired: "That job's full description has expired from my list. Paste it below and I'll carry on.",
   jobShort: 'That description is too short to tailor against. Paste the full job description.',
-  limitTailored: "You've used today's 2 tailored résumés. New ones after midnight.",
-  limitLetters: "You've used today's cover letter. A new one after midnight.",
+  limitTailored: `You've used today's ${DAILY_LIMITS.tailored} tailored résumés. New ones after midnight.`,
+  limitLetters: `You've used today's ${DAILY_LIMITS.letters} cover letters. New ones after midnight.`,
   profileReady: "Here's what I picked up from your résumé. Check it's right (edit anything), then ask me how to position yourself, what to sharpen, or how to approach a role.",
   limitMessages: "You've used today's messages. New ones arrive at midnight, and this chat stays saved on your device.",
   limitUploads: "You've used today's résumé uploads. You can upload again after midnight.",
@@ -350,8 +351,9 @@ function jobCard(job: RankedJob, i: number) {
   tile.setAttribute('aria-hidden', 'true');
   const who = el('div', 'cc-job__who');
   const meta = el('div', 'cc-job__meta');
-  meta.append(el('span', undefined, [job.company, job.location].filter(Boolean).join(' · ')));
-  if (job.remote) meta.append(el('span', 'cc-job__remote', 'Remote'));
+  // Remote jobs say who can apply ("Remote · Worldwide", "Remote · Africa"); office jobs say where.
+  meta.append(el('span', undefined, (job.remote ? [job.company] : [job.company, job.location]).filter(Boolean).join(' · ')));
+  if (job.remote) meta.append(el('span', 'cc-job__remote', `Remote · ${!job.location.trim() || /\b(worldwide|anywhere|global|all countries)\b/i.test(job.location) ? 'Worldwide' : job.location}`));
   if (job.salary) meta.append(el('span', 'cc-job__salary', job.salary));
   who.append(el('h2', 'cc-job__title', job.title), meta, link(job.attribution.label, job.sourceUrl, 'cc-job__via'));
   const side = el('div', 'cc-job__side');
@@ -380,6 +382,7 @@ function jobCard(job: RankedJob, i: number) {
   const jobRef = { jobId: job.id, title: job.title, company: job.company };
   const open = link('Open job', job.applyUrl, 'btn cc-job__btn');
   open.append(el('span', 'sr-only', ` (${job.attribution.label}, opens in a new tab)`));
+  open.addEventListener('click', () => markOpened(job.id));
   const save = button(saved.has(job.id) ? 'Saved' : 'Save', 'btn cc-job__btn cc-job__save', () => toggleSave(job));
   save.setAttribute('aria-pressed', String(saved.has(job.id)));
   actions.append(
@@ -415,7 +418,7 @@ function jobsBlock(m: Message) {
   const bar = el('div', 'cc-jobs__left');
   const left = m.left ?? 0;
   const line = el('p');
-  line.append(el('strong', undefined, `${left} of 5 fresh jobs left today.`), document.createTextNode(' New ones after midnight.'));
+  line.append(el('strong', undefined, `${left} of ${DAILY_LIMITS.jobs} fresh jobs left today.`), document.createTextNode(' New ones after midnight.'));
   bar.append(line);
   const latest = messages.filter((x) => x.kind === 'jobs').at(-1)?.id === m.id;
   if (latest && left > 0 && (m.more ?? 0) > 0) bar.append(button(`Show ${Math.min(m.more!, left)} more`, 'btn cc-jobs__more', () => findJobs(true)));
@@ -424,11 +427,43 @@ function jobsBlock(m: Message) {
 }
 
 /** The cards on screen, compact, so the chat can answer "why is X the top match?". */
+/** "Open job" clicks, on this device only (encrypted like everything else): jobId → when it was first opened. */
+async function markOpened(id: string) {
+  const opened = (await vault.get<Record<string, number>>('meta', 'opened')) ?? {};
+  if (opened[id]) return;
+  opened[id] = Date.now();
+  // Only the last 7 days matter for Ami; older entries are dropped as new ones arrive.
+  for (const [k, at] of Object.entries(opened)) if (Date.now() - at > 7 * 86_400_000) delete opened[k];
+  await vault.put('meta', 'opened', opened);
+}
+
+/** Every job shown in the last 7 days, in any chat, newest first, and whether "Open job" was clicked: for Ami's answers. */
+async function recentJobs() {
+  const since = Date.now() - 7 * 86_400_000;
+  const [all, opened] = await Promise.all([vault.list<Message>('messages'), vault.get<Record<string, number>>('meta', 'opened')]);
+  const seen = new Set<string>();
+  return all
+    .filter((m) => m.kind === 'jobs' && m.at >= since)
+    .sort((a, b) => b.at - a.at)
+    .flatMap((m) => (m.jobs ?? []).map((j) => ({ j, at: m.at })))
+    .filter(({ j }) => !seen.has(j.id) && (seen.add(j.id), true))
+    .slice(0, 25)
+    .map(({ j, at }) => ({
+      title: j.title.slice(0, 200),
+      company: j.company.slice(0, 200),
+      location: j.location.slice(0, 200),
+      fit: j.fit,
+      shown: new Date(at).toISOString().slice(0, 16).replace('T', ' '),
+      opened: opened?.[j.id] ? new Date(opened[j.id]).toISOString().slice(0, 16).replace('T', ' ') : null,
+      source: j.attribution.label.replace(/^via /, ''),
+    }));
+}
+
 const shownJobs = () =>
   messages
     .filter((m) => m.kind === 'jobs')
     .flatMap((m) => m.jobs ?? [])
-    .slice(-5)
+    .slice(-10)
     .map((j) => ({ title: j.title.slice(0, 400), company: j.company.slice(0, 400), location: j.location.slice(0, 400), fit: j.fit, why: j.why, gaps: j.gaps }));
 
 function searchingNode() {
@@ -444,28 +479,29 @@ function searchingNode() {
   return li;
 }
 
-type JobsData = { jobs: RankedJob[]; left: number; more?: number; reason?: string; checked?: number; searched?: string[]; searchable?: boolean };
+type JobsData = { jobs: RankedJob[]; left: number; more?: number; reason?: string; checked?: number; searched?: string[]; searchable?: boolean; demand?: string };
 const WIDEN = { anywhere: 'Search remote roles anywhere', roles: 'Edit my target roles' } as const;
 
 /** The shared pool first; if nothing there fits, a live search of job sites (streamed), saved for everyone. */
-async function findJobs(more = false, opts: { anywhere?: boolean; userText?: string } = {}) {
+/** `silent`: Ami picked this tool from the visitor's own message, which is already in the chat. */
+async function findJobs(more = false, opts: { anywhere?: boolean; userText?: string; silent?: boolean } = {}) {
   if (busy) return;
   const userText = opts.userText ?? (more ? 'Show me more' : 'Find jobs for me');
   if (!stored) {
-    await add({ role: 'user', text: userText });
+    if (!opts.silent) await add({ role: 'user', text: userText });
     await note(NOTES.jobsNeedProfile);
     return;
   }
   busy = true;
   try {
-    await add({ role: 'user', text: userText });
+    if (!opts.silent) await add({ role: 'user', text: userText });
     setOrb('searching');
     let data: JobsData | null = null;
     if (!opts.anywhere) {
       const searching = searchingNode();
       msgsEl.append(searching);
       log.scrollTop = log.scrollHeight;
-      const res = await deviceFetch('/api/career/jobs', jsonBody({ profile: stored.profile, day: localDay(), today: localDay(), count: 3, more })).catch(() => null);
+      const res = await deviceFetch('/api/career/jobs', jsonBody({ profile: stored.profile, day: localDay(), today: localDay(), count: 10, more })).catch(() => null);
       searching.remove();
       if (!res?.ok) {
         setOrb('error');
@@ -496,7 +532,7 @@ async function findJobs(more = false, opts: { anywhere?: boolean; userText?: str
     for (const b of msgsEl.querySelectorAll('.cc-jobs__more')) b.remove();
     await add({ role: 'coach', text: intro, kind: 'jobs', jobs: data.jobs, left: data.left, more: data.more ?? 0, suggest });
     suggestions(suggest);
-    announce(`${intro} ${data.jobs.length} job${data.jobs.length > 1 ? 's' : ''}. ${data.left} of 5 left today.`);
+    announce(`${intro} ${data.jobs.length} job${data.jobs.length > 1 ? 's' : ''}. ${data.left} of ${DAILY_LIMITS.jobs} left today.`);
     setOrb('done');
   } finally {
     busy = false;
@@ -512,7 +548,7 @@ async function searchLive(anywhere: boolean, checked?: number): Promise<JobsData
   msgsEl.append(searching);
   log.scrollTop = log.scrollHeight;
   try {
-    const res = await deviceFetch('/api/career/job-search', jsonBody({ profile: stored!.profile, day: localDay(), today: localDay(), count: 3, anywhere })).catch(() => null);
+    const res = await deviceFetch('/api/career/job-search', jsonBody({ profile: stored!.profile, day: localDay(), today: localDay(), count: 10, anywhere })).catch(() => null);
     if (!res?.ok || !res.body || !res.headers.get('content-type')?.includes('event-stream')) {
       if (res?.ok) return { ...((await res.json()) as JobsData), checked };
       setOrb('error');
@@ -549,7 +585,9 @@ async function noJobs(data: JobsData) {
   const roles = stored?.profile.targetRoles.slice(0, 2).join(' or ') || 'your roles';
   const checked = data.checked ? `I checked ${data.checked} recent ${data.checked === 1 ? 'job' : 'jobs'}` : "I couldn't find recent jobs";
   const searched = data.searched?.length ? ` and searched job sites for ${data.searched.join(' and ')}` : '';
-  await add({ role: 'coach', text: `${checked}${searched}, but none fit ${roles} at 55% or better. Widening the search usually helps.`, kind: 'note', suggest: [WIDEN.anywhere, WIDEN.roles] });
+  const from = data.demand ? ` you can apply for from ${data.demand}` : '';
+  const more = data.demand ? ` I've asked for more roles in ${data.demand}: new company boards are checked every hour, so try again later.` : ' Widening the search usually helps.';
+  await add({ role: 'coach', text: `${checked}${searched}, but none${from} fit ${roles} at 55% or better.${more}`, kind: 'note', suggest: [WIDEN.anywhere, WIDEN.roles] });
   suggestions([WIDEN.anywhere, WIDEN.roles]);
 }
 
@@ -597,13 +635,14 @@ async function failNote(res: Response | null, quota: 'messages' | 'tailored' | '
 }
 
 /** Paste a job description (tailor or cover letter). URLs are refused: we never fetch pages server-side. */
-function jobPanel() {
+/** `prefill`: text the visitor already pasted (when Ami couldn't check it), so one click continues. */
+function jobPanel(prefill = '') {
   msgsEl.querySelector('.cc-jobpaste')?.remove();
   const li = el('li', 'cc-msg cc-msg--coach cc-paste cc-jobpaste');
   const f = el('form', 'cc-paste__form');
   const label = el('label', 'cc-field');
   const area = el('textarea', 'cc-field__input cc-paste__area');
-  Object.assign(area, { maxLength: 15_000, rows: 8, name: 'job' });
+  Object.assign(area, { maxLength: 15_000, rows: 8, name: 'job', value: prefill });
   label.append(el('span', 'cc-field__label', 'Job description'), area);
   const go = (what: 'both' | 'tailor' | 'letter') => async () => {
     const text = area.value.trim();
@@ -630,21 +669,21 @@ function jobPanel() {
 }
 
 /** Both documents for one job. If today's limit for one is used up, say so and make the other. */
-async function startBoth(job: NonNullable<Task['job']>, userText: string) {
-  if (!stored) return needProfile(userText);
+async function startBoth(job: NonNullable<Task['job']>, userText: string | null, tone?: string) {
+  if (!stored) return userText === null ? undefined : needProfile(userText);
   const left = (k: UsageKind) => (usage ? usage.limits[k] - usage.used[k] : 1);
-  if (left('tailored') > 0 && left('letters') > 0) return startTailor({ mode: 'tailor', then: 'letter', job }, userText);
+  if (left('tailored') > 0 && left('letters') > 0) return startTailor({ mode: 'tailor', then: 'letter', job, tone }, userText);
   if (left('tailored') > 0) {
-    await add({ role: 'user', text: userText });
+    if (userText !== null) await add({ role: 'user', text: userText });
     await note(`${NOTES.limitLetters} I'll tailor your résumé now.`);
     return startTailor({ mode: 'tailor', job }, null);
   }
   if (left('letters') > 0) {
-    await add({ role: 'user', text: userText });
+    if (userText !== null) await add({ role: 'user', text: userText });
     await note(`${NOTES.limitTailored} I'll write the cover letter now.`);
-    return startLetter(job, null);
+    return startLetter(job, null, tone);
   }
-  await add({ role: 'user', text: userText });
+  if (userText !== null) await add({ role: 'user', text: userText });
   return note(NOTES.limitTailored);
 }
 
@@ -776,11 +815,12 @@ async function write(m: Message) {
     busy = false;
     loadUsage();
   }
-  if (next) await startLetter(m.task!.job!, null);
+  if (next) await startLetter(m.task!.job!, null, m.task!.tone);
 }
 
 /** `userText: null` = part of "Résumé + cover letter", so no new user turn. */
-async function startLetter(job: NonNullable<Task['job']>, userText: string | null) {
+/** `tone`: how they want the letter ("warm and short"), passed as their answer so the letter follows it. */
+async function startLetter(job: NonNullable<Task['job']>, userText: string | null, tone?: string) {
   if (busy) return;
   if (!stored) return userText === null ? undefined : needProfile(userText);
   busy = true;
@@ -789,7 +829,8 @@ async function startLetter(job: NonNullable<Task['job']>, userText: string | nul
     await rememberJob(job);
     setOrb('thinking');
     const live = liveNode('Writing your cover letter…');
-    const res = await deviceFetch('/api/career/cover-letter', jsonBody({ profile: stored.profile, resume: resumeForAI(), job, day: localDay(), today: localDay() })).catch(() => null);
+    const answers = tone ? [{ question: 'How should the cover letter sound or be written?', answer: tone.slice(0, 500) }] : [];
+    const res = await deviceFetch('/api/career/cover-letter', jsonBody({ profile: stored.profile, resume: resumeForAI(), job, answers, day: localDay(), today: localDay() })).catch(() => null);
     if (!res?.ok || !res.body) {
       live.li.remove();
       setOrb('error');
@@ -1181,17 +1222,147 @@ function messageNode(m: Message) {
   if (m.role === 'coach') rich(content, m.text);
   else content.textContent = m.text;
   body.append(content);
+  if (m.text.trim()) body.append(messageActions(m, content));
   li.append(body);
   return li;
 }
 
+const COPY = 'M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1zM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1';
+const CHECK = 'M5 12l5 5L20 7';
+
+/** Copy on every message; Edit on the visitor's latest message (shown only there, see refreshEdit). */
+function messageActions(m: Message, content: HTMLElement) {
+  const bar = el('div', 'cc-msg__actions');
+  const copy = el('button', 'cc-msg__action');
+  copy.type = 'button';
+  copy.setAttribute('aria-label', m.role === 'user' ? 'Copy your message' : 'Copy Ami’s message');
+  copy.append(icon(COPY));
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(m.text);
+      copy.replaceChildren(icon(CHECK));
+      announce('Copied.');
+      setTimeout(() => copy.replaceChildren(icon(COPY)), 1500);
+    } catch {
+      announce("Couldn't copy. Select the text and copy it instead.");
+    }
+  });
+  bar.append(copy);
+  if (m.role === 'user') {
+    const editBtn = el('button', 'cc-msg__action cc-msg__edit');
+    editBtn.type = 'button';
+    editBtn.setAttribute('aria-label', 'Edit your message');
+    editBtn.append(icon(ICONS.pen));
+    editBtn.addEventListener('click', () => editMessage(m, content, bar));
+    bar.append(editBtn);
+  }
+  return bar;
+}
+
+/** Only the latest message the visitor wrote can be edited. */
+function refreshEdit() {
+  const last = [...messages].reverse().find((m) => m.role === 'user' && !m.kind);
+  for (const b of msgsEl.querySelectorAll<HTMLElement>('.cc-msg__edit')) b.hidden = b.closest<HTMLElement>('[data-id]')?.dataset.id !== last?.id;
+}
+
+/** Edit in place; saving removes this message and everything after it, then sends the new text. */
+function editMessage(m: Message, content: HTMLElement, bar: HTMLElement) {
+  if (busy) return;
+  const form = el('form', 'cc-msg__editor');
+  const area = el('textarea', 'cc-field__input cc-msg__edit-area');
+  area.value = m.text;
+  area.rows = Math.min(10, Math.max(2, m.text.split('\n').length));
+  area.setAttribute('aria-label', 'Edit your message');
+  const actions = el('div', 'cc-edit__actions');
+  const cancel = () => {
+    form.replaceWith(content);
+    bar.hidden = false;
+    $<HTMLButtonElement>('.cc-msg__edit', bar).focus();
+  };
+  actions.append(button('Send', 'btn btn--primary cc-btn-sm', () => form.requestSubmit()), button('Cancel', 'btn btn--secondary cc-btn-sm', cancel));
+  form.append(area, actions);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = area.value.trim();
+    if (!text || busy) return;
+    if (text === m.text.trim()) return cancel();
+    const at = messages.findIndex((x) => x.id === m.id);
+    const gone = messages.splice(at);
+    await Promise.all(gone.map((x) => vault.removeRecord('messages', x.id)));
+    for (const x of gone) msgsEl.querySelector(`[data-id="${x.id}"]`)?.remove();
+    msgsEl.querySelector('.cc-suggest')?.remove();
+    msgsEl.querySelector('.cc-jobpaste')?.remove();
+    await send(text);
+  });
+  area.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') cancel();
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+  content.replaceWith(form);
+  bar.hidden = true;
+  area.focus();
+  area.setSelectionRange(area.value.length, area.value.length);
+}
+
 // ---------- understanding what the visitor asks for ----------
+// Clear requests run their tool directly (intentOf, no model call). Everything else goes to Ami, who answers or calls a
+// tool (ToolCallSchema) when the phrasing was unusual or text was pasted: the browser then runs that tool's flow.
+type ToolCall =
+  | { name: 'find_jobs'; input: { anywhere?: boolean } }
+  | { name: 'make_document'; input: { kind: 'tailor' | 'letter' | 'both' | 'improve'; job: 'pasted' | 'current' | 'none'; title?: string | null; company?: string | null; tone?: string | null } };
+
+/** Runs the tool Ami picked. The visitor's message is already in the chat, so no second "you" message is added. */
+async function runTool(tool: ToolCall, userText: string) {
+  if (tool.name === 'find_jobs') return findJobs(false, { anywhere: !!tool.input.anywhere, silent: true });
+  const { kind, job: source, title, company, tone } = tool.input;
+  if (!stored) return note(NOTES.jobsNeedProfile.replace('match jobs to', 'work from'));
+  if (kind === 'improve') return startTailor({ mode: 'improve' }, null);
+  // "Pasted": the most recent message in this chat with pasted text (not necessarily the latest: "I'm eligible, go ahead").
+  const posting = source === 'pasted' ? latestPasted(userText) : null;
+  const job =
+    posting
+      ? { description: posting, ...(title ? { title } : {}), ...(company ? { company } : {}) }
+      : source === 'current' || source === 'pasted'
+        ? current()?.job
+        : undefined;
+  if (!job) {
+    // Ami judged there's no job description in the chat (what was pasted, if anything, is something else).
+    await note(latestPasted(userText) ? "That doesn't look like a job description. Paste the job description below and I'll start." : NOTES.pasteJob);
+    return jobPanel();
+  }
+  return forThisJob(kind, null, job, tone ?? undefined);
+}
+
+/** The latest text the visitor pasted in this chat (≥ 200 characters), newest message first; the job description. */
+function latestPasted(latest: string): string | null {
+  const texts = [latest, ...[...messages].reverse().filter((m) => m.role === 'user' && !m.kind).map((m) => m.text)];
+  const hit = texts.find((t) => t.trim().length >= 200);
+  return hit ? hit.trim().slice(0, 15_000) : null;
+}
+
+/** Tailor / letter / both for a job (the chat's own, or one given); without one, ask for the description once. */
+async function forThisJob(what: 'both' | 'tailor' | 'letter', userText: string | null, given?: NonNullable<Task['job']>, tone?: string) {
+  const job = given ?? current()?.job;
+  if (job) return what === 'both' ? startBoth(job, userText, tone) : what === 'tailor' ? startTailor({ mode: 'tailor', job }, userText) : startLetter(job, userText, tone);
+  if (!stored) return userText === null ? note(NOTES.jobsNeedProfile.replace('match jobs to', 'work from')) : needProfile(userText);
+  // A posting was already pasted in this chat: Ami reads it and starts the document, instead of asking for it again.
+  if (userText !== null && latestPasted('')) return ask(userText, 'document');
+  if (userText !== null) await add({ role: 'user', text: userText });
+  await note(NOTES.pasteJob);
+  jobPanel();
+}
+
+/** One chat message (the server's LIMITS_INPUT.message): a full pasted job posting fits. */
+const CHAT_MAX = 15_000;
+
 const RESUME_RE = /\b(cv|r[eé]s?u?m[eé]?s?)\b/i;
 const LEAD_RE = /^(?:(?:hi|hey|ok(?:ay)?|great|thanks|now|please|so|also|and|then)[,!. ]+|can you |could you |would you |help(?: me)?(?: to)? |i (?:want|need|would like) (?:you )?to )*/;
-
-/** Clear instructions run the tool straight away (questions still go to the chat, so they never spend a quota). */
 const JOBS_RE = /\b(jobs?|roles?|openings?|positions?|vacanc(?:y|ies)|opportunit(?:y|ies))\b/;
 
+/** Clear, common requests map to a tool without any model call. Anything else goes to Ami (who can still pick a tool). */
 function intentOf(text: string): 'jobs' | 'both' | 'tailor' | 'letter' | 'improve' | null {
   const t = text.trim().toLowerCase();
   const polite = /^(can|could|would) you\b/.test(t);
@@ -1207,24 +1378,37 @@ function intentOf(text: string): 'jobs' | 'both' | 'tailor' | 'letter' | 'improv
   return null;
 }
 
-/** Tailor / letter for this chat's job; without one, ask for the description once. */
-async function forThisJob(what: 'both' | 'tailor' | 'letter', userText: string) {
-  const job = current()?.job;
-  if (job) return what === 'both' ? startBoth(job, userText) : what === 'tailor' ? startTailor({ mode: 'tailor', job }, userText) : startLetter(job, userText);
-  if (!stored) return needProfile(userText);
-  await add({ role: 'user', text: userText });
-  await note(NOTES.pasteJob);
-  jobPanel();
-}
-
+/**
+ * Cheapest route first. A clear request with nothing pasted runs its tool directly (no model call). Anything else (an
+ * unclear request, a question, or a request with pasted text that must be read to know if it's a job description)
+ * goes to Ami: one chat call, in which she answers or picks the right tool.
+ */
 async function send(text: string) {
   const q = text.trim();
   if (!q || busy) return;
-  const intent = intentOf(q);
-  if (intent === 'jobs') return findJobs(false, { userText: q });
-  if (intent === 'both' || intent === 'tailor' || intent === 'letter') return forThisJob(intent, q);
-  if (intent === 'improve') return startTailor({ mode: 'improve' }, q);
-  return ask(q);
+  const [first, ...rest] = q.split('\n');
+  const pasted = rest.join('\n').trim().length >= 200;
+  const intent = intentOf(pasted ? first : q);
+  if (intent && !pasted) {
+    if (intent === 'jobs') return findJobs(false, { userText: q });
+    if (intent === 'improve') return startTailor({ mode: 'improve' }, q);
+    return forThisJob(intent, q);
+  }
+  // A document was asked for (now, with the posting pasted; or earlier and still not made, and this isn't a question):
+  // Ami must start it. Otherwise she answers or picks a tool herself.
+  const asked = (intent === 'tailor' || intent === 'letter' || intent === 'both') && pasted;
+  return ask(q, asked || (documentPending() && !/\?\s*$/.test(q)) ? 'document' : undefined);
+}
+
+/** A résumé or letter was asked for in this chat and nothing has been made since (no analysis, résumé or letter). */
+function documentPending(): boolean {
+  for (const m of [...messages].reverse().slice(0, 12)) {
+    if (m.kind === 'match' || m.kind === 'tailored' || m.kind === 'letter') return false;
+    if (m.role !== 'user' || m.kind) continue;
+    const intent = intentOf(m.text.split('\n')[0]);
+    if (intent === 'tailor' || intent === 'letter' || intent === 'both') return true;
+  }
+  return false;
 }
 
 /** Suggestions that name one of the tools run that tool (with real DOCX/PDF downloads); anything else is a chat reply. */
@@ -1250,6 +1434,7 @@ function suggestions(items: string[]) {
 
 function renderMessages() {
   msgsEl.replaceChildren(...messages.map(messageNode));
+  refreshEdit();
   const last = messages.at(-1);
   if (last?.role === 'coach' && last.suggest) suggestions(last.suggest);
   empty.hidden = messages.length > 0;
@@ -1292,6 +1477,7 @@ async function add(part: Pick<Message, 'role' | 'text'> & Partial<Message>) {
   empty.hidden = true;
   msgsEl.querySelector('.cc-suggest')?.remove();
   msgsEl.append(messageNode(m));
+  refreshEdit();
   renderChats();
   log.scrollTop = log.scrollHeight;
   return m;
@@ -1301,7 +1487,42 @@ const note = (text: string) => add({ role: 'coach', text, kind: 'note' });
 
 // ---------- chat ----------
 const chatTurns = () => messages.filter((m) => !m.kind);
-const asTurn = (m: Message): ChatTurn => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text });
+/**
+ * The whole chat as Ami's context: what was said, in full, plus what the tools did as short notes (job cards shown, a
+ * job analysed, a résumé tailored, a letter written), so she understands everything that happened in this chat.
+ */
+function transcript(): ChatTurn[] {
+  const turns = messages
+    .map((m): ChatTurn | null => {
+      const coach = (content: string): ChatTurn => ({ role: 'assistant', content });
+      if (!m.kind) return m.text.trim() ? { role: m.role === 'user' ? 'user' : 'assistant', content: m.text } : null;
+      if (m.kind === 'note') return m.text.trim() ? coach(m.text) : null;
+      if (m.kind === 'profile') return coach('(I read their résumé and built their profile.)');
+      if (m.kind === 'jobs') return coach(`(I showed job cards: ${(m.jobs ?? []).map((j, i) => `${i + 1}. ${j.title}, ${j.company}, ${j.location}, fit ${j.fit}`).join('; ')}.)`);
+      if (m.kind === 'match') {
+        const a = m.analysis;
+        const qa = (m.answers ?? []).map((x) => `${x.question} → ${x.answer}`).join('; ');
+        return coach(`(I analysed ${m.task?.mode === 'improve' ? 'their résumé against their target role' : `the job${a?.role ? ` ${a.role}` : ''}${a?.company ? ` at ${a.company}` : ''}`}: ${(a?.match ?? []).map((x) => x.text).join('; ')}.${qa ? ` Their answers: ${qa}.` : ''})`);
+      }
+      if (m.kind === 'tailored') return coach(`(I built ${m.critique?.length ? 'a stronger résumé' : 'a tailored résumé'}${m.ats ? `, keyword match ${m.ats.before} → ${m.ats.after}` : ''}. Changes: ${(m.changes ?? []).map((c) => `${c.section}: ${c.why}`).join('; ') || 'none listed'}.${m.flags?.length ? ` Flagged to check: ${m.flags.map((f) => f.text).join(', ')}.` : ''})`);
+      if (m.kind === 'letter') return coach(`(I wrote a cover letter${m.flags?.length ? `; flagged to check: ${m.flags.map((f) => f.text).join(', ')}` : ''}.)`);
+      return null;
+    })
+    .filter((t): t is ChatTurn => !!t)
+    .slice(-CONTEXT_TURNS)
+    .map((t) => ({ ...t, content: t.content.slice(0, t.role === 'user' ? CHAT_MAX : 6000) }));
+  // Nothing is trimmed: a posting pasted earlier must stay whole ("I'm eligible, go ahead"). Only a very long chat
+  // drops its oldest turns (the rolling summary covers them); the prompt cache keeps resending history cheap.
+  // The newest turn must be theirs: a note saved a moment after they sent this (a fast second message) waits its turn.
+  const lastUser = turns.map((t) => t.role).lastIndexOf('user');
+  turns.splice(lastUser + 1);
+  let total = turns.reduce((n, t) => n + t.content.length, 0);
+  while (total > 60_000 && turns.length > 1) total -= turns.shift()!.content.length;
+  return turns;
+}
+
+// The newest message goes in full (Ami must read all of it); earlier turns are trimmed (a job they chose travels as <job>).
+const asTurn = (m: Message, newest = false): ChatTurn => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text.slice(0, newest ? CHAT_MAX : 4000) });
 const jsonBody = (body: unknown) => ({ method: 'POST', body: JSON.stringify(body) });
 
 async function errorNote(res: Response, kind: 'messages' | 'uploads') {
@@ -1314,8 +1535,9 @@ async function errorNote(res: Response, kind: 'messages' | 'uploads') {
   return note(NOTES.error);
 }
 
-async function ask(text: string) {
-  const q = text.trim().slice(0, 2000);
+/** `want: 'document'`: a résumé or letter was clearly asked for, so Ami must start it rather than reply in chat. */
+async function ask(text: string, want?: 'document') {
+  const q = text.trim().slice(0, CHAT_MAX);
   if (!q || busy) return;
   busy = true;
   try {
@@ -1338,9 +1560,11 @@ async function ask(text: string) {
       '/api/career/chat',
       jsonBody({
         task: 'chat',
-        messages: chatTurns().slice(-CONTEXT_TURNS).map(asTurn),
+        ...(want ? { want } : {}),
+        messages: transcript(),
         profile: stored?.profile ?? null,
         jobs: shownJobs(),
+        recent: await recentJobs().catch(() => []),
         // The job this chat is about, so "the role above" means something. Long pasted descriptions are trimmed.
         job: c.job ? { ...c.job, description: c.job.description?.slice(0, 6000) } : undefined,
         summary: c.summary ?? '',
@@ -1357,7 +1581,9 @@ async function ask(text: string) {
     let answer = '';
     let suggest: string[] = [];
     let failed = false;
+    let tool: ToolCall | null = null;
     for await (const { event, data } of readEvents(res)) {
+      if (event === 'tool') tool = data as ToolCall;
       if (event === 'token') {
         if (!answer) setOrb('streaming');
         answer += (data as { t: string }).t;
@@ -1367,6 +1593,12 @@ async function ask(text: string) {
       else if (event === 'error') failed = true;
     }
     live.remove();
+    if (tool) {
+      // Ami picked a tool: run its flow once this request is finished.
+      if (answer.trim()) await add({ role: 'coach', text: answer.trim() });
+      pendingTool = { tool, text: q };
+      return;
+    }
     if (!answer.trim()) {
       setOrb('error');
       await note(failed ? NOTES.error : NOTES.offline);
@@ -1380,8 +1612,13 @@ async function ask(text: string) {
   } finally {
     busy = false;
     loadUsage();
+    // Ami picked a tool: run its flow now that this request is done (it sets its own busy state).
+    const next = pendingTool;
+    pendingTool = null;
+    if (next) await runTool(next.tool, next.text);
   }
 }
+let pendingTool: { tool: ToolCall; text: string } | null = null;
 
 /** Every 10 turns beyond the 6 sent verbatim, fold the older ones into the conversation's rolling summary. */
 async function summarizeIfDue(c: Conversation) {
@@ -1389,7 +1626,7 @@ async function summarizeIfDue(c: Conversation) {
   const upTo = c.summarizedUpTo ?? 0;
   const keep = turns.length - CONTEXT_TURNS;
   if (keep - upTo < SUMMARIZE_EVERY) return;
-  const older = turns.slice(Math.max(upTo, keep - 24), keep).map(asTurn);
+  const older = turns.slice(Math.max(upTo, keep - 24), keep).map((m) => asTurn(m));
   const res = await deviceFetch('/api/career/chat', jsonBody({ task: 'summarize', messages: older, profile: stored?.profile ?? null, summary: c.summary ?? '', day: localDay(), today: localDay() })).catch(() => null);
   if (!res?.ok) return;
   const { summary } = (await res.json()) as { summary: string };

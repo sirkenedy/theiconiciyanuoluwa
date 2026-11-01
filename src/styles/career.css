@@ -471,6 +471,27 @@ a.cc-rail__portfolio { display: none; }
   overflow-wrap: anywhere;
 }
 .cc-msg--coach .cc-msg__text { padding-top: 6px; overflow-wrap: anywhere; }
+.cc-msg__actions { display: flex; gap: var(--s-1); margin-top: var(--s-1); }
+.cc-msg--user .cc-msg__actions { justify-content: flex-end; }
+.cc-msg__actions[hidden], .cc-msg__action[hidden] { display: none; }
+.cc-msg__action {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  margin: -6px 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-subtle);
+  cursor: pointer;
+  transition: color var(--dur-1), background var(--dur-1);
+}
+.cc-msg__action:hover { color: var(--ink); background: var(--surface-alt); }
+.cc-msg__action:focus-visible { outline: 2px solid var(--lilac-deep); outline-offset: 2px; }
+.cc-msg__editor { display: flex; flex-direction: column; gap: var(--s-2); width: min(600px, 80vw); }
+.cc-msg__edit-area { resize: vertical; min-height: 88px; }
 .cc-msg--coach.is-live .cc-msg__text { white-space: pre-wrap; }
 .cc-msg__text ul { display: flex; flex-direction: column; gap: var(--s-1); margin: 0; padding-left: 1.2em; }
 .cc-msg__heading { font-weight: 700; }

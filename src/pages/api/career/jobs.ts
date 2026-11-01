@@ -9,6 +9,7 @@ import { ingest } from '../../../lib/jobs/ingest.ts';
 import { SEARCH_INDEX } from '../../../lib/jobs/live.ts';
 import { pendingKey, rankAndServe, serve, type ServeContext } from '../../../lib/jobs/serve.ts';
 import { KEY, parseIndex } from '../../../lib/jobs/store.ts';
+import { placeFor } from '../../../lib/jobs/geo.ts';
 import { SOURCES, type SourceId } from '../../../lib/jobs/types.ts';
 import { clientIp, pipeline, redisConfig, type Redis } from '../../../lib/redis.ts';
 
@@ -38,7 +39,7 @@ const readPool = async (redis: Redis, sources: SourceId[]) =>
   (await pipeline(redis, [...sources.map((s) => ['GET', KEY.index(s)]), ['GET', SEARCH_INDEX]], 15_000)).flatMap(parseIndex);
 
 /**
- * Up to 5 fresh job cards per device per day (career-mode.md §3.3), from the shared pool: the hourly ingest, discovered
+ * Up to 10 fresh job cards per device per day, all at once (career-mode.md §3.3), from the shared pool: the hourly ingest, discovered
  * boards and earlier live searches. If the pool is empty or stale the three job feeds are refreshed first. When nothing
  * fits, the client follows up with /api/career/job-search (a live keyword search, streamed).
  */
@@ -57,7 +58,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
     }
     const profile = cleanProfile(body.profile);
     const day = typeof body.day === 'string' ? body.day : '';
-    const want = Math.min(5, Math.max(1, Number(body.count) || 3));
+    const want = Math.min(10, Math.max(1, Number(body.count) || 10));
     if (!profile || !plausibleDay(day)) return json({ error: 'invalid' }, 400);
 
     const sources = Object.keys(SOURCES) as SourceId[];
@@ -76,6 +77,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
       day,
       today: isoDay(body.today),
       profile,
+      place: placeFor(profile.location ?? profile.identity.location, request.headers),
       want,
       left,
       seen: new Set(Array.isArray(served) ? (served as string[]) : []),

@@ -7,7 +7,7 @@ export const prerender = false;
 
 // "Delete everything" makes a new device, which would start with fresh device limits; capping new devices per network
 // (plus the per-network usage limits) means wiping can't be used to reset the day's allowance.
-export const REGISTRATIONS_PER_IP_PER_DAY = 3;
+export const REGISTRATIONS_PER_IP_PER_DAY = 2;
 const SITEVERIFY = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
 /** Cloudflare Turnstile (free, invisible): stops bot farms from minting devices. Required whenever the secret is set. */

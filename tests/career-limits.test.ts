@@ -5,7 +5,8 @@ import type { Server } from 'node:http';
 import { startFakeUpstash, FAKE_TOKEN } from './fake-upstash.mjs';
 import { startFakeClaude, SAMPLE_PROFILE } from './fake-claude.mjs';
 import { ECDSA, ECDSA_SIGN, HEADER, b64url, canonicalJwk, signingInput } from '../src/lib/career/signing.ts';
-import { localDay } from '../src/lib/career/limits.ts';
+import { DAILY_LIMITS, localDay } from '../src/lib/career/limits.ts';
+import { ipUsageKey } from '../src/lib/career/quota.ts';
 import { costMicros } from '../src/lib/career/spend.ts';
 
 const realFetch = globalThis.fetch;
@@ -128,30 +129,24 @@ test('Turnstile: without a secret (local dev), registration works as before', as
 
 // ---------- device + IP limits ----------
 
-test('"Delete everything" can\'t reset the day: a new device still shares the network limit, and only 3 new devices per network per day', async () => {
+test('only 2 new devices per network per day: deleting or a private window can\'t mint a third; uploads share the network limit', async () => {
   const ip = '198.18.0.5';
   const statuses: number[] = [];
-  for (let device = 0; device < 3; device++) {
+  for (let device = 0; device < 2; device++) {
     const d = await register(ip);
     assert.equal(d.res.status, 200);
-    for (let i = 0; i < 3; i++) {
-      const res = await signedCall('profile', d, ip, 'POST', { text: RESUME, day: localDay() });
-      statuses.push(res.status);
-      if (res.status === 429) assert.equal((await res.json()).scope, 'ip');
-    }
+    for (let i = 0; i < 3; i++) statuses.push((await signedCall('profile', d, ip, 'POST', { text: RESUME, day: localDay() })).status);
   }
-  assert.deepEqual(statuses.slice(0, 6), Array(6).fill(200), 'two devices × 3 uploads = this network\'s 6');
-  assert.deepEqual(statuses.slice(6), [429, 429, 429], 'wiping and starting again gives nothing more today');
-  const fourth = await register(ip);
-  assert.equal(fourth.res.status, 429, 'a 4th new device from the same network today is refused');
+  assert.deepEqual(statuses, Array(6).fill(200), 'two devices × 3 uploads');
+  assert.equal((await register(ip)).res.status, 429, 'a 3rd new device from the same network today is refused');
   const fresh = await register('198.18.0.6');
   assert.equal((await signedCall('profile', fresh, '198.18.0.6', 'POST', { text: RESUME, day: localDay() })).status, 200, 'other networks unaffected');
 });
 
-test('device limits: 10 messages, then a limit error, independent of other devices', async () => {
+test(`device limits: ${DAILY_LIMITS.messages} messages, then a limit error, independent of other devices`, async () => {
   const ip = '198.18.0.7';
   const d = await register(ip);
-  for (let i = 0; i < 10; i++) await (await signedCall('chat', d, ip, 'POST', { messages: [{ role: 'user', content: `Q${i}` }], profile: null, day: localDay() })).text();
+  for (let i = 0; i < DAILY_LIMITS.messages; i++) await (await signedCall('chat', d, ip, 'POST', { messages: [{ role: 'user', content: `Q${i}` }], profile: null, day: localDay() })).text();
   const over = await signedCall('chat', d, ip, 'POST', { messages: [{ role: 'user', content: 'Q11' }], profile: null, day: localDay() });
   assert.equal(over.status, 429);
   assert.equal((await over.json()).scope, 'device');
@@ -160,16 +155,13 @@ test('device limits: 10 messages, then a limit error, independent of other devic
   assert.equal(usage.used.messages, 0, 'a new device starts the day fresh');
 });
 
-test('usage shows what a request will really get: a fresh device on a used-up network sees 0 left', async () => {
+test('usage shows what a request will really get: when the network\'s allowance is used up, a fresh device sees 0 left', async () => {
   const ip = '198.18.0.8';
-  const first = await register(ip);
-  const second = await register(ip);
-  for (const d of [first, second]) for (let i = 0; i < 3; i++) assert.equal((await signedCall('profile', d, ip, 'POST', { text: RESUME, day: localDay() })).status, 200);
-  for (let i = 0; i < 10; i++) await (await signedCall('chat', first, ip, 'POST', { messages: [{ role: 'user', content: `Q${i}` }], profile: null, day: localDay() })).text();
-  for (let i = 0; i < 10; i++) await (await signedCall('chat', second, ip, 'POST', { messages: [{ role: 'user', content: `Q${i}` }], profile: null, day: localDay() })).text();
-  const third = await register(ip);
-  const usage = (await (await signedCall('usage', third, ip, 'GET')).json()) as { used: { messages: number; jobs: number } };
-  assert.equal(usage.used.messages, 10, 'this network used its 20 messages: the new device has none left');
+  const d = await register(ip);
+  // The network used its whole allowance today (e.g. from yesterday's devices still within their local day).
+  await realFetch(`${redis.url}/pipeline`, { method: 'POST', headers: { authorization: `Bearer ${FAKE_TOKEN}` }, body: JSON.stringify([['HINCRBY', await ipUsageKey(ip), 'messages', DAILY_LIMITS.messages * 2]]) });
+  const usage = (await (await signedCall('usage', d, ip, 'GET')).json()) as { used: { messages: number; jobs: number } };
+  assert.equal(usage.used.messages, DAILY_LIMITS.messages, 'none left for this device either');
   assert.equal(usage.used.jobs, 0);
-  assert.equal((await signedCall('chat', third, ip, 'POST', { messages: [{ role: 'user', content: 'Q' }], profile: null, day: localDay() })).status, 429);
+  assert.equal((await signedCall('chat', d, ip, 'POST', { messages: [{ role: 'user', content: 'Q' }], profile: null, day: localDay() })).status, 429);
 });

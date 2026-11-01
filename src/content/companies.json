@@ -719,5 +719,35 @@
       "ca"
     ],
     "active": true
+  },
+  {
+    "company": "M-KOPA",
+    "ats": "ashby",
+    "token": "m-kopa",
+    "regions": [
+      "ke",
+      "ng",
+      "gh"
+    ],
+    "active": true
+  },
+  {
+    "company": "Luno",
+    "ats": "greenhouse",
+    "token": "luno",
+    "regions": [
+      "za"
+    ],
+    "active": true
+  },
+  {
+    "company": "LemFi",
+    "ats": "ashby",
+    "token": "lemfi",
+    "regions": [
+      "gb",
+      "ng"
+    ],
+    "active": true
   }
 ]

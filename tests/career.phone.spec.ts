@@ -91,7 +91,7 @@ test('phone: the hamburger opens the panel with chats, résumé, usage, privacy 
     await expect(rail.getByText(text, { exact: false }).first()).toBeInViewport();
   }
   await expect(rail.getByRole('link', { name: 'Privacy' })).toBeVisible();
-  await expect(rail.locator('[data-usage="messages"] [data-left]')).toHaveText('10 of 10 left');
+  await expect(rail.locator('[data-usage="messages"] [data-left]')).toHaveText('20 of 20 left');
   // A modal panel: what's behind it can't be reached.
   expect(await page.locator('#main').evaluate((el) => (el as HTMLElement).inert)).toBe(true);
 

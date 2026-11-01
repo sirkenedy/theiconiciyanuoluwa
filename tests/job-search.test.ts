@@ -163,11 +163,12 @@ async function fetchRedis(cmds: (string | number)[][]) {
 // ---------- the streamed route ----------
 
 type Device = { pair: CryptoKeyPair; id: string };
+let regSeq = 0;
 async function device(ip: string): Promise<Device> {
   const { POST } = await import('../src/pages/api/device/register.ts');
   const pair = (await crypto.subtle.generateKey(ECDSA, false, ['sign', 'verify'])) as CryptoKeyPair;
   const jwk = JSON.parse(canonicalJwk(await crypto.subtle.exportKey('jwk', pair.publicKey))!);
-  const res = await POST({ request: new Request('https://x.test/api/device/register', { method: 'POST', body: JSON.stringify({ jwk }) }), clientAddress: ip } as never);
+  const res = await POST({ request: new Request('https://x.test/api/device/register', { method: 'POST', body: JSON.stringify({ jwk }) }), clientAddress: `${ip}#reg${++regSeq}` } as never); // its own network: only 2 new devices per network per day
   return { pair, id: (await res.json()).deviceId };
 }
 async function search(d: Device, ip: string, payload: Record<string, unknown> = {}) {
@@ -269,4 +270,57 @@ test('JOB_SEARCH_SOURCES switches sources on or off, even with keys set', async 
     delete process.env.JOB_SEARCH_SOURCES;
   }
   assert.deepEqual([searchConfigured('adzuna'), searchConfigured('jooble')], [true, true], 'unset = every source with keys');
+});
+
+// ---------- country: eligibility, network fallback, demand → discovery ----------
+
+async function jobsRoute(d: Device, ip: string, profile: unknown, headers: Record<string, string> = {}) {
+  const { POST } = await import('../src/pages/api/career/jobs.ts');
+  const path = '/api/career/jobs';
+  const body = JSON.stringify({ profile, day: localDay() });
+  const ts = String(Date.now());
+  const nonce = b64url(crypto.getRandomValues(new Uint8Array(16)));
+  const sig = b64url(await crypto.subtle.sign(ECDSA_SIGN, d.pair.privateKey, await signingInput('POST', path, ts, nonce, body)));
+  const res = (await POST({ request: new Request(`https://x.test${path}`, { method: 'POST', headers: { [HEADER.device]: d.id, [HEADER.timestamp]: ts, [HEADER.nonce]: nonce, [HEADER.signature]: sig, 'x-forwarded-for': ip, ...headers }, body }), clientAddress: ip } as never)) as Response;
+  return (await res.json()) as { jobs: { id: string }[]; reason?: string; demand?: string };
+}
+const remoteJob = (id: string, location: string): Job => ({ id, title: 'Customer Support Specialist', company: 'Co', location, remote: true, time: { kind: 'posted', at: Date.now() - 86_400_000 }, applyUrl: 'https://x.test', sourceUrl: 'https://x.test', attribution: { source: 'X', label: 'via X' }, snippet: '' });
+const supportProfile = (location: string | null) => ({ ...designer, identity: { ...designer.identity, location }, location, targetRoles: ['Customer Support'], remotePreference: 'remote' });
+
+async function onlyPool(jobs: Job[]) {
+  const sources = ['greenhouse', 'lever', 'ashby', 'himalayas', 'remotive', 'jobicy'];
+  await fetchRedis([...sources.map((s) => ['DEL', `jobs:idx:${s}`]), ['DEL', 'jobs:idx:search'], ['SET', 'jobs:idx:himalayas', JSON.stringify(jobs)], ...sources.map((s) => ['SET', `jobs:last:${s}`, String(Date.now())]), ['DEL', 'search:demand'], ['DEL', 'search:demand:last'], ['DEL', 'search:demand:roles:ng']]);
+}
+
+test('jobs: an Ibadan visitor never gets a Colombia-only job; nothing fits → Nigeria is noted for discovery (no names)', async () => {
+  await onlyPool([remoteJob('himalayas:co', 'Colombia'), remoteJob('himalayas:fr', 'France')]);
+  const out = await jobsRoute(await device('203.0.113.90'), '203.0.113.90', supportProfile('Ibadan, Nigeria'));
+  assert.deepEqual([out.jobs.length, out.reason, out.demand], [0, 'none', 'Nigeria']);
+  assert.equal(claude.requests.length, 0, 'nothing to rank: no model call');
+  const [count, roles] = await fetchRedis([['HGET', 'search:demand', 'ng'], ['SMEMBERS', 'search:demand:roles:ng']]);
+  assert.deepEqual([count, roles], ['1', ['Customer Support']]);
+  assert.ok(!JSON.stringify([...redis.kv.entries()]).includes('Sample Candidate'), 'no personal data stored');
+});
+
+test('jobs: no country on the résumé → the network country (Vercel header) decides; ranking is told the country', async () => {
+  await onlyPool([remoteJob('himalayas:co', 'Colombia'), remoteJob('himalayas:africa', 'Africa')]);
+  const out = await jobsRoute(await device('203.0.113.91'), '203.0.113.91', supportProfile(null), { 'x-vercel-ip-country': 'NG', 'x-vercel-ip-timezone': 'Africa/Lagos' });
+  assert.deepEqual(out.jobs.map((j) => j.id), ['himalayas:africa']);
+  const prompt = (claude.requests.at(-1) as { messages: { content: string }[] }).messages[0].content;
+  assert.match(prompt, /<candidate_country>Nigeria \(from their network/);
+  assert.match(prompt, /score it below 40/);
+});
+
+test('discovery for a country with demand: a board is added only if it really hires there', async () => {
+  const lagos = { jobs: [{ id: 1, title: 'Support', first_published: ago(2), updated_at: ago(1), location: { name: 'Lagos, Nigeria' }, absolute_url: 'https://boards.greenhouse.io/realng/jobs/1' }] };
+  const manila = { jobs: [{ id: 2, title: 'Support', first_published: ago(2), updated_at: ago(1), location: { name: 'Makati City' }, absolute_url: 'https://boards.greenhouse.io/samename/jobs/2' }] };
+  mock({
+    'https://boards-api.greenhouse.io/robots.txt': 404, 'https://api.lever.co/robots.txt': 404, 'https://api.ashbyhq.com/robots.txt': 404,
+    'https://boards-api.greenhouse.io/v1/boards/realng/': () => lagos,
+    'https://boards-api.greenhouse.io/v1/boards/samename/': () => manila,
+    'https://boards-api.greenhouse.io/': 404, 'https://api.lever.co/': 404, 'https://api.ashbyhq.com/': 404,
+  });
+  const out = await discover({ url: redis.url, token: FAKE_TOKEN }, [], [], [], () => {}, [{ company: 'RealNG', country: 'ng' }, { company: 'SameName', country: 'ng' }]);
+  assert.deepEqual(out.added.map((c) => [c.token, c.regions]), [['realng', ['ng']]]);
+  assert.deepEqual(out.skipped.map((s) => [s.key, s.reason]), [['company:samename', 'board found, but no recent roles in NG']]);
 });

@@ -51,6 +51,7 @@ const live = [ADZUNA && 'Adzuna', JOOBLE && 'Jooble'].filter(Boolean).join(' and
         <li>To answer you, the text it needs (your résumé or profile, a job description, your question) is sent to <a href="https://www.anthropic.com/legal/privacy" rel="noopener">Anthropic</a>'s Claude, a Haiku-class model. It is processed to write the answer; this site keeps no copy.</li>
         <li>Your <strong>email address and phone number are removed</strong> on your device before anything is sent. Downloaded résumés get them back from your own file, on your device.</li>
         <li>Your résumé file itself is read in your browser and never uploaded.</li>
+        <li>Jobs are matched to the country you live in. It comes from your résumé; if your résumé doesn't say, Ami uses the country your network connects from (an estimate our host adds to each request). It is not stored.</li>
         {live && <li>When no saved job fits, Ami searches job sites ({live}) using only your target role, level and city or country. Never your name, contact details or résumé.</li>}
       </ul>
     </section>
@@ -60,6 +61,7 @@ const live = [ADZUNA && 'Adzuna', JOOBLE && 'Jooble'].filter(Boolean).join(' and
       <ul>
         <li>Today's usage counters for your device and a scrambled (hashed) version of your network address, so the free limits are fair. They expire after two days.</li>
         <li>The jobs already shown to your device, for 30 days, so you never see the same job twice.</li>
+        <li>When no job fits, a count of searches per country and the target roles asked for there (no names, no devices), so Ami can look for job boards in that country.</li>
         <li>Your device's public key (not the private one, which never leaves your browser), so requests can be checked as really coming from you. It expires after 90 days unused.</li>
         <li>No résumés, no chat content, no cookies and no analytics.</li>
       </ul>

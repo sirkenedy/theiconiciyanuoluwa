@@ -122,11 +122,12 @@ test('edit + confirm the profile; it is what the chat sends; chat streams with s
   await expect(answer).toContainText('Lead with outcomes');
   await expect(answer.locator('strong')).toHaveText('checkout redesign');
   await expect(page.locator('.cc-suggest .cc-chip--btn')).toHaveText(['Find jobs for me', 'Tailor to this job']);
-  await expect(page.locator('[data-usage="messages"] [data-left]')).toHaveText('9 of 10 left');
+  await expect(page.locator('[data-usage="messages"] [data-left]')).toHaveText('19 of 20 left');
 
   const chat = (await sentToClaude(page)).find((r) => r.stream)!;
-  expect(chat.messages[0].content).toContain('"targetRoles":["Product Manager","Associate PM"]');
-  expect(chat.messages[0].content).toContain('"yearsExperience":6');
+  const newest = JSON.stringify(chat.messages.at(-1)!.content); // the per-message context rides on the newest message
+  expect(newest).toContain('\\"targetRoles\\":[\\"Product Manager\\",\\"Associate PM\\"]');
+  expect(newest).toContain('\\"yearsExperience\\":6');
 
   const before = await page.locator('.cc-msg').allTextContents();
   await page.reload();
@@ -137,7 +138,7 @@ test('edit + confirm the profile; it is what the chat sends; chat streams with s
   await expect(page.locator('.cc-suggest .cc-chip--btn')).toHaveCount(2);
 });
 
-test('only the last 6 turns are sent; older ones are folded into a rolling summary', async ({ page }) => {
+test('the whole chat is sent with every message (each request is stateless); history is marked for the prompt cache', async ({ page }) => {
   await page.goto('/career');
   await expect(page.locator('[data-usage-ready]')).toHaveCount(1);
   for (let i = 1; i <= 9; i++) {
@@ -146,16 +147,13 @@ test('only the last 6 turns are sent; older ones are folded into a rolling summa
     await expect(page.locator('.cc-msg--coach').nth(i - 1)).toContainText('Lead with outcomes');
   }
   const reqs = await sentToClaude(page);
-  const chats = reqs.filter((r) => r.stream);
-  expect(chats.at(-1)!.messages.length).toBeLessThanOrEqual(6);
-  expect(chats.at(-1)!.messages.at(-1)!.content).toBe('Question 9');
-  // 9 questions = 18 turns: 12 beyond the 6 sent verbatim → one summary call, then the summary rides along.
-  expect(reqs.filter((r) => !r.stream && !r.output_config?.format)).toHaveLength(1);
-  await page.locator('#cc-input').fill('Question 10');
-  await page.locator('#cc-input').press('Enter');
-  await expect(page.locator('.cc-msg--coach').nth(9)).toContainText('Lead with outcomes');
-  const last = (await sentToClaude(page)).filter((r) => r.stream).at(-1)!;
-  expect(last.messages[0].content).toContain('<summary>The visitor is a product designer');
+  const last = reqs.filter((r) => r.stream).at(-1)! as unknown as { messages: { role: string; content: string | { text: string; cache_control?: unknown }[] }[] };
+  expect(last.messages).toHaveLength(17); // 9 questions + 8 answers: nothing dropped
+  expect(last.messages[0].content).toBe('Question 1');
+  expect(String(last.messages.at(-1)!.content)).toMatch(/Question 9$/);
+  expect((last.messages.at(-2)!.content as { cache_control?: unknown }[])[0].cache_control).toEqual({ type: 'ephemeral' });
+  // Within 40 turns there is nothing to summarise.
+  expect(reqs.filter((r) => !r.stream && !r.output_config?.format)).toHaveLength(0);
 });
 
 test('orb shows "reading" while the résumé is parsed', async ({ page }) => {
@@ -184,5 +182,5 @@ test('usage panel shows a loading skeleton until Upstash answers, then real coun
   release();
   await expect(card).not.toHaveAttribute('data-usage-loading', '');
   await expect(card).not.toHaveAttribute('aria-busy', 'true');
-  await expect(card.locator('[data-usage="messages"] [data-left]')).toHaveText('10 of 10 left');
+  await expect(card.locator('[data-usage="messages"] [data-left]')).toHaveText('20 of 20 left');
 });

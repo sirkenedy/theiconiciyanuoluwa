@@ -110,6 +110,19 @@ export function startFakeClaude(port = 0) {
       }
       if (!params.stream) return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(message('The visitor is a product designer moving into product management.')));
       if (params.messages[0].content.includes('task = "cover_letter"')) return streamText(res, params, state.letter);
+      // Chat with tools: imitate Ami reading the whole message and picking a tool (or not).
+      if (params.tools?.length) {
+        // Forced tool (tool_choice): the model must call make_document; it still judges the job from the chat.
+        if (params.tool_choice?.name === 'make_document') {
+          const users = params.messages.filter((m) => m.role === 'user').map((m) => (typeof m.content === 'string' ? m.content : m.content.map((b) => b.text).join('')));
+          const posting = users.some((t) => t.replace(/[\s\S]*<\/context>/, '').trim().length >= 200 && !t.includes('NOT-A-JOB'));
+          const letter = users.some((t) => /cover letter/i.test(t.split('\n')[0]) || /^cover letter/i.test(t.replace(/[\s\S]*<\/context>\s*/, '')));
+          return streamTool(res, params, 'make_document', { kind: letter ? 'letter' : 'tailor', job: posting ? 'pasted' : 'none', title: null, company: null });
+        }
+        const route = routeLike(params);
+        if (route?.say) return streamText(res, params, [route.say]);
+        if (route) return streamTool(res, params, route.name, route.input);
+      }
       // Asked for a downloadable file: offer the tools by their exact labels, as the prompt requires.
       if (/download|pdf|docx/i.test(params.messages.at(-1).content)) return streamText(res, params, ['The button below builds it with Download DOCX/PDF.', '<suggest>["Make my résumé stronger","Tailor my résumé to a job","Write a cover letter"]</suggest>']);
       // A hostile answer, to prove model output is sanitised (DOMPurify) before it reaches the page.
@@ -127,6 +140,40 @@ export function startFakeClaude(port = 0) {
     });
   });
   return new Promise((resolve) => server.listen(port, () => resolve({ server, requests, state, url: `http://127.0.0.1:${server.address().port}` })));
+}
+
+/** What the real model is told to do with the chat tools, approximated for tests (first line = the request). */
+function routeLike(params) {
+  const raw = params.messages.at(-1).content;
+  const text = raw.includes('</context>') ? raw.slice(raw.indexOf('</context>') + 10).trim() : raw.trim();
+  const [first, ...rest] = text.split('\n');
+  const line = first.toLowerCase();
+  const pasted = rest.join('\n').trim();
+  // A concern about the pasted posting: the model answers first; "I'm eligible" then starts tailoring that posting.
+  if (/ELIGIBILITY-CHECK/.test(text)) return { say: 'Note: this role requires US residency. Are you eligible?' };
+  if (/^i('| a)?m eligible/.test(line)) return { name: 'make_document', input: { kind: 'tailor', job: 'pasted', title: 'Senior Product Manager', company: 'Sample Pay' } };
+  if (/NOT-A-JOB/.test(text)) return { say: "That looks like a résumé, not a job description. Paste the job description and I'll tailor your résumé to it." };
+  if (/\?\s*$/.test(line) && /^(should|how|what|why|is|do|does|which)\b/.test(line)) return null;
+  if (/\b(find|show|get|any|search)\b.*\b(jobs?|roles?|openings?)\b/.test(line)) return { name: 'find_jobs', input: { anywhere: /anywhere/.test(line) } };
+  const cv = /\b(cv|r[eé]s?u?m[eé]?s?)\b/.test(line);
+  const letter = /cover letter/.test(line);
+  const kind = cv && letter && /\b(and|both|plus|with)\b|\+/.test(line) ? 'both' : /\b(tailor|customi[sz]e|adapt)/.test(line) && cv ? 'tailor' : letter && /\b(write|draft|make|create|please)\b/.test(line) ? 'letter' : /\b(improve|stronger|strengthen)\b/.test(line) && cv ? 'improve' : null;
+  if (!kind) return null;
+  const job = kind === 'improve' ? 'none' : pasted.length >= 200 ? 'pasted' : raw.includes('<job>') || params.messages.some((m) => m.content.includes('<job>')) ? 'current' : 'none';
+  const tone = /\b(warm|formal|short)\b/.test(line) ? line.match(/(warm[^,.]*|formal[^,.]*|short[^,.]*)/)[0].trim() : null;
+  return { name: 'make_document', input: { kind, job, title: job === 'pasted' ? 'Product Manager, Payments' : null, company: job === 'pasted' ? 'Sample Pay' : null, ...(tone ? { tone } : {}) } };
+}
+
+function streamTool(res, params, name, input) {
+  res.writeHead(200, { 'content-type': 'text/event-stream' });
+  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  send('message_start', { type: 'message_start', message: { id: 'msg_fake', type: 'message', role: 'assistant', model: params.model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 50, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } });
+  send('content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'toolu_fake', name, input: {} } });
+  send('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(input) } });
+  send('content_block_stop', { type: 'content_block_stop', index: 0 });
+  send('message_delta', { type: 'message_delta', delta: { stop_reason: 'tool_use', stop_sequence: null }, usage: { output_tokens: 20 } });
+  send('message_stop', { type: 'message_stop' });
+  res.end();
 }
 
 function streamText(res, params, chunks) {

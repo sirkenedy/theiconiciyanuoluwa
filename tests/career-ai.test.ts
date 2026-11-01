@@ -5,7 +5,7 @@ import type { Server } from 'node:http';
 import { startFakeUpstash, FAKE_TOKEN } from './fake-upstash.mjs';
 import { startFakeClaude, SAMPLE_PROFILE } from './fake-claude.mjs';
 import { ECDSA, ECDSA_SIGN, HEADER, b64url, canonicalJwk, signingInput } from '../src/lib/career/signing.ts';
-import { localDay } from '../src/lib/career/limits.ts';
+import { DAILY_LIMITS, localDay } from '../src/lib/career/limits.ts';
 import { TagSplitter, parseSuggest } from '../src/lib/career/stream.ts';
 import { asData } from '../src/lib/career/ai.ts';
 
@@ -32,11 +32,12 @@ beforeEach(() => {
 });
 
 type Device = { pair: CryptoKeyPair; id: string };
+let regSeq = 0;
 async function device(ip = '203.0.113.20'): Promise<Device> {
   const { POST } = await import('../src/pages/api/device/register.ts');
   const pair = (await crypto.subtle.generateKey(ECDSA, false, ['sign', 'verify'])) as CryptoKeyPair;
   const jwk = JSON.parse(canonicalJwk(await crypto.subtle.exportKey('jwk', pair.publicKey))!);
-  const res = await POST({ request: new Request(`${ORIGIN}/api/device/register`, { method: 'POST', body: JSON.stringify({ jwk }) }), clientAddress: ip } as never);
+  const res = await POST({ request: new Request(`${ORIGIN}/api/device/register`, { method: 'POST', body: JSON.stringify({ jwk }) }), clientAddress: `${ip}#reg${++regSeq}` } as never); // its own network: only 2 new devices per network per day
   return { pair, id: (await res.json()).deviceId };
 }
 
@@ -117,26 +118,31 @@ test('chat: streams the answer, holds back <suggest> and parses it into chips', 
   assert.deepEqual(out.suggest, ['Find jobs for me', 'Tailor to this job']);
 });
 
-test('chat: compact context — profile + rolling summary + at most 6 turns, context on the oldest turn', async () => {
-  const turns = Array.from({ length: 6 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: `turn ${i + 1}` }));
-  turns.push({ role: 'user', content: 'turn 7' });
+test('chat: the whole chat goes (≤ 40 turns): history cached, the context on the newest message', async () => {
   const d = await device('203.0.113.24');
-  const seven = await call('chat', d, { messages: turns, profile: SAMPLE_PROFILE, summary: 'Earlier: wants PM roles.', day: localDay() }, '203.0.113.24');
-  assert.equal(seven.status, 400, 'more than 6 turns is refused');
+  const many = Array.from({ length: 41 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: `turn ${i + 1}` }));
+  assert.equal((await call('chat', d, { messages: many, profile: SAMPLE_PROFILE, summary: '', day: localDay() }, '203.0.113.24')).status, 400, 'more than 40 turns is refused');
 
-  const res = await call('chat', d, { messages: turns.slice(-6), profile: SAMPLE_PROFILE, summary: 'Earlier: wants PM roles.', day: localDay() }, '203.0.113.24');
-  await events(res);
-  const sent = claude.requests[0] as { messages: { role: string; content: string }[] };
-  assert.equal(sent.messages.length, 5, 'leading assistant turn dropped; 5 turns remain');
-  assert.equal(sent.messages[0].role, 'user');
-  assert.match(sent.messages[0].content, /task = "chat"[\s\S]*<profile>\{"identity"[\s\S]*<summary>Earlier: wants PM roles\.<\/summary>/);
-  assert.equal(sent.messages.at(-1)!.content, 'turn 7');
+  const turns = [
+    { role: 'user', content: 'Tailor my résumé to this posting' },
+    { role: 'assistant', content: '(I analysed the job Senior PM at Sample Pay: strong: payments.)' },
+    { role: 'assistant', content: '(I built a tailored résumé, keyword match 40 → 70.)' },
+    { role: 'user', content: 'What did you change?' },
+  ];
+  await events(await call('chat', d, { messages: turns, profile: SAMPLE_PROFILE, summary: 'Earlier: wants PM roles.', day: localDay() }, '203.0.113.24'));
+  const sent = claude.requests.at(-1) as { messages: { role: string; content: string | { text: string; cache_control?: unknown }[] }[] };
+  assert.deepEqual(sent.messages.map((m) => m.role), ['user', 'assistant', 'user'], 'back-to-back assistant notes merged');
+  const prev = sent.messages[1].content as { text: string; cache_control?: unknown }[];
+  assert.match(prev[0].text, /analysed the job[\s\S]*built a tailored résumé/);
+  assert.deepEqual(prev[0].cache_control, { type: 'ephemeral' }, 'history up to the newest message is cached');
+  assert.equal(sent.messages[0].content, 'Tailor my résumé to this posting', 'older turns carry no per-message context');
+  assert.match(sent.messages[2].content as string, /task = "chat"[\s\S]*<summary>Earlier: wants PM roles\.<\/summary>[\s\S]*What did you change\?$/);
 });
 
-test('chat: 10 messages a day per device, then a limit error (no model call)', async () => {
-  const d = await device('203.0.113.25');
-  const ask = () => call('chat', d, { messages: [{ role: 'user', content: 'Hi' }], profile: null, day: localDay() }, '203.0.113.25');
-  for (let i = 0; i < 10; i++) await events(await ask());
+test(`chat: ${DAILY_LIMITS.messages} messages a day per device, then a limit error (no model call)`, async () => {
+  const d = await device('203.0.113.29');
+  const ask = () => call('chat', d, { messages: [{ role: 'user', content: 'Hi' }], profile: null, day: localDay() }, '203.0.113.29');
+  for (let i = 0; i < DAILY_LIMITS.messages; i++) await events(await ask());
   const before = claude.requests.length;
   const over = await ask();
   assert.equal(over.status, 429);
@@ -152,7 +158,7 @@ test('summarize: older turns → a short summary (JSON, not streamed)', async ()
   }, '203.0.113.26');
   assert.equal(res.status, 200);
   assert.match((await res.json()).summary, /product management/);
-  assert.match((claude.requests[0] as { messages: { content: string }[] }).messages[0].content, /task = "summarize"[\s\S]*<transcript>/);
+  assert.match((claude.requests.at(-1) as { messages: { content: string }[] }).messages[0].content, /task = "summarize"[\s\S]*<transcript>/);
 });
 
 test('injection: visitor text cannot close the data tags the prompt relies on', () => {
@@ -160,4 +166,22 @@ test('injection: visitor text cannot close the data tags the prompt relies on', 
   const s = new TagSplitter('<suggest>');
   assert.equal(s.push('Great answer <sug') + s.push('gest>["A"]</suggest>'), 'Great answer ');
   assert.deepEqual(parseSuggest(s.end().hidden), ['A']);
+});
+
+test('chat: Ami picks a tool from the whole message (job description judged from the content); the message is given back', async () => {
+  const d = await device('203.0.113.28');
+  const posting = 'Senior Product Manager at Sample Pay. You will own payments, merchant onboarding and settlement. '.repeat(4);
+  const res = await call('chat', d, { messages: [{ role: 'user', content: `Tailor my resume to this role\n\n${posting}` }], profile: SAMPLE_PROFILE, summary: '', day: localDay() }, '203.0.113.28');
+  const text = await res.text();
+  const tool = JSON.parse(text.match(/event: tool\ndata: (.*)\n/)![1]);
+  assert.deepEqual(tool, { name: 'make_document', input: { kind: 'tailor', job: 'pasted', title: 'Product Manager, Payments', company: 'Sample Pay' } });
+  const sent = claude.requests.at(-1) as { tools: { name: string }[]; messages: { content: string }[] };
+  assert.deepEqual(sent.tools.map((t) => t.name), ['find_jobs', 'make_document']);
+  assert.ok(sent.messages.at(-1)!.content.includes('settlement. Senior Product Manager'), 'the whole message reached Ami');
+  const { GET } = await import('../src/pages/api/career/usage.ts');
+  void GET;
+  const jobs = await events(await call('chat', d, { messages: [{ role: 'user', content: 'any openings for me' }], profile: SAMPLE_PROFILE, summary: '', day: localDay() }, '203.0.113.28'));
+  assert.equal(jobs.text, '', 'a tool, not an answer');
+  const chat = await events(await call('chat', d, { messages: [{ role: 'user', content: 'Should I tailor my résumé for every application?' }], profile: SAMPLE_PROFILE, summary: '', day: localDay() }, '203.0.113.28'));
+  assert.ok(chat.text.length > 0, 'a question gets an answer, not a tool');
 });

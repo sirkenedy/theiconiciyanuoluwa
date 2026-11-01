@@ -54,11 +54,12 @@ export type StoredProfile = { profile: Profile; fileName: string; resumeText: st
 
 export type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
-export const LIMITS_INPUT = { resume: 20_000, message: 2_000, answer: 6_000, summary: 2_000, turns: 6, summarize: 24 } as const;
+// message: one chat turn: a full pasted job posting fits (Ami reads it and picks the tool).
+export const LIMITS_INPUT = { resume: 20_000, message: 15_000, answer: 6_000, summary: 2_000, turns: 40, summarize: 24 } as const;
 
 // ---- job ranking (task = "rank_jobs") ----
 export const RankSchema = z.object({
-  results: z.array(z.object({ jobId: z.string().max(200), fit: z.number().int().min(0).max(100), why: z.array(z.string().max(160)).max(2), gaps: z.array(z.string().max(160)).max(2) })).max(25),
+  results: z.array(z.object({ jobId: z.string().max(200), fit: z.number().int().min(0).max(100), why: z.array(z.string().max(160)).max(2), gaps: z.array(z.string().max(160)).max(2) })).max(40),
 });
 export const RANK_JSON_SCHEMA = obj({
   results: { type: 'array', items: obj({ jobId: str, fit: { type: 'integer' }, why: { type: 'array', items: str }, gaps: { type: 'array', items: str } }) },
@@ -69,9 +70,15 @@ export type RankedJob = import('../jobs/types.ts').Job & { fit: number; why: str
 export const MIN_FIT = 55;
 
 /** Compact job context for the chat: what's on screen, so "why is X the top match?" can be answered. */
+/** Jobs shown in the last 7 days (any chat), newest first, with when "Open job" was clicked. Times are "YYYY-MM-DD HH:MM" UTC. */
+const stamp = z.string().regex(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+export const RecentJobsSchema = z
+  .array(z.object({ title: z.string().max(200), company: z.string().max(200), location: z.string().max(200), fit: z.number().int().min(0).max(100), shown: stamp, opened: stamp.nullable(), source: z.string().max(40) }))
+  .max(25);
+
 export const ChatJobsSchema = z
   .array(z.object({ title: text, company: text, location: text, fit: z.number().int().min(0).max(100), why: z.array(text).max(2), gaps: z.array(text).max(2) }))
-  .max(5);
+  .max(10);
 
 // ---- tailoring, improving, cover letters (career-mode.md §3.4–3.5) ----
 const line = z.string().max(600);
@@ -98,6 +105,50 @@ const TAILORED_JSON = obj({
 });
 
 export const MATCH_KINDS = ['strong', 'added', 'missing'] as const;
+/**
+ * Chat tools: Ami reads the whole message and either answers or picks one of these; the browser then runs the flow.
+ * `job`: "pasted" = a job description they pasted in this chat (their latest message, or an earlier one), "current" = the
+ * job this chat is already about (<job>), "none" = no job yet (the visitor is asked to paste it).
+ */
+export const ToolCallSchema = z.discriminatedUnion('name', [
+  z.object({ name: z.literal('find_jobs'), input: z.object({ anywhere: z.boolean().optional() }) }),
+  z.object({
+    name: z.literal('make_document'),
+    input: z.object({
+      kind: z.enum(['tailor', 'letter', 'both', 'improve']),
+      job: z.enum(['pasted', 'current', 'none']),
+      title: z.string().max(200).nullable().optional(),
+      company: z.string().max(200).nullable().optional(),
+      tone: z.string().max(500).nullable().optional(),
+    }),
+  }),
+]);
+export type ToolCall = z.infer<typeof ToolCallSchema>;
+export const CHAT_TOOLS = [
+  {
+    name: 'find_jobs',
+    description: 'Show the visitor fresh job cards matched to their profile (title, fit, apply link). Use when they ask to find, show or get jobs, roles or openings for themselves. Not for advice about job hunting.',
+    input_schema: { type: 'object', properties: { anywhere: { type: 'boolean', description: 'true only if they ask for remote roles anywhere / outside their area' } }, additionalProperties: false },
+  },
+  {
+    name: 'make_document',
+    description:
+      'Build a downloadable document: "tailor" = their résumé tailored to a job, "letter" = a cover letter for a job, "both" = tailored résumé + cover letter, "improve" = their résumé made stronger for their target role (no job needed). Use when they ask for one of these, however they phrase it. Not for questions about how to write them.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: ['tailor', 'letter', 'both', 'improve'] },
+        job: { type: 'string', enum: ['pasted', 'current', 'none'], description: '"pasted" if they pasted a job description or posting in this conversation (their latest message or an earlier one: judge the content, not the length); "current" if they mean the job in <job>; "none" if there is no job yet. Use "none" for improve.' },
+        title: { type: ['string', 'null'], description: 'the role title, if a job is pasted or known' },
+        company: { type: ['string', 'null'], description: 'the company, if stated' },
+        tone: { type: ['string', 'null'], description: 'for a cover letter: the tone or anything they asked for ("warm and short", "mention my relocation"), else null' },
+      },
+      required: ['kind', 'job'],
+      additionalProperties: false,
+    },
+  },
+] as const;
+
 export const AnalysisSchema = z.object({
   role: clip(400).nullable(),
   company: clip(400).nullable(),

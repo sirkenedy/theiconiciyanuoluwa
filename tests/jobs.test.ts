@@ -6,7 +6,8 @@ import { startFakeUpstash, FAKE_TOKEN } from './fake-upstash.mjs';
 import { startFakeClaude, SAMPLE_PROFILE } from './fake-claude.mjs';
 import { sampleIndexes, seedJobs } from './fixtures-jobs.mjs';
 import { ECDSA, ECDSA_SIGN, HEADER, b64url, canonicalJwk, signingInput } from '../src/lib/career/signing.ts';
-import { localDay } from '../src/lib/career/limits.ts';
+import { DAILY_LIMITS, localDay } from '../src/lib/career/limits.ts';
+import { usageKey } from '../src/lib/career/quota.ts';
 import { ashby, greenhouse, himalayas, jobicy, lever, remotive } from '../src/lib/jobs/sources.ts';
 import { candidates, placeFits, tierOf } from '../src/lib/jobs/select.ts';
 import { plainText } from '../src/lib/jobs/text.ts';
@@ -160,11 +161,12 @@ test('place: remote seekers get remote or local jobs only', () => {
 // ---------- /api/career/jobs ----------
 
 type Device = { pair: CryptoKeyPair; id: string };
+let regSeq = 0;
 async function device(ip: string): Promise<Device> {
   const { POST } = await import('../src/pages/api/device/register.ts');
   const pair = (await crypto.subtle.generateKey(ECDSA, false, ['sign', 'verify'])) as CryptoKeyPair;
   const jwk = JSON.parse(canonicalJwk(await crypto.subtle.exportKey('jwk', pair.publicKey))!);
-  const res = await POST({ request: new Request('https://x.test/api/device/register', { method: 'POST', body: JSON.stringify({ jwk }) }), clientAddress: ip } as never);
+  const res = await POST({ request: new Request('https://x.test/api/device/register', { method: 'POST', body: JSON.stringify({ jwk }) }), clientAddress: `${ip}#reg${++regSeq}` } as never); // its own network: only 2 new devices per network per day
   return { pair, id: (await res.json()).deviceId };
 }
 async function jobs(d: Device, payload: Record<string, unknown>, ip: string) {
@@ -178,7 +180,7 @@ async function jobs(d: Device, payload: Record<string, unknown>, ip: string) {
   return (await res.json()) as { jobs: (Job & { fit: number; why: string[]; gaps: string[] })[]; left: number; more?: number; reason?: string };
 }
 
-test('jobs: one batched Haiku ranking, fit < 55 dropped, best first, 3 now + "show more" from the cache, 5 a day, never repeated', async () => {
+test('jobs: one batched Haiku ranking, fit < 55 dropped, best first, every good match at once (up to 10), never repeated', async () => {
   await seedJobs(redisUrl);
   const d = await device('203.0.113.40');
   const first = await jobs(d, {}, '203.0.113.40');
@@ -186,21 +188,25 @@ test('jobs: one batched Haiku ranking, fit < 55 dropped, best first, 3 now + "sh
   const rankReq = claude.requests[0] as { model: string; messages: { content: string }[] };
   assert.equal(rankReq.model, 'claude-haiku-5-5');
   assert.match(rankReq.messages[0].content, /task = "rank_jobs"/);
-  assert.equal(first.jobs.length, 3);
-  assert.deepEqual(first.jobs.map((j) => j.fit), [92, 81, 76]);
-  assert.equal(first.left, 2);
-  assert.equal(first.more, 2);
+  assert.deepEqual(first.jobs.map((j) => j.fit), [92, 81, 76, 64, 58], 'all five good matches in one go');
+  assert.equal(first.left, DAILY_LIMITS.jobs - 5);
+  assert.equal(new Set(first.jobs.map((j) => j.id)).size, 5, 'no repeats');
+  const again = await jobs(d, {}, '203.0.113.40');
+  assert.ok(again.jobs.every((j) => !first.jobs.some((f) => f.id === j.id)), 'never shown twice');
+});
 
-  const more = await jobs(d, { more: true, count: 2 }, '203.0.113.40');
+test('jobs: a smaller count still works with "show more" from the cache; the daily limit stops it', async () => {
+  await seedJobs(redisUrl);
+  const d = await device('203.0.113.47');
+  const first = await jobs(d, { count: 3 }, '203.0.113.47');
+  assert.deepEqual(first.jobs.map((j) => j.fit), [92, 81, 76]);
+  assert.equal(first.more, 2);
+  const more = await jobs(d, { more: true, count: 2 }, '203.0.113.47');
   assert.equal(claude.requests.length, 1, '"show more" reuses the ranked list');
   assert.deepEqual(more.jobs.map((j) => j.fit), [64, 58]);
-  assert.equal(more.left, 0);
-  const ids = [...first.jobs, ...more.jobs].map((j) => j.id);
-  assert.equal(new Set(ids).size, 5, 'no repeats');
-  assert.ok([...first.jobs, ...more.jobs].every((j) => j.fit >= 55));
-
-  const sixth = await jobs(d, {}, '203.0.113.40');
-  assert.deepEqual([sixth.jobs.length, sixth.reason], [0, 'limit']);
+  await realFetch(`${redisUrl}/pipeline`, { method: 'POST', headers: { authorization: `Bearer ${FAKE_TOKEN}` }, body: JSON.stringify([['HINCRBY', usageKey(d.id, localDay()), 'jobs', DAILY_LIMITS.jobs]]) });
+  const over = await jobs(d, {}, '203.0.113.47');
+  assert.deepEqual([over.jobs.length, over.reason], [0, 'limit']);
 });
 
 test('jobs: a new day still never repeats what this device has seen', async () => {
@@ -219,7 +225,7 @@ test('jobs: nothing good enough → none, and no quota spent', async () => {
   try {
     const d = await device('203.0.113.42');
     const out = await jobs(d, {}, '203.0.113.42');
-    assert.deepEqual([out.jobs.length, out.reason, out.left], [0, 'none', 5]);
+    assert.deepEqual([out.jobs.length, out.reason, out.left], [0, 'none', DAILY_LIMITS.jobs]);
   } finally {
     claude.state.fits = [92, 81, 76, 64, 58, 40, 35];
   }
@@ -272,7 +278,7 @@ test('jobs: someone else is already fetching an empty pool → "warming", no mod
   try {
     const d = await device('203.0.113.45');
     const out = await jobs(d, {}, '203.0.113.45');
-    assert.deepEqual([out.jobs.length, out.reason, out.left], [0, 'warming', 5]);
+    assert.deepEqual([out.jobs.length, out.reason, out.left], [0, 'warming', DAILY_LIMITS.jobs]);
     assert.equal(claude.requests.length, 0);
   } finally {
     kv.delete('jobs:refresh:lock');

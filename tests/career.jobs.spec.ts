@@ -37,18 +37,18 @@ async function docx(page: Page): Promise<Buffer> {
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
-test('cards: ranked, honest freshness, fit meter, why/gaps, attribution, apply link, save; show more; limit; restore', async ({ page }) => {
+test('cards: every good match at once, ranked, honest freshness, fit meter, why/gaps, attribution, apply link, save; restore', async ({ page }) => {
   await withProfile(page);
   await page.locator('.cc-suggest').getByRole('button', { name: 'Find jobs for me' }).click();
 
   const cards = page.locator('.cc-job');
-  await expect(cards).toHaveCount(3);
+  await expect(cards).toHaveCount(5); // all five matches in the sample pool (up to 10 at once)
   await expect(page.locator('.cc-jobs__intro')).toHaveText("Here are today's freshest matches for you. 2 were posted within the last hour.");
   const first = cards.first();
   await expect(first.locator('.cc-job__title')).toHaveText('Product Manager, Payments');
   await expect(first.locator('.cc-job__tile')).toHaveText('S');
-  await expect(first.locator('.cc-job__meta')).toContainText('Sample Pay · Lagos, Nigeria');
-  await expect(first.locator('.cc-job__remote')).toHaveText('Remote');
+  await expect(first.locator('.cc-job__meta')).toContainText('Sample Pay');
+  await expect(first.locator('.cc-job__remote')).toHaveText('Remote · Lagos, Nigeria'); // who can apply
   await expect(first.locator('.cc-job__when')).toHaveText(/^posted (18|19|20) min ago$/);
   await expect(first.locator('.cc-job__when')).toHaveClass(/is-fresh/);
   await expect(first.locator('.cc-job__fit-num')).toHaveText('92');
@@ -69,12 +69,9 @@ test('cards: ranked, honest freshness, fit meter, why/gaps, attribution, apply l
   await first.getByRole('button', { name: 'Save' }).click();
   await expect(first.locator('.cc-job__save')).toHaveAttribute('aria-pressed', 'true');
 
-  await expect(page.locator('.cc-jobs__left')).toContainText('2 of 5 fresh jobs left today.');
+  await expect(page.locator('.cc-jobs__left')).toContainText('5 of 10 fresh jobs left today.');
   await expect(page.locator('.cc-suggest .cc-chip--btn')).toHaveText(['Why is Sample Pay the top match?', 'Prep me for the Product Manager, Payments interview', 'What should I improve first?']);
-  await page.getByRole('button', { name: 'Show 2 more' }).click();
-  await expect(cards).toHaveCount(5);
-  await expect(page.locator('.cc-jobs__left').last()).toContainText('0 of 5 fresh jobs left today.');
-  await expect(page.locator('.cc-jobs__more')).toHaveCount(0);
+  await expect(page.locator('.cc-jobs__more')).toHaveCount(0); // nothing held back
   const titles = await page.locator('.cc-job__title').allTextContents();
   expect(new Set(titles).size).toBe(5);
 
@@ -83,14 +80,14 @@ test('cards: ranked, honest freshness, fit meter, why/gaps, attribution, apply l
   await expect(page.locator('.cc-msg--coach:not(.is-live) .cc-msg__text').last()).toContainText('Lead with outcomes');
   const reqs = (await (await page.request.get(`${CLAUDE}/__requests`)).json()) as { stream?: boolean; messages: { content: string }[] }[];
   const chat = reqs.filter((r) => r.stream).at(-1)!;
-  expect(chat.messages[0].content).toContain('<jobs>[{"title":"Product Manager, Payments","company":"Sample Pay"');
-  // One ranking call for all 5 cards: "Show 2 more" came from the cached ranked list.
+  expect(String(chat.messages.at(-1)!.content)).toContain('<jobs>[{"title":"Product Manager, Payments","company":"Sample Pay"');
+  // One ranking call for all 5 cards.
   expect(reqs.filter((r) => JSON.stringify(r.messages).includes('task = \\"rank_jobs\\"'))).toHaveLength(1);
 
   await page.reload();
   await expect(cards).toHaveCount(5);
   await expect(first.locator('.cc-job__save')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('[data-usage="jobs"] [data-left]')).toHaveText('0 of 5 left');
+  await expect(page.locator('[data-usage="jobs"] [data-left]')).toHaveText('5 of 10 left');
 });
 
 test('without a résumé, "Find jobs for me" asks for one first (no request made)', async ({ page }) => {
@@ -105,12 +102,10 @@ test('without a résumé, "Find jobs for me" asks for one first (no request made
 
 test('when the day is used up, the coach says so plainly', async ({ page }) => {
   await withProfile(page);
+  // The server's answer once today's 10 are used (the limit itself is covered by tests/jobs.test.ts).
+  await page.route('**/api/career/jobs', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ jobs: [], left: 0, reason: 'limit' }) }));
   await page.locator('.cc-suggest').getByRole('button', { name: 'Find jobs for me' }).click();
-  await expect(page.locator('.cc-job')).toHaveCount(3);
-  await page.getByRole('button', { name: 'Show 2 more' }).click();
-  await expect(page.locator('.cc-job')).toHaveCount(5);
-  await page.evaluate(() => document.querySelector<HTMLButtonElement>('.cc-starter[data-start="jobs"]')!.click());
-  await expect(page.locator('.cc-msg--note').last()).toContainText("You've seen today's 5 fresh jobs");
+  await expect(page.locator('.cc-msg--note').last()).toContainText("You've seen today's 10 fresh jobs");
 });
 
 for (const theme of ['light', 'dark'] as const) {
@@ -120,7 +115,7 @@ for (const theme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
       await withProfile(page);
       await page.locator('.cc-suggest').getByRole('button', { name: 'Find jobs for me' }).click();
-      await expect(page.locator('.cc-job')).toHaveCount(3);
+      await expect(page.locator('.cc-job')).toHaveCount(5);
       const { violations } = await new AxeBuilder({ page }).analyze();
       expect(violations.map((v) => `${v.id}: ${v.nodes.slice(0, 3).map((n) => n.target).join(' | ')}`)).toEqual([]);
     });
@@ -159,7 +154,7 @@ test('nothing in the pool fits → a typed "find me jobs" runs a live search, st
   expect(adzuna.url).toContain('where=Toronto');
   expect(JSON.stringify(calls)).not.toContain('Sample Candidate'); // only role, level and place leave the device
   // The chat isn't spent: a typed job request is the jobs tool, not a chat message.
-  await expect(page.locator('[data-usage="messages"] [data-left]')).toHaveText('10 of 10 left');
+  await expect(page.locator('[data-usage="messages"] [data-left]')).toHaveText('20 of 20 left');
 });
 
 test('no fit even after searching → says what was checked and searched, and offers to widen', async ({ page, request }) => {
@@ -168,8 +163,29 @@ test('no fit even after searching → says what was checked and searched, and of
   await page.locator('.cc-suggest').getByRole('button', { name: 'Find jobs for me' }).click();
   const msg = page.locator('.cc-msg--note').last();
   await expect(msg).toContainText('I checked 1 recent job and searched job sites for Product Manager');
-  await expect(msg).toContainText('none fit Product Manager at 55% or better');
+  await expect(msg).toContainText('none you can apply for from Nigeria fit Product Manager at 55% or better');
+  await expect(msg).toContainText("I've asked for more roles in Nigeria");
   await expect(page.locator('.cc-suggest').getByRole('button', { name: 'Search remote roles anywhere' })).toBeVisible();
   await page.locator('.cc-suggest').getByRole('button', { name: 'Edit my target roles' }).click();
   await expect(page.locator('.cc-profile [contenteditable], .cc-profile input, .cc-profile textarea').first()).toBeVisible();
+});
+
+test('Ami knows every job shown in the last 7 days, in any chat, and which ones were opened', async ({ page, context, request }) => {
+  await context.route('https://jobs.sample.test/**', (r) => r.fulfill({ status: 200, body: 'job page' }));
+  await withProfile(page);
+  await page.locator('.cc-suggest').getByRole('button', { name: 'Find jobs for me' }).click();
+  const cards = page.locator('.cc-job');
+  await expect(cards).toHaveCount(5);
+  const openedTitle = (await cards.nth(1).locator('.cc-job__title').textContent())!;
+  const [tab] = await Promise.all([context.waitForEvent('page'), cards.nth(1).getByRole('link', { name: /Open job/ }).click()]);
+  await tab.close();
+  await page.locator('[data-new-chat]').click();
+  await page.locator('#cc-input').fill('Jobs I have seen most recently?');
+  await page.locator('#cc-input').press('Enter');
+  await expect(page.locator('.cc-msg--coach:not(.is-live) .cc-msg__text').last()).not.toBeEmpty();
+  const reqs = (await (await request.get(`${CLAUDE}/__requests`)).json()) as { stream?: boolean; messages: { content: string }[] }[];
+  const chat = reqs.filter((r) => r.stream).at(-1)!.messages[0].content;
+  const recent = JSON.parse(chat.match(/<recent_jobs>(.*)<\/recent_jobs>/)![1]) as { title: string; opened: string | null }[];
+  expect(recent).toHaveLength(5); // from the other chat
+  expect(recent.filter((j) => j.opened).map((j) => j.title)).toEqual([openedTitle]);
 });

@@ -5,7 +5,7 @@ import type { Server } from 'node:http';
 import { startFakeUpstash, FAKE_TOKEN } from './fake-upstash.mjs';
 import { startFakeClaude, HONEST_WRITE, INVENTED_WRITE, SAMPLE_PROFILE } from './fake-claude.mjs';
 import { ECDSA, ECDSA_SIGN, HEADER, b64url, canonicalJwk, signingInput } from '../src/lib/career/signing.ts';
-import { localDay } from '../src/lib/career/limits.ts';
+import { DAILY_LIMITS, localDay } from '../src/lib/career/limits.ts';
 import { checkResume, checkText } from '../src/lib/career/factcheck.ts';
 import { changedKeys, contactLine, fileBase, profileToResume, setLine } from '../src/lib/career/document.ts';
 import type { Profile } from '../src/lib/career/types.ts';
@@ -154,9 +154,9 @@ test('improve: no job needed, returns the 5-point critique', async () => {
   assert.deepEqual(result.critique.map((c) => c.area), ['clarity', 'impact', 'keywords', 'structure', 'length']);
 });
 
-test('tailored résumés: 2 a day per device; a third is refused before any model call', async () => {
+test(`tailored résumés: ${DAILY_LIMITS.tailored} a day per device; one more is refused before any model call`, async () => {
   const d = await device();
-  for (let i = 0; i < 2; i++) await events(await call('tailor', d, { mode: 'improve', phase: 'write' }));
+  for (let i = 0; i < DAILY_LIMITS.tailored; i++) await events(await call('tailor', d, { mode: 'improve', phase: 'write' }));
   const before = claude.requests.length;
   const third = await call('tailor', d, { mode: 'improve', phase: 'write' });
   assert.equal(third.status, 429);
@@ -168,17 +168,18 @@ test('a found job uses the description stored at ingest; an expired one asks for
   const d = await device();
   const ok = await call('tailor', d, { mode: 'tailor', phase: 'analyze', job: { jobId: 'greenhouse:sample:1', title: JOB.title, company: JOB.company } });
   assert.equal(ok.status, 200);
-  assert.match((claude.requests[0] as { messages: { content: string }[] }).messages[0].content, /You will own discovery/);
+  assert.match((claude.requests.at(-1) as { messages: { content: string }[] }).messages[0].content, /You will own discovery/);
   const gone = await call('tailor', d, { mode: 'tailor', phase: 'analyze', job: { jobId: 'greenhouse:sample:999' } });
   assert.equal(gone.status, 410);
 });
 
-test('cover letter: streamed, checked, 1 a day', async () => {
+test(`cover letter: streamed, checked, ${DAILY_LIMITS.letters} a day`, async () => {
   const d = await device();
   const out = await events(await call('cover-letter', d, { job: JOB }));
   const text = (out.token as { t: string }[]).map((t) => t.t).join('');
   assert.match(text, /^Dear hiring team,/);
   assert.deepEqual((out.flags as { flags: unknown[] }[])[0].flags, []);
+  for (let i = 1; i < DAILY_LIMITS.letters; i++) await events(await call('cover-letter', d, { job: JOB }));
   const second = await call('cover-letter', d, { job: JOB });
   assert.equal(second.status, 429);
 });

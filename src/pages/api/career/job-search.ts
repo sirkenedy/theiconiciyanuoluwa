@@ -9,6 +9,7 @@ import { SEARCH_INDEX, liveSearch } from '../../../lib/jobs/live.ts';
 import { queriesFor } from '../../../lib/jobs/search.ts';
 import { rankAndServe, type ServeContext } from '../../../lib/jobs/serve.ts';
 import { KEY, parseIndex } from '../../../lib/jobs/store.ts';
+import { placeFor } from '../../../lib/jobs/geo.ts';
 import { SOURCES, type SourceId } from '../../../lib/jobs/types.ts';
 import { clientIp, pipeline, redisConfig } from '../../../lib/redis.ts';
 
@@ -50,7 +51,8 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
       day,
       today: isoDay(body.today),
       profile,
-      want: Math.min(5, Math.max(1, Number(body.count) || 3)),
+      place: placeFor(profile.location ?? profile.identity.location, request.headers),
+      want: Math.min(10, Math.max(1, Number(body.count) || 10)),
       left,
       seen: new Set(Array.isArray(served) ? (served as string[]) : []),
       signal: request.signal,
@@ -72,7 +74,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
         } catch {}
       };
       try {
-        const queries = queriesFor(ctx.profile, { anywhere });
+        const queries = queriesFor(ctx.profile, { anywhere, place: ctx.place });
         const live = await liveSearch(redis, queries, (p) => send('progress', p));
         // A search that ran nothing new (not set up, or all reused) gives the day's search back.
         if (!live.searched.length) await quota.release().catch(() => {});

@@ -11,7 +11,7 @@ async function openCareer(page: Page) {
   const res = await page.goto('/career');
   const signedReq = await captured;
   await expect(page.locator('[data-usage-ready]')).toHaveCount(1);
-  await expect(page.locator('[data-usage="messages"] [data-left]')).toHaveText('10 of 10 left');
+  await expect(page.locator('[data-usage="messages"] [data-left]')).toHaveText('20 of 20 left');
   return { res: res!, signedReq, errors };
 }
 
@@ -232,7 +232,7 @@ test('"Delete everything" clears chats but keeps the device, so today\'s usage s
   await expect(page.locator('.cc-msg')).toHaveCount(0);
   await expect(page.locator('[data-welcome]')).toBeHidden();
   expect((await keyInfo(page)).deviceId).toBe(before);
-  await expect(page.locator('[data-usage="messages"] [data-left]')).toHaveText('9 of 10 left');
+  await expect(page.locator('[data-usage="messages"] [data-left]')).toHaveText('19 of 20 left');
 });
 
 test('phone: the rail is a panel the hamburger opens and Escape closes (no peek bar)', async ({ page }) => {

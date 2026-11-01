@@ -19,6 +19,8 @@ export type Job = {
   sourceUrl: string;
   attribution: { source: string; label: string };
   salary?: string;
+  /** Hiring time zones as UTC offsets, when the source gives them (Himalayas): a remote job's working-hours limit. */
+  timezones?: number[];
   snippet: string;
 };
 

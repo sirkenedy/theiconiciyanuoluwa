@@ -23,6 +23,7 @@ export function context(parts: {
   job?: { title?: string; company?: string; description: string } | null;
   answers?: { question: string; answer: string }[];
   jobs?: unknown[];
+  recent?: unknown[];
   summary?: string;
   today: string;
 }) {
@@ -34,6 +35,7 @@ export function context(parts: {
     parts.job ? `  <job>\n${asData([parts.job.title, parts.job.company].filter(Boolean).join(' · '))}\n${asData(parts.job.description)}\n  </job>` : '',
     parts.answers?.length ? `  <answers>${asData(JSON.stringify(parts.answers))}</answers>` : '',
     parts.jobs?.length ? `  <jobs>${asData(JSON.stringify(parts.jobs))}</jobs>` : '',
+    parts.recent?.length ? `  <recent_jobs>${asData(JSON.stringify(parts.recent))}</recent_jobs>` : '',
     parts.summary ? `  <summary>${asData(parts.summary)}</summary>` : '',
     `  <today>${parts.today}</today>`,
     '</context>',

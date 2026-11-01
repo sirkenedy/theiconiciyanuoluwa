@@ -88,7 +88,7 @@ export const BOARDS = { greenhouse, lever, ashby };
 
 // ---------- job boards ----------
 
-type HimalayasJob = { title: string; companyName: string; locationRestrictions?: string[]; pubDate: number; expiryDate?: number; applicationLink: string; guid: string; description?: string; minSalary?: number; maxSalary?: number; currency?: string };
+type HimalayasJob = { title: string; companyName: string; locationRestrictions?: string[]; timezoneRestrictions?: number[]; pubDate: number; expiryDate?: number; applicationLink: string; guid: string; description?: string; minSalary?: number; maxSalary?: number; currency?: string };
 /** Himalayas `pubDate` is the last update ("updated"). Apply uses `applicationLink` unchanged; expired jobs are dropped. */
 export async function himalayas(now = Date.now(), maxPages = 10): Promise<Fetched[]> {
   const out: Fetched[] = [];
@@ -107,7 +107,8 @@ export async function himalayas(now = Date.now(), maxPages = 10): Promise<Fetche
       if (j.expiryDate && j.expiryDate * 1000 < now) continue;
       const location = j.locationRestrictions?.length ? j.locationRestrictions.join(', ') : 'Worldwide';
       const salary = j.minSalary && j.maxSalary ? `${j.currency ?? ''} ${j.minSalary.toLocaleString('en')}–${j.maxSalary.toLocaleString('en')}`.trim() : undefined;
-      out.push(make('himalayas', j.guid.split('/').at(-1) ?? j.guid, { title: j.title, company: j.companyName, location, remote: true, time: { kind: 'updated', at }, applyUrl: j.applicationLink, sourceUrl: j.guid, salary }, j.description ?? ''));
+      const timezones = j.timezoneRestrictions?.filter((n) => Number.isFinite(n));
+      out.push(make('himalayas', j.guid.split('/').at(-1) ?? j.guid, { title: j.title, company: j.companyName, location, remote: true, time: { kind: 'updated', at }, applyUrl: j.applicationLink, sourceUrl: j.guid, salary, ...(timezones?.length ? { timezones } : {}) }, j.description ?? ''));
     }
     if (older || !data.nextCursor) break;
     cursor = data.nextCursor;
