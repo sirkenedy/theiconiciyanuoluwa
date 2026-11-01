@@ -247,3 +247,55 @@ test('phone: after tapping a starter in the panel, focus stays in the panel and 
   await page.keyboard.press('Escape');
   await expect(page.locator('.twin-panel')).toHaveCount(0);
 });
+
+test('phone: Harnie opens full screen with the input on the bottom edge, no caption under it, and Close back to the site', async ({ page }) => {
+  const { default: AxeBuilder } = await import('@axe-core/playwright');
+  await mockTwin(page, { tokens: ['I build AI products.'] });
+  for (const [width, height] of [[430, 932], [390, 844]] as const) {
+    await page.setViewportSize({ width, height });
+    await page.goto('/');
+    await page.evaluate(() => scrollTo({ top: 600, behavior: 'instant' }));
+    const launcher = page.locator('.twin-launcher').first();
+    await launcher.click();
+    const panel = page.locator('.twin-panel');
+    await expect(panel).toHaveAttribute('aria-modal', 'true');
+    await panel.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+    const fit = await page.evaluate(() => {
+      const p = document.querySelector('.twin-panel')!.getBoundingClientRect();
+      const form = document.querySelector('.twin-panel .twin-form')!.getBoundingClientRect();
+      return { top: p.top, left: p.left, right: p.right, bottom: p.bottom, formBottom: form.bottom, vw: innerWidth, vh: innerHeight };
+    });
+    expect([fit.top, fit.left, fit.right, fit.bottom]).toEqual([0, 0, fit.vw, fit.vh]);
+    expect(fit.formBottom).toBeGreaterThanOrEqual(fit.vh - 24);
+    // The caption lives in the header (one line) and once in the empty state, not under the input.
+    await expect(page.locator('.twin-panel__foot .twin-form__note')).toHaveCount(0);
+    await expect(page.locator('.twin-panel__sub')).toHaveText('AI twin · may be imperfect');
+    await expect(page.locator('.twin-starters__note')).toContainText('may be imperfect');
+    // A modal: the page behind is out of reach and doesn't scroll.
+    expect(await page.locator('main').evaluate((el) => !!el.closest('[inert]'))).toBe(true);
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflow)).toBe('hidden');
+
+    await page.locator('#twin-panel-input').fill('What do you build?');
+    await page.locator('#twin-panel-input').press('Enter');
+    await expect(panel.locator('.bubble--twin')).toContainText('I build AI products.');
+    await expect(page.locator('.twin-starters__note')).toHaveCount(0);
+    await expect(panel.locator('.twin-panel__foot .handoff')).toHaveCount(0);
+    await expect(panel.locator('.twin-panel__body .handoff')).toBeVisible();
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
+      const { violations } = await new AxeBuilder({ page }).include('.twin-panel').analyze();
+      expect(violations.map((v) => `${scheme} ${v.id}`)).toEqual([]);
+    }
+
+    const close = page.getByRole('button', { name: 'Close chat' });
+    await expect(close).toContainText('Close');
+    expect((await close.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await close.click();
+    await expect(panel).toHaveCount(0);
+    await expect(launcher).toBeFocused();
+    expect(await page.locator('main').evaluate((el) => !!el.closest('[inert]'))).toBe(false);
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflow)).not.toBe('hidden');
+    await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'no-preference' });
+    await page.evaluate(() => (localStorage.clear(), sessionStorage.clear())); // the next size starts a new chat
+  }
+});

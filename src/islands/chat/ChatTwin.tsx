@@ -78,6 +78,11 @@ function usePhone() {
 function Starters() {
   return (
     <div class="twin-starters">
+      {/* Phones: the caption under the input moves here, shown once on a new chat, so the composer keeps the room. */}
+      <p class="twin-starters__note">
+        <small>Harnie (AI twin) · answers from {twinData.firstName}'s résumé · may be imperfect</small>
+        <a href="#ai-twin-note" onClick={() => setState({ open: false })}>What gets logged?</a>
+      </p>
       <p class="twin-starters__hint">Ask about my work, or start here:</p>
       {twinData.faq.map((f) => (
         <button
@@ -297,15 +302,19 @@ export function Dock() {
   useLayoutEffect(() => {
     if (!s.open) return;
     input.current?.focus();
-    if (!prefersReducedMotion()) panel.current?.animate({ transform: ['scale(0.9) translateY(16px)', 'none'], opacity: [0, 1] }, { duration: 380, easing: SPRING });
+    const from = phone ? 'translateY(32px)' : 'scale(0.9) translateY(16px)';
+    if (!prefersReducedMotion()) panel.current?.animate({ transform: [from, 'none'], opacity: [0, 1] }, { duration: 380, easing: SPRING });
   }, [s.open]);
 
-  // On phones the keyboard covers the bottom of the layout viewport; expose its height as --kb so the sheet sits above it.
+  // On phones the panel fills the visible area: --kb-top/--kb follow visualViewport, so the input sits right above the keyboard.
   useEffect(() => {
     const vv = window.visualViewport;
     if (!s.open || !vv) return;
     const root = document.documentElement;
-    const update = () => root.style.setProperty('--kb', `${Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop))}px`);
+    const update = () => {
+      root.style.setProperty('--kb', `${Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop))}px`);
+      root.style.setProperty('--kb-top', `${Math.max(0, Math.round(vv.offsetTop))}px`);
+    };
     update();
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
@@ -313,8 +322,23 @@ export function Dock() {
       vv.removeEventListener('resize', update);
       vv.removeEventListener('scroll', update);
       root.style.removeProperty('--kb');
+      root.style.removeProperty('--kb-top');
     };
   }, [s.open]);
+
+  // Full screen on phones is a modal: the page behind stops scrolling and leaves the tab order until it closes.
+  useEffect(() => {
+    if (!s.open || !phone) return;
+    const root = document.documentElement;
+    const own = panel.current?.closest('body > *');
+    const behind = [...document.body.children].filter((el): el is HTMLElement => el !== own && el instanceof HTMLElement && !el.inert);
+    root.classList.add('twin-modal');
+    for (const el of behind) el.inert = true;
+    return () => {
+      root.classList.remove('twin-modal');
+      for (const el of behind) el.inert = false;
+    };
+  }, [s.open, phone]);
 
   useLayoutEffect(() => {
     const el = body.current;
@@ -324,6 +348,8 @@ export function Dock() {
   const close = () => {
     setState({ open: false });
     launcher.current?.focus();
+    // On phones the launcher is hidden under the open panel; focus it again once it's back.
+    requestAnimationFrame(() => launcher.current?.focus());
   };
 
   // Escape closes the panel wherever focus is (a tapped starter or the page itself), not only inside it.
@@ -362,15 +388,19 @@ export function Dock() {
           id="twin-panel"
           class="twin-panel"
           role="dialog"
-          aria-modal="false"
+          aria-modal={phone ? 'true' : 'false'}
           aria-labelledby="twin-panel-title"
         >
           <span class="twin-panel__handle" aria-hidden="true" onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={onHandleUp} />
           <div class="twin-panel__head">
             <Orb state={s.orb} size={32} />
-            <h2 id="twin-panel-title" class="twin-panel__title">Ask Harnie</h2>
+            <div class="twin-panel__titles">
+              <h2 id="twin-panel-title" class="twin-panel__title">Ask Harnie</h2>
+              <p class="twin-panel__sub">AI twin · may be imperfect</p>
+            </div>
             <button type="button" class="twin-panel__close" aria-label="Close chat" onClick={close}>
               <Glyph d="M6 6l12 12M18 6L6 18" />
+              <span class="twin-panel__close-text" aria-hidden="true">Close</span>
             </button>
           </div>
           <nav class="twin-mode" aria-label="Chat mode">
@@ -379,14 +409,17 @@ export function Dock() {
           </nav>
           <div ref={body} class="twin-panel__body twin-log" role="log" aria-live="off" aria-label="Conversation with Harnie">
             {s.messages.length ? <Conversation /> : <Starters />}
+            {phone && <Handoff />}
           </div>
           <div class="twin-panel__foot">
             <Composer inputRef={input} />
-            <p class="twin-form__note">
-              <small>Harnie (AI twin) · answers from {twinData.firstName}'s résumé · may be imperfect</small>
-              <a href="#ai-twin-note">What gets logged?</a>
-            </p>
-            <Handoff />
+            {!phone && (
+              <p class="twin-form__note">
+                <small>Harnie (AI twin) · answers from {twinData.firstName}'s résumé · may be imperfect</small>
+                <a href="#ai-twin-note">What gets logged?</a>
+              </p>
+            )}
+            {!phone && <Handoff />}
           </div>
         </div>
       )}
