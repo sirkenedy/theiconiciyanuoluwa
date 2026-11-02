@@ -257,3 +257,140 @@ test('if Ami wrongly picks a new search for jobs the visitor already has, the ap
   expect(reqs.some((r) => JSON.stringify(r.messages).includes('rank_jobs'))).toBe(false); // no new search
   await expect(page.locator('[data-usage="jobs"] [data-left]')).toHaveText('5 of 10 left');
 });
+
+test('tracker: eligibility badges, status on the card, calendar reminder, 7-day follow-up nudge, "my applications", this week', async ({ page, request }) => {
+  await request.post('http://localhost:4329/pipeline', {
+    headers: { authorization: 'Bearer test-token' },
+    data: [
+      ['SET', 'jobs:desc:greenhouse:sample:1', 'Build payments products. Visa sponsorship is available for this role.'],
+      ['SET', 'jobs:desc:greenhouse:sample:2', 'Applicants must be authorized to work in Nigeria without sponsorship.'],
+    ],
+  });
+  await withProfile(page);
+  await page.locator('.cc-suggest').getByRole('button', { name: 'Find jobs for me' }).click();
+  const pay = page.locator('.cc-job', { hasText: 'Product Manager, Payments' });
+  const health = page.locator('.cc-job', { hasText: 'Associate Product Manager' });
+  await expect(pay.locator('.cc-job__elig')).toHaveText('Sponsors visas');
+  await expect(pay.locator('.cc-job__elig')).toHaveClass(/is-open/);
+  await expect(health.locator('.cc-job__elig')).toHaveText('No visa sponsorship');
+  await expect(health.locator('.cc-job__elig')).toHaveClass(/is-limited/);
+  await expect(page.locator('.cc-job__elig')).toHaveCount(2); // the rest say nothing either way
+
+  // This week: counted on the device.
+  await expect(page.locator('[data-week-strip] [data-stat="found"] .cc-week__num')).toHaveText('5');
+
+  // Applied: saved too, dated, with a follow-up date and a calendar reminder.
+  await pay.getByLabel(/Application status/).selectOption('applied');
+  await expect(pay.locator('.cc-job__save')).toHaveAttribute('aria-pressed', 'true');
+  await expect(pay.locator('.cc-job__since')).toContainText('Applied today · follow up');
+  await expect(page.locator('[data-week-strip] [data-stat="applied"] .cc-week__num')).toHaveText('1');
+  const download = page.waitForEvent('download');
+  await pay.getByRole('button', { name: 'Add reminder to my calendar' }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe('follow-up-sample-pay.ics');
+  const ics = (await (await import('node:fs/promises')).readFile(await file.path())).toString();
+  expect(ics).toContain('BEGIN:VEVENT');
+  expect(ics).toContain('SUMMARY:Follow up: Product Manager\\, Payments at Sample Pay');
+  expect(ics).toMatch(/DTSTART;VALUE=DATE:\d{8}/);
+  await expect(page.locator('[data-nudge]')).toBeHidden(); // not due yet
+
+  // "show my applications": the tracked cards, no AI call.
+  await request.post(`${CLAUDE}/__reset`);
+  await page.locator('#cc-input').fill('show my applications');
+  await page.locator('#cc-input').press('Enter');
+  await expect(page.locator('.cc-jobs__intro').last()).toHaveText('Your 1 application, newest first:');
+  expect(((await (await request.get(`${CLAUDE}/__requests`)).json()) as unknown[]).length).toBe(0);
+
+  // Eight days later, no reply: Ami nudges.
+  const now = Date.now();
+  await page.clock.setFixedTime(now + 8 * 86_400_000);
+  await page.reload();
+  const nudge = page.locator('[data-nudge]');
+  await expect(nudge).toBeVisible();
+  await expect(nudge).toContainText('You applied to Product Manager, Payments at Sample Pay 8 days ago.');
+  await nudge.getByRole('button', { name: 'Remind me in 3 days' }).click();
+  await expect(nudge).toBeHidden();
+  await page.clock.setFixedTime(now + 12 * 86_400_000);
+  await page.reload();
+  await expect(nudge).toBeVisible();
+  await expect(nudge).toContainText('12 days ago');
+  await nudge.getByRole('button', { name: 'I heard back' }).click();
+  await expect(nudge).toBeHidden();
+  await page.locator('.cc-jobs__intro').last().waitFor();
+  await expect(page.locator('.cc-job', { hasText: 'Product Manager, Payments' }).last().getByLabel(/Application status/)).toHaveValue('interview');
+});
+
+test('the follow-up nudge writes the email in chat; dismissing hides it for the day', async ({ page }) => {
+  await withProfile(page);
+  await page.locator('.cc-suggest').getByRole('button', { name: 'Find jobs for me' }).click();
+  await page.locator('.cc-job').first().getByLabel(/Application status/).selectOption('applied');
+  await expect(page.locator('.cc-job').first().locator('.cc-job__since')).toBeVisible();
+  const now = Date.now();
+  await page.clock.setFixedTime(now + 8 * 86_400_000);
+  await page.reload();
+  const nudge = page.locator('[data-nudge]');
+  await expect(nudge).toBeVisible();
+  await nudge.getByRole('button', { name: 'Hide follow-up reminders for today' }).click();
+  await expect(nudge).toBeHidden();
+  await page.reload();
+  await expect(page.locator('.cc-msgs')).toBeVisible();
+  await expect(nudge).toBeHidden(); // dismissed for that day
+  await page.evaluate(() => localStorage.removeItem('cc-nudge-dismissed'));
+  await page.clock.setFixedTime(now);
+  await page.reload();
+  await expect(nudge).toBeHidden(); // back to today: not due
+  await page.clock.setFixedTime(now + 8 * 86_400_000);
+  await page.reload();
+  await expect(nudge).toBeVisible();
+  await page.clock.setFixedTime(now); // the chat request needs today's date
+  await nudge.getByRole('button', { name: 'Write a follow-up' }).click();
+  await expect(nudge).toBeHidden();
+  await expect(page.locator('.cc-msg--user').last()).toContainText(/Write a short follow-up email for my application to the .+ role at .+\. I applied 8 days ago/);
+  await expect(page.locator('.cc-msg--coach:not(.is-live) .cc-msg__text').last()).not.toBeEmpty();
+});
+
+test('"Your week" on the new-chat screen: a weekly goal ring, tappable stats, and interview prep from a tracked interview', async ({ page }) => {
+  await withProfile(page);
+  await page.locator('[data-new-chat]').click();
+  const strip = page.locator('[data-week-strip]');
+  await expect(strip).toBeVisible();
+  await expect(strip.locator('.cc-week__stat')).toHaveCount(4); // found, saved, applied, interviews
+  await expect(strip).toContainText('Weekly goal: how many jobs will you apply to?');
+  await expect(strip.getByRole('group', { name: 'Weekly goal: how many jobs will you apply to?' }).getByRole('button')).toHaveText(['3 jobs', '5 jobs', '10 jobs']);
+  await strip.getByRole('button', { name: '5 jobs' }).click();
+  await expect(strip.locator('.cc-goal__text')).toContainText('0 of 5 applications5 to go this week');
+  await expect(page.locator('[data-week]')).toHaveCount(0); // not in the sidebar
+
+  // "0 jobs found" is a shortcut to finding jobs.
+  await strip.locator('[data-stat="found"] button').click();
+  await expect(page.locator('.cc-job')).toHaveCount(5);
+  const first = page.locator('.cc-job').first();
+  await first.getByLabel(/Application status/).selectOption('applied');
+  await expect(page.locator('[data-welcome]')).toContainText('1 of 5 this week.');
+
+  await page.locator('[data-new-chat]').click();
+  await expect(strip.locator('.cc-goal__text')).toContainText('1 of 5 applications');
+  await expect(strip.locator('[data-stat="applied"] .cc-week__num')).toHaveText('1');
+  await expect(strip.locator('[data-stat="found"] .cc-week__num')).toHaveText('5');
+  await strip.locator('[data-stat="applied"] button').click();
+  await expect(page.locator('.cc-jobs__intro').last()).toHaveText('Your 1 application, newest first:');
+
+  // Heard back: the card offers interview prep, and "interviews" lists it.
+  const tracked = page.locator('.cc-job').last();
+  await tracked.getByLabel(/Application status/).selectOption('interview');
+  await expect(tracked.getByRole('button', { name: 'Interview prep' })).toBeVisible();
+  await page.locator('[data-new-chat]').click();
+  await expect(strip.locator('[data-stat="interview"] .cc-week__num')).toHaveText('1');
+  await strip.locator('[data-stat="interview"] button').click();
+  await expect(page.locator('.cc-jobs__intro').last()).toHaveText('Your 1 interview. Tap Interview prep on a card for a guide.');
+  await page.locator('.cc-job').last().getByRole('button', { name: 'Interview prep' }).click();
+  await expect(page.locator('.cc-msg--user').last()).toContainText(/Prep me for my .+ interview at .+\.$/);
+
+  // Goal reached, and the goal can be changed.
+  await page.locator('[data-new-chat]').click();
+  await strip.getByRole('button', { name: 'Change goal' }).click();
+  await strip.getByRole('button', { name: '3 jobs' }).click();
+  await expect(strip.locator('.cc-goal__text')).toContainText('1 of 3 applications');
+  await page.reload();
+  await expect(strip.locator('.cc-goal__text')).toContainText('1 of 3 applications');
+});

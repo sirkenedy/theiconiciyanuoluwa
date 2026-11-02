@@ -111,6 +111,11 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
         <span><strong>Taking a breather until tomorrow.</strong> Today's free coaching is used up. Your chats and résumé are saved on this device, and <a href="/">Ask about {firstName}</a> still works.</span>
         <button class="cc-icon-btn cc-breather__close" type="button" data-breather-close aria-label="Dismiss this notice"><Icon name="close" size={18} /></button>
       </div>
+      <div class="cc-nudge" data-nudge role="status" hidden>
+        <span class="cc-nudge__tile tile--mint" aria-hidden="true"><Icon name="mail" size={18} /></span>
+        <div class="cc-nudge__body" data-nudge-body></div>
+        <button class="cc-icon-btn cc-nudge__close" type="button" data-nudge-close aria-label="Hide follow-up reminders for today"><Icon name="close" size={18} /></button>
+      </div>
       <div class="cc-log" data-log>
         <div class="cc-scroll" data-scroll>
 
@@ -139,6 +144,17 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
                 <a class="cc-consent-link" href="/career/privacy">How it works</a>
               </div>
             </div>
+
+            <section class="cc-week-strip" aria-labelledby="cc-week-strip-title" data-week-strip hidden>
+              <div class="cc-week-strip__head">
+                <h3 id="cc-week-strip-title" class="label cc-week-strip__label">Your week</h3>
+                <span data-goal-change></span>
+              </div>
+              <div class="cc-week-strip__body">
+                <div data-goal></div>
+                <ul class="cc-week" role="list" data-week-list></ul>
+              </div>
+            </section>
 
             <ul class="cc-starters" role="list">
               {

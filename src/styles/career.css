@@ -661,6 +661,9 @@ a.cc-rail__portfolio { display: none; }
   font-weight: 700;
 }
 .cc-job__salary { background: var(--bg); font-weight: 500; }
+.cc-job__elig { padding: 4px 10px; border-radius: var(--r-pill); color: var(--ink); font-size: var(--fs-meta); font-weight: 700; }
+.cc-job__elig.is-open { background: color-mix(in srgb, var(--lilac) 40%, var(--surface)); }
+.cc-job__elig.is-limited { background: color-mix(in srgb, var(--peach) 40%, var(--surface)); }
 .cc-job__via {
   align-self: flex-start;
   display: inline-flex;
@@ -702,6 +705,157 @@ a.cc-job__btn::after { content: '↗'; margin-left: 6px; }
 .cc-job__save { margin-left: auto; }
 .cc-job__save[aria-pressed='true'] { background: color-mix(in srgb, var(--lilac) 35%, var(--surface)); }
 .cc-job__save[aria-pressed='true'] svg path { fill: currentColor; }
+
+/* Application tracker: a status pill on every card, the date, and a calendar reminder while they wait. */
+.cc-job__track { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); padding-top: var(--s-3); border-top: 1px dashed var(--line); font-size: var(--fs-label); }
+.cc-job__status { position: relative; display: inline-flex; }
+.cc-job__status select {
+  min-height: var(--tap);
+  padding: 0 40px 0 18px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  appearance: none;
+  cursor: pointer;
+}
+.cc-job__status::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 18px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+.cc-job__status select:focus-visible { outline: 2px solid var(--lilac-deep); outline-offset: 3px; }
+.cc-job__status[data-status='applied'] select { background: color-mix(in srgb, var(--lilac) 40%, var(--surface)); box-shadow: var(--ledge-sm) var(--lilac-ledge); }
+.cc-job__status[data-status='interview'] select { background: color-mix(in srgb, var(--mint) 45%, var(--surface)); box-shadow: var(--ledge-sm) var(--mint-ledge); }
+.cc-job__status[data-status='offer'] select { background: color-mix(in srgb, var(--butter) 50%, var(--surface)); box-shadow: var(--ledge-sm) var(--butter-ledge); }
+.cc-job__status[data-status='rejected'] select { background: var(--surface-alt); }
+.cc-job__since { color: var(--ink-muted); }
+.cc-job__cal { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); margin-left: auto; }
+
+/* Follow-up nudge: sits atop the chat like the breather notice. */
+.cc-nudge {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  margin: var(--s-4) var(--s-6) 0;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--mint) 22%, var(--surface));
+  box-shadow: var(--ledge-sm) var(--mint-ledge);
+}
+.cc-nudge[hidden] { display: none; }
+.cc-nudge__tile { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: var(--r-sm); color: var(--on-pastel); }
+.cc-nudge__body { display: flex; flex: 1; flex-direction: column; gap: var(--s-2); min-width: 0; padding-top: var(--s-2); }
+.cc-nudge__btns { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.cc-nudge__btn { min-height: var(--tap); padding: 0 var(--s-4); background: var(--bg); color: var(--ink); font-size: var(--fs-label); box-shadow: none; }
+.cc-nudge__btn.btn--primary { background: var(--btn-primary-bg); color: var(--btn-primary-fg); box-shadow: var(--ledge-sm) var(--btn-primary-ledge); }
+.cc-nudge__close { flex: none; }
+
+/* "Your week" on the new-chat screen: a goal ring and one row of tappable stat pills. */
+.cc-week-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  width: 100%;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--ledge-sm) var(--line);
+  text-align: left;
+}
+.cc-week-strip[hidden] { display: none; }
+.cc-week-strip__head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); min-height: 24px; }
+.cc-week-strip__label { margin: 0; }
+.cc-week-strip__body { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+.cc-week { display: flex; flex-wrap: wrap; gap: var(--s-2); margin: 0 0 0 auto; padding: 0; }
+.cc-week__stat { display: flex; }
+.cc-week__go {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-height: var(--tap);
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-label);
+  white-space: nowrap;
+  line-height: var(--tap);
+  box-shadow: 0 2px 0 var(--line);
+  cursor: pointer;
+  transition: transform var(--dur-2) var(--ease-spring);
+}
+.cc-week__go:hover { transform: translateY(-2px); }
+.cc-week__go:active { transform: translateY(2px); }
+.cc-week__go:focus-visible { outline: 2px solid var(--lilac-deep); outline-offset: 3px; }
+.cc-week__stat[data-stat='applied'] .cc-week__go { background: color-mix(in srgb, var(--lilac) 30%, var(--surface)); box-shadow: 0 2px 0 var(--lilac-ledge); }
+.cc-week__stat[data-stat='interview'] .cc-week__go { background: color-mix(in srgb, var(--mint) 35%, var(--surface)); box-shadow: 0 2px 0 var(--mint-ledge); }
+.cc-week__num { font-family: var(--font-display); font-size: var(--fs-body); font-weight: 800; }
+.cc-week__label { color: var(--ink); }
+
+/* Weekly goal: a picker, then a clay ring that fills with each application. */
+.cc-goal { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); }
+.cc-goal__ring {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: conic-gradient(var(--lilac-deep) calc(var(--p, 0) * 360deg), var(--surface-alt) 0);
+  box-shadow: 0 2px 0 var(--lilac-ledge);
+}
+.cc-goal__ring::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: var(--surface); }
+.cc-goal.is-done .cc-goal__ring { background: var(--mint-deep); box-shadow: 0 2px 0 var(--mint-ledge); }
+.cc-goal__text { display: flex; flex-direction: column; font-size: var(--fs-label); line-height: 1.3; }
+.cc-goal__text span { color: var(--ink-muted); font-size: var(--fs-meta); }
+.cc-goal__change { display: inline-flex; align-items: center; min-height: var(--tap); margin-block: -10px; font-size: var(--fs-meta); }
+.cc-goal__ask { font-size: var(--fs-label); font-weight: 700; }
+.cc-goal__pick { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.cc-goal__opt {
+  min-height: var(--tap);
+  padding: 0 var(--s-4);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-label);
+  font-weight: 700;
+  box-shadow: 0 2px 0 var(--line);
+  cursor: pointer;
+  transition: transform var(--dur-2) var(--ease-spring);
+}
+.cc-goal__opt:hover { transform: translateY(-2px); }
+.cc-goal__opt:active { transform: translateY(2px); }
+.cc-goal__opt[aria-pressed='true'] { background: var(--lilac); color: var(--on-pastel); box-shadow: 0 2px 0 var(--lilac-ledge); }
+[data-goal]:has(.is-picking) { flex: 1 1 100%; }
+.cc-week-strip__body:has(.is-picking) .cc-week { margin-left: 0; }
+@media (max-width: 560px) {
+  .cc-week { display: grid; grid-template-columns: 1fr 1fr; width: 100%; margin-left: 0; }
+  .cc-week__go { justify-content: center; width: 100%; }
+}
+@media (max-width: 760px) {
+  .cc-nudge { margin: var(--s-3) var(--s-4) 0; padding: var(--s-3); }
+  .cc-nudge__tile { display: none; }
+  .cc-nudge { position: relative; }
+  .cc-nudge__close { position: absolute; top: var(--s-1); right: var(--s-1); }
+  .cc-nudge__text { padding-right: 40px; }
+  .cc-nudge__btns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
+  .cc-nudge__btn { justify-content: center; padding: 0 var(--s-2); font-size: var(--fs-meta); }
+  .cc-nudge__btn.btn--primary { grid-column: 1 / -1; }
+  .cc-job__cal { margin-left: 0; }
+}
 
 .cc-jobs__left {
   display: flex;
@@ -896,14 +1050,15 @@ a.cc-job__btn::after { content: '↗'; margin-left: 6px; }
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(380px, 1fr);
     /* Notices (welcome back, breather) on top of the chat column, then the conversation, then the composer. */
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
     column-gap: var(--s-6);
     padding-right: var(--s-6);
   }
   .cc.has-preview .cc-welcome { grid-column: 1; grid-row: 1; }
   .cc.has-preview .cc-breather { grid-column: 1; grid-row: 2; max-width: 640px; }
-  .cc.has-preview .cc-log { grid-column: 1; grid-row: 3; }
-  .cc.has-preview .cc-dock { grid-column: 1; grid-row: 4; }
+  .cc.has-preview .cc-nudge { grid-column: 1; grid-row: 3; max-width: 640px; }
+  .cc.has-preview .cc-log { grid-column: 1; grid-row: 4; }
+  .cc.has-preview .cc-dock { grid-column: 1; grid-row: 5; }
   /* Stretch to the column and scroll inside it: a long résumé must never make the page itself scroll. */
   .cc.has-preview .cc-main { overflow: hidden; }
   .cc.has-preview .cc-preview { grid-column: 2; grid-row: 1 / -1; align-self: stretch; min-height: 0; margin-block: var(--s-6); overflow-y: auto; overscroll-behavior: contain; }

@@ -66,17 +66,29 @@ export const RANK_JSON_SCHEMA = obj({
 });
 
 /** A job card as the visitor sees it (and as the chat may reference it). */
-export type RankedJob = import('../jobs/types.ts').Job & { fit: number; why: string[]; gaps: string[] };
+export type RankedJob = import('../jobs/types.ts').Job & { fit: number; why: string[]; gaps: string[]; eligibility?: import('../jobs/eligibility.ts').Eligibility };
 export const MIN_FIT = 55;
 
 /** Compact job context for the chat: what's on screen, so "why is X the top match?" can be answered. */
 /** Jobs the visitor saved (any time, any chat). */
+/** Times are "YYYY-MM-DD HH:MM" UTC. `status`/`applied`: where their application is, from the tracker on their device. */
+const stamp = z.string().regex(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
 export const SavedJobsSchema = z
-  .array(z.object({ title: z.string().max(200), company: z.string().max(200), location: z.string().max(200), fit: z.number().int().min(0).max(100), saved: z.boolean(), source: z.string().max(40) }))
+  .array(
+    z.object({
+      title: z.string().max(200),
+      company: z.string().max(200),
+      location: z.string().max(200),
+      fit: z.number().int().min(0).max(100),
+      saved: z.boolean(),
+      source: z.string().max(40),
+      status: z.enum(['applied', 'interview', 'offer', 'rejected']).nullable().optional(),
+      applied: stamp.nullable().optional(),
+    }),
+  )
   .max(25);
 
-/** Jobs shown in the last 7 days (any chat), newest first, with when "Open job" was clicked. Times are "YYYY-MM-DD HH:MM" UTC. */
-const stamp = z.string().regex(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+/** Jobs shown in the last 7 days (any chat), newest first, with when "Open job" was clicked. */
 export const RecentJobsSchema = z
   .array(z.object({ title: z.string().max(200), company: z.string().max(200), location: z.string().max(200), fit: z.number().int().min(0).max(100), shown: stamp, opened: stamp.nullable(), source: z.string().max(40) }))
   .max(25);
@@ -117,7 +129,7 @@ export const MATCH_KINDS = ['strong', 'added', 'missing'] as const;
  */
 export const ToolCallSchema = z.discriminatedUnion('name', [
   z.object({ name: z.literal('find_jobs'), input: z.object({ anywhere: z.boolean().optional() }) }),
-  z.object({ name: z.literal('show_jobs'), input: z.object({ which: z.enum(['saved', 'recent']) }) }),
+  z.object({ name: z.literal('show_jobs'), input: z.object({ which: z.enum(['saved', 'recent', 'applied']) }) }),
   z.object({
     name: z.literal('prep_guide'),
     input: z.object({ job: z.enum(['pasted', 'current', 'none']), instructions: z.string().max(1000).nullable().optional(), title: z.string().max(200).nullable().optional(), company: z.string().max(200).nullable().optional() }),
@@ -142,8 +154,8 @@ export const CHAT_TOOLS = [
   },
   {
     name: 'show_jobs',
-    description: 'Show job CARDS (with apply links, tailor and cover-letter buttons) for jobs the visitor already has: "saved" = jobs they saved, "recent" = jobs shown to them in the last 7 days. Use when they want to see, get or open those jobs as cards. Free: no new search.',
-    input_schema: { type: 'object', properties: { which: { type: 'string', enum: ['saved', 'recent'] } }, required: ['which'], additionalProperties: false },
+    description: 'Show job CARDS (with apply links, tailor and cover-letter buttons) for jobs the visitor already has: "saved" = jobs they saved, "recent" = jobs shown to them in the last 7 days, "applied" = jobs they are tracking as applied, interviewing, offer or not selected. Use when they want to see, get or open those jobs as cards. Free: no new search.',
+    input_schema: { type: 'object', properties: { which: { type: 'string', enum: ['saved', 'recent', 'applied'] } }, required: ['which'], additionalProperties: false },
   },
   {
     name: 'prep_guide',

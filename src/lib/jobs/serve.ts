@@ -7,6 +7,7 @@ import { overBudget, recordSpend } from '../career/spend.ts';
 import { MIN_FIT, RANK_JSON_SCHEMA, RankSchema, type RankedJob } from '../career/types.ts';
 import { pipeline, type Redis } from '../redis.ts';
 import type { Place } from './geo.ts';
+import { eligibility } from './eligibility.ts';
 import { candidates, type Tier } from './select.ts';
 import { DEMAND, DEMAND_LAST, KEY, SERVED_TTL_S, demandRoles } from './store.ts';
 import type { Job } from './types.ts';
@@ -74,12 +75,16 @@ export async function serve(ctx: ServeContext, ranked: RankedJob[], tier: Tier |
   }
   const quota = await take(redis, deviceId, ctx.ip, day, 'jobs', now.length);
   if (!quota.ok) return { ok: true, body: { jobs: [], left: 0, reason: 'limit' } };
-  await pipeline(redis, [
+  const [, , , descriptions] = await pipeline(redis, [
     ['SADD', KEY.served(deviceId), ...now.map((j) => j.id)],
     ['EXPIRE', KEY.served(deviceId), SERVED_TTL_S],
     rest.length ? ['SET', pendingKey(deviceId, day), JSON.stringify(rest), 'EX', PENDING_TTL_S] : ['DEL', pendingKey(deviceId, day)],
+    ['MGET', ...now.map((j) => KEY.description(j.id))],
   ]);
-  return { ok: true, body: { jobs: now, left: ctx.left - now.length, more: Math.min(rest.length, ctx.left - now.length), tier: tier ? TIER_NAMES[tier] : undefined } };
+  // Who can apply, from the full posting (the snippet when it has expired): "Sponsors visas", "Citizens or PR only"…
+  const texts = (descriptions as (string | null)[] | null) ?? [];
+  const served = now.map((j, i) => ({ ...j, eligibility: eligibility(`${j.title}\n${j.location}\n${texts[i] ?? j.snippet}`) }));
+  return { ok: true, body: { jobs: served, left: ctx.left - now.length, more: Math.min(rest.length, ctx.left - now.length), tier: tier ? TIER_NAMES[tier] : undefined } };
 }
 
 /** One batched ranking call: structured output, zod-checked, one retry with the error. */

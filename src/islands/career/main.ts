@@ -110,6 +110,9 @@ const rail = $<HTMLElement>('[data-rail]');
 const railBody = $<HTMLElement>('.cc-rail__body');
 const drop = $<HTMLElement>('.cc-drop__zone');
 const breatherBox = $<HTMLElement>('[data-breather]');
+const nudgeBox = $<HTMLElement>('[data-nudge]');
+const nudgeBody = $<HTMLElement>('[data-nudge-body]');
+const weekStrip = $<HTMLElement>('[data-week-strip]');
 
 /** Today's global AI budget is spent: a friendly resting state until midnight UTC; nothing on the device is lost. */
 /** Dismissed notices stay hidden for the rest of that day (this browser only); the composer stays paused. */
@@ -135,6 +138,126 @@ $<HTMLButtonElement>('[data-breather-close]').addEventListener('click', () => {
   breatherBox.hidden = true;
   input.focus();
 });
+$<HTMLButtonElement>('[data-nudge-close]').addEventListener('click', () => {
+  try {
+    localStorage.setItem(NUDGE_KEY, localDay());
+  } catch {}
+  nudgeBox.hidden = true;
+  input.focus();
+});
+
+// ---------- this week: progress from what's on this device (no server, no AI) ----------
+// The week starts on Monday (local time). Shown on the new-chat screen (where people look every visit) and in the rail;
+// every number is a shortcut to those jobs, and a weekly applications goal gives the numbers a meaning.
+type Goal = { perWeek: number };
+let goal: Goal | null = null;
+let goalEditing = false;
+const GOALS = [3, 5, 10];
+let weekTimer: ReturnType<typeof setTimeout> | undefined;
+const scheduleWeek = () => {
+  clearTimeout(weekTimer);
+  weekTimer = setTimeout(renderWeek, 300);
+};
+function weekStart(now = Date.now()) {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d.getTime();
+}
+type Stat = { key: string; n: number; label: string; go: () => unknown; hint: string };
+async function weekStats(): Promise<Stat[]> {
+  const since = weekStart();
+  const [all, savedJobs] = await Promise.all([vault.list<Message>('messages'), vault.list<RankedJob & { savedAt?: number }>('savedJobs')]);
+  const recent = all.filter((m) => m.at >= since);
+  const found = new Set(recent.filter((m) => m.kind === 'jobs' && !m.recalled).flatMap((m) => (m.jobs ?? []).map((j) => j.id))).size;
+  const tracks = Object.values(tracker);
+  const interviews = tracks.filter((t) => (t.status === 'interview' || t.status === 'offer') && t.at >= since).length;
+  const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+  return [
+    { key: 'found', n: found, label: 'found', go: () => (found ? showJobs('recent', "Show the jobs I've found this week") : findJobs()), hint: found ? 'Show them' : 'Find jobs' },
+    { key: 'saved', n: savedJobs.filter((j) => (j.savedAt ?? 0) >= since).length, label: 'saved', go: () => showJobs('saved', 'Show my saved jobs'), hint: 'Show saved jobs' },
+    { key: 'applied', n: tracks.filter((t) => t.applied >= since).length, label: 'applied', go: () => showJobs('applied', 'Show my applications'), hint: 'Show applications' },
+    { key: 'interview', n: interviews, label: plural(interviews, 'interview', 'interviews'), go: () => showJobs('interviews', 'Show my interviews'), hint: 'Show interviews' },
+  ];
+}
+
+function statNode(st: Stat) {
+  const li = el('li', 'cc-week__stat');
+  li.dataset.stat = st.key;
+  const b = button('', 'cc-week__go', () => {
+    if (busy) return;
+    if (phone.matches) setSheet(false);
+    st.go();
+  });
+  // The visible words lead the accessible name ("2 applied"), then what a tap does.
+  b.replaceChildren(el('strong', 'cc-week__num', String(st.n)), document.createTextNode(' '), el('span', 'cc-week__label', st.label), el('span', 'sr-only', ` this week: ${st.hint.toLowerCase()}`));
+  li.append(b);
+  return li;
+}
+
+/** The goal: a picker until one is set, then a clay ring that fills with each application. */
+function goalNode(applied: number) {
+  const box = el('div', 'cc-goal');
+  if (!goal || goalEditing) {
+    box.classList.add('is-picking');
+    const ask = el('span', 'cc-goal__ask', 'Weekly goal: how many jobs will you apply to?');
+    ask.id = 'cc-goal-ask';
+    const pick = el('div', 'cc-goal__pick');
+    pick.setAttribute('role', 'group');
+    pick.setAttribute('aria-labelledby', 'cc-goal-ask');
+    for (const n of GOALS) {
+      const b = button(`${n} jobs`, 'cc-goal__opt', () => setGoal(n));
+      b.setAttribute('aria-pressed', String(goal?.perWeek === n));
+      pick.append(b);
+    }
+    box.append(ask, pick);
+    return box;
+  }
+  const done = Math.min(applied, goal.perWeek);
+  const ring = el('span', 'cc-goal__ring');
+  ring.style.setProperty('--p', String(done / goal.perWeek)); // CSSOM: allowed by the CSP
+  ring.setAttribute('aria-hidden', 'true');
+  const left = goal.perWeek - applied;
+  const text = el('span', 'cc-goal__text');
+  text.append(
+    el('strong', undefined, left <= 0 ? 'Weekly goal reached' : `${applied} of ${goal.perWeek} applications`),
+    el('span', undefined, left <= 0 ? 'Nice work. Anything more is a bonus.' : `${left} to go this week`),
+  );
+  if (left <= 0) box.classList.add('is-done');
+  box.append(ring, text);
+  return box;
+}
+
+async function setGoal(n: number) {
+  goal = { perWeek: n };
+  goalEditing = false;
+  await vault.put('meta', 'goal', goal);
+  await renderWeek();
+  announce(`Weekly goal set: ${n} applications.`);
+}
+
+async function renderWeek() {
+  weekStrip.hidden = !stored;
+  if (!stored) return;
+  const stats = await weekStats();
+  const applied = stats.find((x) => x.key === 'applied')!.n;
+  $<HTMLElement>('[data-week-list]', weekStrip).replaceChildren(...stats.map(statNode));
+  $<HTMLElement>('[data-goal]', weekStrip).replaceChildren(goalNode(applied));
+  const change = $<HTMLElement>('[data-goal-change]', weekStrip);
+  change.replaceChildren();
+  if (goal) change.append(button(goalEditing ? 'Cancel' : 'Change goal', 'cc-link cc-goal__change', () => ((goalEditing = !goalEditing), renderWeek())));
+}
+
+/** A short confirmation that floats over the chat (the "welcome back" spot), then steps away. */
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+function toast(strong: string, rest: string) {
+  const text = welcome.lastElementChild!;
+  text.replaceChildren(el('strong', undefined, strong), document.createTextNode(` ${rest}`));
+  welcome.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (welcome.hidden = true), 3500);
+}
+
 async function isBreather(res: Response | null) {
   if (res?.status !== 503) return false;
   const { error } = (await res.clone().json().catch(() => ({}))) as { error?: string };
@@ -157,6 +280,13 @@ function setBusy(on: boolean) {
   send?.setAttribute('aria-disabled', String(on));
 }
 let saved = new Set<string>();
+/** Application tracker, on this device only: jobId → where the application is, and when to nudge a follow-up. */
+type Status = 'applied' | 'interview' | 'offer' | 'rejected';
+type Track = { status: Status; at: number; applied: number; remind: number | null };
+let tracker: Record<string, Track> = {};
+const STATUS_LABELS: Record<Status, string> = { applied: 'Applied', interview: 'Interviewing', offer: 'Offer', rejected: 'Not selected' };
+const FOLLOW_UP_MS = 7 * 86_400_000;
+const DAY_MS = 86_400_000;
 
 const uid = () => crypto.randomUUID();
 const current = () => conversations.find((c) => c.id === state.current) ?? null;
@@ -307,6 +437,7 @@ function renderResumeCard() {
   const text = $<HTMLElement>('.cc-resume__text');
   const btns = $<HTMLElement>('[data-resume-actions]');
   cc.toggleAttribute('data-has-resume', !!stored);
+  if ((vault as Vault | undefined) !== undefined) scheduleWeek();
   if (!stored) {
     text.replaceChildren(el('strong', undefined, 'No résumé yet'), el('span', undefined, "Upload one and I'll build your profile."));
     btns.replaceChildren(button('Upload résumé', 'btn btn--secondary cc-card__btn', pickFile));
@@ -333,7 +464,7 @@ async function openProfileEditor() {
 
 // ---------- jobs ----------
 const TONES = ['peach', 'mint', 'butter', 'lilac'];
-const ICONS = { wand: 'M5 19L15 9M14 5v2M19 10h-2M17.5 6.5l-1.4 1.4M11 4.5l.5 1M19.5 13l-1 .5', pen: 'M4 20h4L19 9l-4-4L4 16zM13 7l4 4', bookmark: 'M7 4h10v16l-5-4-5 4z' };
+const ICONS = { sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z', calendar: 'M5 6h14v14H5zM5 10h14M9 3v4M15 3v4', wand: 'M5 19L15 9M14 5v2M19 10h-2M17.5 6.5l-1.4 1.4M11 4.5l.5 1M19.5 13l-1 .5', pen: 'M4 20h4L19 9l-4-4L4 16zM13 7l4 4', bookmark: 'M7 4h10v16l-5-4-5 4z' };
 
 function icon(d: string) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -385,6 +516,7 @@ function jobCard(job: RankedJob, i: number) {
   meta.append(el('span', undefined, (job.remote ? [job.company] : [job.company, job.location]).filter(Boolean).join(' · ')));
   if (job.remote) meta.append(el('span', 'cc-job__remote', `Remote · ${!job.location.trim() || /\b(worldwide|anywhere|global|all countries)\b/i.test(job.location) ? 'Worldwide' : job.location}`));
   if (job.salary) meta.append(el('span', 'cc-job__salary', job.salary));
+  if (job.eligibility) meta.append(el('span', `cc-job__elig is-${job.eligibility.kind}`, job.eligibility.label));
   who.append(el('h2', 'cc-job__title', job.title), meta, link(job.attribution.label, job.sourceUrl, 'cc-job__via'));
   const side = el('div', 'cc-job__side');
   const fresh = Date.now() - job.time.at <= 3600_000;
@@ -421,23 +553,172 @@ function jobCard(job: RankedJob, i: number) {
     open,
     withIcon(save, ICONS.bookmark),
   );
-  card.append(head, panels, actions);
+  card.append(head, panels, actions, trackRow(job));
   return card;
 }
 
 async function toggleSave(job: RankedJob, on = !saved.has(job.id)) {
   if (on) {
     saved.add(job.id);
-    await vault.put('savedJobs', job.id, job);
+    await vault.put('savedJobs', job.id, { ...job, savedAt: Date.now() });
   } else {
     saved.delete(job.id);
     await vault.removeRecord('savedJobs', job.id);
+    // An unsaved job leaves the tracker too: nothing is kept about it.
+    if (tracker[job.id]) {
+      delete tracker[job.id];
+      await vault.put('meta', 'tracker', tracker);
+      refreshTrack(job);
+      renderNudge();
+    }
   }
+  scheduleWeek();
   for (const b of msgsEl.querySelectorAll<HTMLButtonElement>(`[data-job="${CSS.escape(job.id)}"] .cc-job__save`)) {
     b.replaceChildren(icon(ICONS.bookmark), document.createTextNode(on ? 'Saved' : 'Save'));
     b.setAttribute('aria-pressed', String(on));
   }
   announce(on ? `Saved ${job.title}.` : `Removed ${job.title} from saved jobs.`);
+}
+
+// ---------- application tracker ----------
+function trackRow(job: RankedJob) {
+  const row = el('div', 'cc-job__track');
+  row.dataset.track = job.id;
+  const t = tracker[job.id];
+  const label = el('label', 'cc-job__status');
+  const sel = document.createElement('select');
+  sel.setAttribute('aria-label', `Application status: ${job.title} at ${job.company}`);
+  for (const [value, text] of [['', 'Not applied yet'], ...Object.entries(STATUS_LABELS)] as [string, string][]) {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = text;
+    o.selected = (t?.status ?? '') === value;
+    sel.append(o);
+  }
+  sel.addEventListener('change', () => setStatus(job, sel.value as Status | ''));
+  label.append(sel);
+  if (t) label.dataset.status = t.status;
+  row.append(label);
+  if (t) {
+    const since = el('span', 'cc-job__since', `Applied ${dayName(t.applied)}`);
+    if (t.status === 'applied' && t.remind) since.append(document.createTextNode(t.remind <= Date.now() ? ' · follow-up due' : ` · follow up ${dayName(t.remind)}`));
+    row.append(since);
+    if (t.status === 'interview' || t.status === 'offer') {
+      row.append(withIcon(button('Interview prep', 'btn btn--primary cc-job__btn cc-job__prep', async () => {
+        if (busy) return;
+        await add({ role: 'user', text: `Prep me for my ${job.title} interview at ${job.company}.` });
+        startGuide({ jobId: job.id, title: job.title, company: job.company }, '');
+      }), ICONS.sparkle));
+    }
+    if (t.status === 'applied' && t.remind) row.append(withIcon(button('Add reminder to my calendar', 'cc-link cc-job__cal', () => reminderFile(job, t)), ICONS.calendar));
+  }
+  return row;
+}
+
+function dayName(at: number) {
+  const days = Math.round((startOfDay(Date.now()) - startOfDay(at)) / DAY_MS);
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days === -1) return 'tomorrow';
+  return new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+const startOfDay = (at: number) => new Date(at).setHours(0, 0, 0, 0);
+
+function refreshTrack(job: RankedJob) {
+  for (const row of msgsEl.querySelectorAll<HTMLElement>(`[data-track="${CSS.escape(job.id)}"]`)) {
+    const focused = row.contains(document.activeElement);
+    const next = trackRow(job);
+    row.replaceWith(next);
+    if (focused) next.querySelector('select')?.focus();
+  }
+}
+
+async function setStatus(job: RankedJob, status: Status | '') {
+  const prev = tracker[job.id];
+  const now = Date.now();
+  if (!status) delete tracker[job.id];
+  else {
+    // Interviewing or an offer means they applied: the application date stays the first one given.
+    const remind = status === 'applied' ? (prev?.status === 'applied' ? prev.remind : now + FOLLOW_UP_MS) : null;
+    tracker[job.id] = { status, at: now, applied: prev?.applied ?? now, remind };
+    if (!saved.has(job.id)) await toggleSave(job, true);
+  }
+  await vault.put('meta', 'tracker', tracker);
+  refreshTrack(job);
+  renderNudge();
+  await renderWeek();
+  if (status === 'applied' && prev?.status !== 'applied') {
+    const n = Object.values(tracker).filter((x) => x.applied >= weekStart()).length;
+    if (goal) toast(n >= goal.perWeek ? 'Weekly goal reached.' : `${n} of ${goal.perWeek} this week.`, n >= goal.perWeek ? 'Great work. I\'ll remind you to follow up in 7 days.' : 'Applied. I\'ll remind you to follow up in 7 days.');
+    else toast('Applied.', "I'll remind you to follow up in 7 days. Set a weekly goal on the new-chat screen.");
+  }
+  announce(status ? `${job.title}: ${STATUS_LABELS[status]}.${status === 'applied' ? " I'll remind you to follow up in 7 days." : ''}` : `${job.title}: not applied yet.`);
+}
+
+/** A follow-up reminder for their own calendar (Google, Apple, Outlook): nothing leaves the device. */
+async function reminderFile(job: RankedJob, t: Track) {
+  const esc = (v: string) => v.replace(/[\;,]/g, (c) => `\\${c}`).replace(/\r?\n/g, '\\n');
+  const ymd = (at: number) => {
+    const d = new Date(at);
+    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const page = `${location.origin}/career`;
+  const ics = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Ami career coach//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:${uid()}@ami`,
+    `DTSTAMP:${stamp}`,
+    `DTSTART;VALUE=DATE:${ymd(t.remind ?? Date.now())}`,
+    `DTEND;VALUE=DATE:${ymd((t.remind ?? Date.now()) + DAY_MS)}`,
+    `SUMMARY:${esc(`Follow up: ${job.title} at ${job.company}`)}`,
+    `DESCRIPTION:${esc(`You applied on ${new Date(t.applied).toLocaleDateString()}. No reply yet? Ami can write a short follow-up note: ${page}`)}`,
+    `URL:${page}`,
+    'BEGIN:VALARM', 'ACTION:DISPLAY', 'TRIGGER:PT9H', `DESCRIPTION:${esc(`Follow up on ${job.company}`)}`, 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR',
+  ].join('\r\n');
+  const { download } = await import('../../lib/career/export.ts');
+  download(new Blob([ics], { type: 'text/calendar' }), `follow-up-${job.company.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'job'}.ics`);
+  announce('Calendar reminder downloaded. Open it to add it to your calendar.');
+}
+
+// ---------- follow-up nudge ----------
+const NUDGE_KEY = 'cc-nudge-dismissed';
+async function renderNudge() {
+  const due = Object.entries(tracker)
+    .filter(([, t]) => t.status === 'applied' && t.remind !== null && t.remind <= Date.now())
+    .sort((a, b) => a[1].applied - b[1].applied);
+  let dismissed = false;
+  try {
+    dismissed = localStorage.getItem(NUDGE_KEY) === localDay();
+  } catch {}
+  const jobs = due.length && !dismissed ? new Map((await vault.list<RankedJob>('savedJobs')).map((j) => [j.id, j])) : new Map<string, RankedJob>();
+  const first = due.find(([id]) => jobs.has(id));
+  nudgeBox.hidden = !first;
+  if (!first) return;
+  const [id, t] = first;
+  const job = jobs.get(id)!;
+  const days = Math.max(1, Math.round((Date.now() - t.applied) / DAY_MS));
+  const others = due.filter(([k]) => jobs.has(k)).length - 1;
+  const text = el('span', 'cc-nudge__text');
+  text.append(el('strong', undefined, `Time to follow up?`), document.createTextNode(` You applied to ${job.title} at ${job.company} ${days} ${days === 1 ? 'day' : 'days'} ago.${others > 0 ? ` (${others} more waiting.)` : ''}`));
+  const later = async (ms: number | null) => {
+    tracker[id] = { ...t, remind: ms === null ? null : Date.now() + ms };
+    await vault.put('meta', 'tracker', tracker);
+    refreshTrack(job);
+    renderNudge();
+  };
+  const btns = el('span', 'cc-nudge__btns');
+  btns.append(
+    button('Write a follow-up', 'btn btn--primary cc-nudge__btn', async () => {
+      if (busy) return;
+      await later(FOLLOW_UP_MS);
+      send(`Write a short follow-up email for my application to the ${job.title} role at ${job.company}. I applied ${days} ${days === 1 ? 'day' : 'days'} ago and haven't heard back.`);
+    }),
+    button('Remind me in 3 days', 'btn cc-nudge__btn', () => later(3 * DAY_MS)),
+    button('I heard back', 'btn cc-nudge__btn', () => setStatus(job, 'interview')),
+  );
+  nudgeBody.replaceChildren(text, btns);
 }
 
 function jobsBlock(m: Message) {
@@ -461,10 +742,12 @@ function jobsBlock(m: Message) {
 }
 
 /** Cards for jobs they already have: saved (any time) or shown in the last 7 days. Free: no search, no quota. */
-async function showJobs(which: 'saved' | 'recent', userText: string | null) {
+async function showJobs(which: 'saved' | 'recent' | 'applied' | 'interviews', userText: string | null) {
   if (userText !== null) await add({ role: 'user', text: userText });
   let jobs: RankedJob[];
   if (which === 'saved') jobs = await vault.list<RankedJob>('savedJobs');
+  else if (which === 'interviews') jobs = (await vault.list<RankedJob>('savedJobs')).filter((j) => tracker[j.id]?.status === 'interview' || tracker[j.id]?.status === 'offer').sort((a, b) => tracker[b.id].at - tracker[a.id].at);
+  else if (which === 'applied') jobs = (await vault.list<RankedJob>('savedJobs')).filter((j) => tracker[j.id]).sort((a, b) => tracker[b.id].applied - tracker[a.id].applied);
   else {
     const since = Date.now() - 7 * 86_400_000;
     const seen = new Set<string>();
@@ -475,8 +758,16 @@ async function showJobs(which: 'saved' | 'recent', userText: string | null) {
       .filter((j) => !seen.has(j.id) && (seen.add(j.id), true))
       .slice(0, 20);
   }
-  if (!jobs.length) return note(which === 'saved' ? "You haven't saved any jobs yet. Tap Save on a job card to keep it here." : "I haven't shown you any jobs in the last 7 days. Ask me to find some.");
-  const intro = which === 'saved' ? `Your ${jobs.length} saved ${jobs.length === 1 ? 'job' : 'jobs'}:` : `Jobs I've shown you in the last 7 days (${jobs.length}):`;
+  if (!jobs.length) {
+    return note(
+      which === 'saved' ? "You haven't saved any jobs yet. Tap Save on a job card to keep it here."
+      : which === 'interviews' ? 'No interviews tracked yet. When you hear back, set the job\'s status to Interviewing and I\'ll help you prepare.'
+      : which === 'applied' ? 'No applications tracked yet. On any job card, set the status to Applied and I\'ll keep track (and remind you to follow up).'
+      : "I haven't shown you any jobs in the last 7 days. Ask me to find some.",
+    );
+  }
+  const n = jobs.length;
+  const intro = which === 'saved' ? `Your ${n} saved ${n === 1 ? 'job' : 'jobs'}:` : which === 'applied' ? `Your ${n} ${n === 1 ? 'application' : 'applications'}, newest first:` : which === 'interviews' ? `Your ${n} ${n === 1 ? 'interview' : 'interviews'}. Tap Interview prep on a card for a guide.` : `Jobs I've shown you in the last 7 days (${n}):`;
   await add({ role: 'coach', text: intro, kind: 'jobs', jobs, recalled: true });
   announce(intro);
 }
@@ -490,11 +781,22 @@ async function markOpened(id: string) {
   // Only the last 7 days matter for Ami; older entries are dropped as new ones arrive.
   for (const [k, at] of Object.entries(opened)) if (Date.now() - at > 7 * 86_400_000) delete opened[k];
   await vault.put('meta', 'opened', opened);
+  scheduleWeek();
 }
 
 /** Every job the visitor saved (any time), for "my saved jobs" and the like. */
 async function savedJobsContext() {
-  return (await vault.list<RankedJob>('savedJobs')).slice(0, 25).map((j) => ({ title: j.title.slice(0, 200), company: j.company.slice(0, 200), location: j.location.slice(0, 200), fit: j.fit, saved: true, source: j.attribution.label.replace(/^via /, '').slice(0, 40) }));
+  const stamp = (at: number) => new Date(at).toISOString().slice(0, 16).replace('T', ' ');
+  return (await vault.list<RankedJob>('savedJobs')).slice(0, 25).map((j) => ({
+    title: j.title.slice(0, 200),
+    company: j.company.slice(0, 200),
+    location: j.location.slice(0, 200),
+    fit: j.fit,
+    saved: true,
+    source: j.attribution.label.replace(/^via /, '').slice(0, 40),
+    status: tracker[j.id]?.status ?? null,
+    applied: tracker[j.id] ? stamp(tracker[j.id].applied) : null,
+  }));
 }
 
 /** Every job shown in the last 7 days, in any chat, newest first, and whether "Open job" was clicked: for Ami's answers. */
@@ -1507,7 +1809,7 @@ function editMessage(m: Message, content: HTMLElement, bar: HTMLElement) {
 // tool (ToolCallSchema) when the phrasing was unusual or text was pasted: the browser then runs that tool's flow.
 type ToolCall =
   | { name: 'find_jobs'; input: { anywhere?: boolean } }
-  | { name: 'show_jobs'; input: { which: 'saved' | 'recent' } }
+  | { name: 'show_jobs'; input: { which: 'saved' | 'recent' | 'applied' } }
   | { name: 'prep_guide'; input: { job: 'pasted' | 'current' | 'none'; instructions?: string | null; title?: string | null; company?: string | null } }
   | { name: 'make_document'; input: { kind: 'tailor' | 'letter' | 'both' | 'improve'; job: 'pasted' | 'current' | 'none'; title?: string | null; company?: string | null; tone?: string | null } };
 
@@ -1515,8 +1817,8 @@ type ToolCall =
 async function runTool(tool: ToolCall, userText: string) {
   if (tool.name === 'find_jobs') {
     // Jobs they already have are never a new search, whatever the model picked.
-    if (/\b(saved|bookmark(ed)?|seen|saw|shown|previous(ly)?|earlier|already|again|before|last time|history)\b/i.test(userText)) {
-      return showJobs(/\b(saved|bookmark)/i.test(userText) ? 'saved' : 'recent', null);
+    if (/\b(saved|bookmark(ed)?|seen|saw|shown|previous(ly)?|earlier|already|again|before|last time|history|applied|my applications)\b/i.test(userText)) {
+      return showJobs(/\b(applied|applications)\b/i.test(userText) ? 'applied' : /\b(saved|bookmark)/i.test(userText) ? 'saved' : 'recent', null);
     }
     return findJobs(false, { anywhere: !!tool.input.anywhere, silent: true });
   }
@@ -1578,10 +1880,12 @@ const LEAD_RE = /^(?:(?:hi|hey|ok(?:ay)?|great|thanks|now|please|so|also|and|the
 const JOBS_RE = /\b(jobs?|roles?|openings?|positions?|vacanc(?:y|ies)|opportunit(?:y|ies))\b/;
 
 /** Clear, common requests map to a tool without any model call. Anything else goes to Ami (who can still pick a tool). */
-function intentOf(text: string): 'saved' | 'jobs' | 'both' | 'tailor' | 'letter' | 'improve' | null {
+function intentOf(text: string): 'saved' | 'applied' | 'jobs' | 'both' | 'tailor' | 'letter' | 'improve' | null {
   const t = text.trim().toLowerCase();
   // "show my saved jobs", "get ,y saved jobs": the saved cards, straight from this device.
   if (/\b(saved|bookmarked)\b/.test(t) && JOBS_RE.test(t) && !/\b(how|why|which|should)\b/.test(t)) return 'saved';
+  // "show my applications", "jobs I applied to": the tracked cards.
+  if ((/\bmy applications\b/.test(t) || (/\bi('ve| have)? applied\b/.test(t) && JOBS_RE.test(t))) && /^(show|list|get|see|view|where|what|which|my|can|could)\b/.test(t.replace(LEAD_RE, '')) && !/\b(how|why|should)\b/.test(t)) return 'applied';
   const polite = /^(can|could|would) you\b/.test(t);
   // "Find jobs for me", "show me roles", "any openings for me?": the jobs tool. Advice questions ("how do I find a job?") stay chat.
   const ask = t.replace(LEAD_RE, '');
@@ -1607,7 +1911,7 @@ async function send(text: string) {
   const pasted = rest.join('\n').trim().length >= 200;
   const intent = intentOf(pasted ? first : q);
   if (intent && !pasted) {
-    if (intent === 'saved') return showJobs('saved', q);
+    if (intent === 'saved' || intent === 'applied') return showJobs(intent, q);
     if (intent === 'jobs') return findJobs(false, { userText: q });
     if (intent === 'improve') return startTailor({ mode: 'improve' }, q);
     return forThisJob(intent, q);
@@ -1729,6 +2033,7 @@ async function add(part: Pick<Message, 'role' | 'text'> & Partial<Message>) {
   refreshEdit();
   renderChats();
   log.scrollTop = log.scrollHeight;
+  if (m.kind === 'jobs' || m.kind === 'tailored' || m.kind === 'letter' || m.kind === 'guide') scheduleWeek();
   return m;
 }
 
@@ -2190,11 +2495,15 @@ $<HTMLButtonElement>('[data-delete-yes]').addEventListener('click', async () => 
   state = (await vault.get<State>('meta', 'state')) ?? { current: null };
   stored = (await vault.get<StoredProfile>('profile', 'current')) ?? null;
   saved = new Set((await vault.list<RankedJob>('savedJobs')).map((j) => j.id));
+  tracker = (await vault.get<Record<string, Track>>('meta', 'tracker')) ?? {};
+  goal = (await vault.get<Goal>('meta', 'goal')) ?? null;
   renderResumeCard();
   conversations = (await vault.list<Conversation>('conversations')).sort((a, b) => b.updatedAt - a.updatedAt);
   if (state.current && !current()) state.current = null;
   await open(state.current, { restoreScroll: true });
-  if (messages.length) {
+  // A due follow-up is the greeting: the "welcome back" toast would sit on top of it.
+  await renderNudge().catch(() => {});
+  if (messages.length && nudgeBox.hidden) {
     welcome.hidden = false;
     announce('Welcome back. Picking up where you left off.');
     // It floats over the log, so it steps away as soon as the visitor reads on (or after a few seconds).
@@ -2203,4 +2512,5 @@ $<HTMLButtonElement>('[data-delete-yes]').addEventListener('click', async () => 
     setTimeout(dismiss, 8000);
   }
   loadUsage();
+  renderWeek();
 })();

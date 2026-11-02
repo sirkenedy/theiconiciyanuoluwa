@@ -297,3 +297,22 @@ test('jobs: a stale pool (ingest stopped > 3 h ago) gets its feeds refreshed, an
   assert.ok(out.jobs.length > 0, 'the saved jobs still count');
   assert.ok(Number(kv.get('jobs:last:jobicy')) > Date.now() - 60_000);
 });
+
+test('eligibility: who can apply, from the posting\'s own words; "limited" wins over "open"', async () => {
+  const { eligibility } = await import('../src/lib/jobs/eligibility.ts');
+  const cases: [string, string | undefined][] = [
+    ['You must be a Canadian citizen or permanent resident.', 'Citizens or PR only'],
+    ['We are unable to sponsor visas for this role.', 'No visa sponsorship'],
+    ['Applicants must be authorized to work in the United States without sponsorship.', 'No visa sponsorship'],
+    ['Candidates must not now or in the future require visa sponsorship.', 'No visa sponsorship'],
+    ['Sponsorship is not available.', 'No visa sponsorship'],
+    ['Visa sponsorship is available for exceptional candidates.', 'Sponsors visas'],
+    ['We offer relocation assistance to Toronto.', 'Relocation support'],
+    ['No relocation provided. Great culture.', undefined],
+    ['Requires an active secret clearance.', 'Needs security clearance'],
+    ['Canadian experience is required.', 'Wants local experience'],
+    ['Relocation support available, but we cannot sponsor visas.', 'No visa sponsorship'],
+    ['We build payments for Africa. Remote friendly.', undefined],
+  ];
+  for (const [text, want] of cases) assert.equal(eligibility(text)?.label, want, text);
+});
