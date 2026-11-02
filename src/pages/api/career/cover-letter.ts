@@ -67,6 +67,14 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
         const final = await response.finalMessage();
         recordSpend(redis, final.usage);
         if (final.stop_reason === 'refusal' || !text.trim()) throw new Error('empty');
+        // A letter opens with a greeting. Anything else is the model talking to the visitor ("tell me if you're
+        // eligible…"): show it as a message, don't save it as a document, and don't count it as today's letter.
+        if (!/^\s*(dear|hello|hi|hey|greetings|to (the )?(hiring|whom|recruit))/i.test(text)) {
+          await quota.release().catch(() => {});
+          send('message', { text: text.trim() });
+          send('done', {});
+          return;
+        }
         // A letter may name the employer, its product and team: anything that appears in the job description itself.
         const allowed = [job.title, job.company, job.description].filter((s): s is string => !!s);
         send('flags', { flags: checkText(text, profile, resume, answers.data, allowed) });

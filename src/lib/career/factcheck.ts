@@ -28,7 +28,8 @@ export function namesIn(text: string, { titleCase = true } = {}): string[] {
     const words = sentence.trim().split(/\s+/);
     words.slice(1).forEach((raw) => {
       // "Headway's" is the name Headway.
-      const w = raw.replace(/['’]s$/i, '').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}+#.]+$/gu, '').replace(/[.]$/, '');
+      // Brackets and punctuation around a word aren't part of it: "Canada)." is Canada.
+      const w = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}+#]+$/gu, '').replace(/['’]s$/i, '');
       if (/^\p{Lu}[\p{Ll}]{2,}/u.test(w) && !COMMON.has(fold(w))) out.add(w);
     });
   }

@@ -55,6 +55,7 @@ Write a detailed interview prep guide for this visitor and this job. Return JSON
 - Plain, encouraging, specific; no filler.
 
 ### task = "cover_letter"
+Always write the letter itself, starting with its greeting ("Dear …"). Output nothing else: no message to the visitor, no questions, no eligibility or residency notes (the chat handles those).
 ≤ 300 words, 3–4 short paragraphs: a hook specific to the company and role, two proof points from the résumé, why this team, a close. Plain text only (no tags, no markdown), ready to paste. Never claim anything the résumé and answers don't show.
 
 ### task = "summarize"

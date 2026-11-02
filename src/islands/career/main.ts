@@ -871,15 +871,22 @@ async function startLetter(job: NonNullable<Task['job']>, userText: string | nul
     let text = '';
     let flags: Flag[] = [];
     let failed = false;
+    let said = '';
     for await (const { event, data } of readEvents(res)) {
       if (event === 'token') {
         setOrb('streaming');
         text += (data as { t: string }).t;
         live.p.textContent = text;
       } else if (event === 'flags') flags = (data as { flags: Flag[] }).flags;
+      else if (event === 'message') said = (data as { text: string }).text;
       else if (event === 'error') failed = true;
     }
     live.li.remove();
+    // Ami replied instead of writing a letter: it's a message, not a document (and it didn't use today's letter).
+    if (said) {
+      setOrb('done');
+      return add({ role: 'coach', text: said });
+    }
     if (failed || !text.trim()) {
       setOrb('error');
       return note(NOTES.error);

@@ -183,3 +183,24 @@ test(`cover letter: streamed, checked, ${DAILY_LIMITS.letters} a day`, async () 
   const second = await call('cover-letter', d, { job: JOB });
   assert.equal(second.status, 429);
 });
+
+test('cover letter: if the model replies instead of writing a letter, it is a message, not a document, and not counted', async () => {
+  const d = await device();
+  const saved = claude.state.letter;
+  claude.state.letter = ["Thanks for sharing the posting. This role requires US residency; if you're eligible, tell me and I'll write the letter."];
+  try {
+    const out = await events(await call('cover-letter', d, { job: JOB }));
+    assert.match((out.message as { text: string }[])[0].text, /tell me and I'll write the letter/);
+    assert.equal(out.flags, undefined, 'no document checks');
+    claude.state.letter = saved;
+    for (let i = 0; i < DAILY_LIMITS.letters; i++) assert.equal((await call('cover-letter', d, { job: JOB })).status, 200, 'all of today\'s letters still available');
+    assert.equal((await call('cover-letter', d, { job: JOB })).status, 429);
+  } finally {
+    claude.state.letter = saved;
+  }
+});
+
+test('factcheck: punctuation around a word is not part of it ("Canada)." is Canada, already in the profile)', () => {
+  const p = { ...profile, location: 'Ontario, Canada' } as Profile;
+  assert.deepEqual(checkText('I am based in Ontario (Ontario, Canada). Happy to relocate.', p, RESUME), []);
+});
