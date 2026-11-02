@@ -149,7 +149,7 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
             <section class="cc-week-strip" aria-labelledby="cc-week-strip-title" data-week-strip hidden>
               <div class="cc-week-strip__head">
                 <h3 id="cc-week-strip-title" class="label cc-week-strip__label">Your week</h3>
-                <span data-goal-change></span>
+                <span class="cc-week-strip__actions"><span data-goal-change></span><button class="cc-link cc-share-open" type="button" data-share-open>Share my progress</button></span>
               </div>
               <div class="cc-week-strip__body">
                 <div data-goal></div>
@@ -206,6 +206,46 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
         <p class="cc-disclaimer"><small>AI suggestions can be wrong. Review everything before you send it.</small></p>
       </div>
       <p class="sr-only" role="status" data-status></p>
+
+      <dialog class="cc-share" data-share aria-labelledby="cc-share-title">
+        <form method="dialog" class="cc-share__inner" data-share-form>
+          <div class="cc-share__head">
+            <h2 id="cc-share-title" class="cc-share__title">Share your progress</h2>
+            <button class="cc-icon-btn" type="submit" value="close" aria-label="Close"><Icon name="close" size={18} /></button>
+          </div>
+          <div class="cc-share__body">
+            <figure class="cc-share__preview" data-share-preview aria-live="polite">
+              <img data-share-img alt="" hidden />
+              <figcaption class="cc-share__wait" data-share-wait>Drawing your card…</figcaption>
+            </figure>
+            <div class="cc-share__controls">
+              <div class="cc-share__name" data-share-ask hidden>
+                <p class="cc-share__ask"><strong>Add your name to the card?</strong> Only your first name shows. It's saved on this device for next time.</p>
+                <label class="cc-field"><span class="cc-field__label">Your name</span><input class="cc-field__input" data-share-name maxlength="30" autocomplete="given-name" /></label>
+                <div class="cc-share__row">
+                  <button class="btn btn--primary cc-btn-sm" type="button" data-share-name-yes>Add my name</button>
+                  <button class="btn btn--secondary cc-btn-sm" type="button" data-share-name-no>Keep it anonymous</button>
+                </div>
+              </div>
+              <fieldset class="cc-ivsetup__set"><legend class="cc-ivsetup__legend">Period</legend><div class="cc-share__chips" data-share-period></div></fieldset>
+              <fieldset class="cc-ivsetup__set"><legend class="cc-ivsetup__legend">Show on the card</legend><div class="cc-share__checks" data-share-checks></div></fieldset>
+              <fieldset class="cc-ivsetup__set"><legend class="cc-ivsetup__legend">Format</legend><div class="cc-share__chips" data-share-format></div></fieldset>
+              <p class="cc-share__note">Only what you tick goes on the card and in its link. Nothing is stored about you.</p>
+            </div>
+          </div>
+          <div class="cc-share__actions">
+            <button class="btn btn--primary" type="button" data-share-go>Share</button>
+            <button class="btn btn--secondary" type="button" data-share-download>Download image</button>
+            <button class="btn btn--secondary" type="button" data-share-copy>Copy caption &amp; link</button>
+            <span class="cc-share__to">
+              <button class="cc-link" type="button" data-share-to="linkedin">LinkedIn</button>
+              <button class="cc-link" type="button" data-share-to="x">X</button>
+              <button class="cc-link" type="button" data-share-to="whatsapp">WhatsApp</button>
+            </span>
+            <p class="cc-share__status" data-share-status role="status"></p>
+          </div>
+        </form>
+      </dialog>
 
       <aside class="cc-preview" data-preview aria-label="Your document" hidden>
         <div class="cc-preview__bar">

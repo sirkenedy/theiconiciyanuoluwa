@@ -1527,3 +1527,51 @@ div.cc-guide__items { padding-left: 0; }
 @keyframes ccBlink { 0%, 94%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
 @keyframes ccNod { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(5px); } 60% { transform: translateY(-1px); } 80% { transform: translateY(3px); } }
 @keyframes ccChuckle { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-5deg) translateY(-2px); } 45% { transform: rotate(4deg); } 70% { transform: rotate(-3deg) translateY(-1px); } }
+
+/* "Share my progress": a clay dialog with the card on one side and the choices on the other. */
+.cc-week-strip__actions { display: inline-flex; align-items: center; gap: var(--s-4); }
+.cc-share-open { display: inline-flex; align-items: center; min-height: var(--tap); margin-block: -10px; font-size: var(--fs-meta); font-weight: 700; }
+.cc-result__share { align-self: flex-start; margin-top: var(--s-2); }
+.cc-share {
+  width: min(980px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-xl);
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: var(--ledge-md) var(--line);
+}
+.cc-share::backdrop { background: color-mix(in srgb, var(--ink) 45%, transparent); }
+.cc-share__inner { display: flex; flex-direction: column; gap: var(--s-4); padding: var(--s-5); }
+.cc-share__head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.cc-share__title { margin: 0; font-family: var(--font-display); font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+.cc-share__body { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: var(--s-5); align-items: start; }
+.cc-share__preview { position: relative; display: grid; place-items: center; min-height: 240px; margin: 0; border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--ledge-sm) var(--line); overflow: hidden; }
+.cc-share__preview img { display: block; width: 100%; height: auto; }
+.cc-share__preview img[hidden] { display: none; }
+.cc-share__wait { padding: var(--s-5); color: var(--ink-muted); font-size: var(--fs-label); }
+.cc-share__wait[hidden] { display: none; }
+.cc-share__controls { display: flex; flex-direction: column; gap: var(--s-4); }
+.cc-share__name { display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-4); border-radius: var(--r-lg); background: var(--lilac-hi); box-shadow: var(--ledge-sm) var(--lilac-ledge); color: var(--on-pastel); }
+.cc-share__name[hidden] { display: none; }
+.cc-share__ask { margin: 0; font-size: var(--fs-label); }
+.cc-share__row { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.cc-share__chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.cc-share__chips .cc-choice__face { padding: var(--s-2) var(--s-4); }
+.cc-share__checks { display: flex; flex-direction: column; gap: var(--s-1); }
+.cc-share__check { display: flex; align-items: center; gap: var(--s-2); min-height: var(--tap); font-size: var(--fs-label); cursor: pointer; }
+.cc-share__check input { width: 20px; height: 20px; accent-color: var(--lilac-deep); }
+.cc-share__note { margin: 0; color: var(--ink-muted); font-size: var(--fs-meta); }
+.cc-share__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+.cc-share__to { display: inline-flex; flex-wrap: wrap; gap: var(--s-3); margin-left: var(--s-2); font-size: var(--fs-label); }
+.cc-share__to .cc-link { min-height: var(--tap); }
+.cc-share__status { flex-basis: 100%; margin: 0; color: var(--ink-muted); font-size: var(--fs-meta); }
+.cc-share__status:empty { display: none; }
+@media (max-width: 760px) {
+  .cc-share__body { grid-template-columns: minmax(0, 1fr); }
+  .cc-share__inner { padding: var(--s-4); }
+  .cc-share__actions .btn { flex: 1 1 auto; }
+  /* The share buttons stay in reach while the choices scroll. */
+  .cc-share__actions { position: sticky; bottom: calc(var(--s-4) * -1); margin: 0 calc(var(--s-4) * -1) calc(var(--s-4) * -1); padding: var(--s-3) var(--s-4) var(--s-4); background: var(--bg); box-shadow: 0 -1px 0 var(--line); }
+}

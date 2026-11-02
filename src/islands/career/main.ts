@@ -270,6 +270,296 @@ function toast(strong: string, rest: string) {
   toastTimer = setTimeout(() => (welcome.hidden = true), 3500);
 }
 
+// ---------- "Share my progress" cards ----------
+// They choose what goes on the card; it's drawn by the server from exactly that (nothing stored there), and its link
+// carries it. Their name is asked once, pre-filled from the résumé, and kept on this device.
+type CardData = import('../../lib/career/card.ts').CardData;
+type CardFormat = import('../../lib/career/card.ts').CardFormat;
+type CardPrefs = { showName: boolean; name: string; period: 'week' | 'all'; format: CardFormat; off: string[] };
+const shareBox = $<HTMLDialogElement>('[data-share]');
+const shareImg = $<HTMLImageElement>('[data-share-img]');
+const shareWait = $<HTMLElement>('[data-share-wait]');
+const shareStatus = $<HTMLElement>('[data-share-status]');
+const shareAsk = $<HTMLElement>('[data-share-ask]');
+const shareName = $<HTMLInputElement>('[data-share-name]');
+let prefs: CardPrefs | null = null;
+let decided = false; // whether they've answered "add your name?"
+let facts: { applied: number; interviews: number; offers: number; practice: number; score: [number, number] | null; highlight: string | null; goal: [number, number] | null } | null = null;
+let shared: { key: string; url: string; caption: string } | null = null;
+let previewUrl = '';
+let previewBlob: Blob | null = null;
+let previewTimer: ReturnType<typeof setTimeout> | undefined;
+let previewSeq = 0;
+
+async function progressFacts(period: 'week' | 'all') {
+  const since = period === 'week' ? weekStart() : 0;
+  const tracks = Object.values(tracker);
+  const all = await vault.list<Message>('messages');
+  const cards = all.filter((m) => m.scorecard && m.at >= since).sort((a, b) => a.at - b.at);
+  let highlight: string | null = null;
+  const latest = cards.at(-1);
+  if (latest?.docId) {
+    const doc = await vault.get<GuideDoc>('documents', latest.docId);
+    const well = doc?.guide.sections[0]?.items.find((i) => i.title === 'What went well');
+    highlight = well?.bullets[0]?.replace(/\.$/, '').slice(0, 90) ?? null;
+  }
+  const applied = tracks.filter((t) => t.applied >= since).length;
+  return {
+    applied,
+    interviews: tracks.filter((t) => (t.status === 'interview' || t.status === 'offer') && t.at >= since).length,
+    offers: tracks.filter((t) => t.status === 'offer' && t.at >= since).length,
+    practice: cards.length,
+    score: cards.length >= 2 ? ([cards[0].scorecard!.score, latest!.scorecard!.score] as [number, number]) : null,
+    highlight,
+    goal: period === 'week' && goal && applied >= goal.perWeek ? ([applied, goal.perWeek] as [number, number]) : null,
+  };
+}
+
+function cardFromChoices(): CardData {
+  const f = facts!;
+  const on = (k: string) => !prefs!.off.includes(k);
+  return {
+    name: prefs!.showName && prefs!.name.trim() ? prefs!.name.trim() : null,
+    period: prefs!.period,
+    applied: on('applied') ? f.applied : null,
+    interviews: on('interviews') ? f.interviews : null,
+    offers: on('offers') && f.offers ? f.offers : null,
+    practice: on('practice') && f.practice ? f.practice : null,
+    score: on('score') ? f.score : null,
+    highlight: on('highlight') ? f.highlight : null,
+    goal: on('goal') ? f.goal : null,
+  };
+}
+
+function chipRow(host: HTMLElement, name: string, options: [string, string][], value: string, onChange: (v: string) => void) {
+  host.replaceChildren(
+    ...options.map(([v, label]) => {
+      const lab = el('label', 'cc-choice');
+      const r = document.createElement('input');
+      r.type = 'radio';
+      r.name = name;
+      r.value = v;
+      r.checked = v === value;
+      r.className = 'sr-only';
+      r.addEventListener('change', () => onChange(v));
+      const face = el('span', 'cc-choice__face');
+      face.append(el('strong', undefined, label));
+      lab.append(r, face);
+      return lab;
+    }),
+  );
+}
+
+function renderShareControls() {
+  const f = facts!;
+  chipRow($<HTMLElement>('[data-share-period]'), 'share-period', [['week', 'This week'], ['all', 'So far']], prefs!.period, async (v) => {
+    prefs!.period = v as CardPrefs['period'];
+    facts = await progressFacts(prefs!.period);
+    renderShareControls();
+    schedulePreview();
+  });
+  chipRow($<HTMLElement>('[data-share-format]'), 'share-format', [['square', 'Square'], ['story', 'Story'], ['wide', 'Wide']], prefs!.format, (v) => {
+    prefs!.format = v as CardFormat;
+    schedulePreview();
+  });
+  const items: [string, string, boolean][] = [
+    ['name', prefs!.showName && prefs!.name ? `My name (${prefs!.name.split(' ')[0]})` : 'My name', true],
+    ['applied', `Applications (${f.applied})`, true],
+    ['interviews', `Interviews (${f.interviews})`, true],
+    ['offers', `Offers (${f.offers})`, f.offers > 0],
+    ['practice', `Mock interviews (${f.practice})`, f.practice > 0],
+    ['score', f.score ? `Practice score (${f.score[0]} → ${f.score[1]})` : 'Practice score', !!f.score],
+    ['highlight', f.highlight ? `Top strength (“${f.highlight}”)` : 'Top strength', !!f.highlight],
+    ['goal', 'Weekly goal reached', !!f.goal],
+  ];
+  $<HTMLElement>('[data-share-checks]').replaceChildren(
+    ...items
+      .filter(([, , ok]) => ok)
+      .map(([key, label]) => {
+        const lab = el('label', 'cc-share__check');
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = key === 'name' ? prefs!.showName : !prefs!.off.includes(key);
+        box.addEventListener('change', () => {
+          if (key === 'name') {
+            if (box.checked && !prefs!.name.trim()) return askName();
+            prefs!.showName = box.checked;
+          } else prefs!.off = box.checked ? prefs!.off.filter((k) => k !== key) : [...prefs!.off, key];
+          renderShareControls();
+          schedulePreview();
+        });
+        lab.append(box, el('span', undefined, label));
+        return lab;
+      }),
+  );
+}
+
+function askName() {
+  shareAsk.hidden = false;
+  shareName.value ||= prefs!.name || (stored?.profile.identity.name?.split(' ')[0] ?? '');
+  shareName.focus();
+  shareName.select();
+}
+
+async function savePrefs() {
+  await vault.put('meta', 'card', { ...prefs, decided: true });
+}
+
+$<HTMLButtonElement>('[data-share-name-yes]').addEventListener('click', async () => {
+  const name = shareName.value.trim();
+  if (!name) return shareName.focus();
+  prefs!.name = name;
+  prefs!.showName = true;
+  decided = true;
+  shareAsk.hidden = true;
+  await savePrefs();
+  renderShareControls();
+  schedulePreview();
+});
+$<HTMLButtonElement>('[data-share-name-no]').addEventListener('click', async () => {
+  prefs!.showName = false;
+  decided = true;
+  shareAsk.hidden = true;
+  await savePrefs();
+  renderShareControls();
+  schedulePreview();
+});
+
+function schedulePreview() {
+  shared = null;
+  clearTimeout(previewTimer);
+  shareWait.hidden = false;
+  shareWait.textContent = 'Drawing your card…';
+  previewTimer = setTimeout(drawPreview, 300);
+}
+
+async function drawPreview() {
+  const seq = ++previewSeq;
+  const res = await deviceFetch('/api/career/card', jsonBody({ mode: 'preview', card: cardFromChoices(), format: prefs!.format, day: localDay() })).catch(() => null);
+  if (seq !== previewSeq) return;
+  if (!res?.ok) {
+    shareWait.textContent = "Couldn't draw your card just now. Try again in a moment.";
+    return;
+  }
+  // A data: URL (the page's security rules allow those for images, not blob: ones).
+  const blob = await res.blob();
+  const url = await new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.readAsDataURL(blob);
+  });
+  if (seq !== previewSeq) return;
+  previewBlob = blob;
+  previewUrl = url;
+  if (seq !== previewSeq) return;
+  shareImg.src = previewUrl;
+  shareImg.alt = `Your progress card: ${shareSummary()}`;
+  shareImg.hidden = false;
+  shareWait.hidden = true;
+}
+
+function shareSummary() {
+  const c = cardFromChoices();
+  return [c.applied !== null && `${c.applied} applications`, c.interviews !== null && `${c.interviews} interviews`, c.practice && `${c.practice} mock interviews`, c.score && `practice score ${c.score[0]} to ${c.score[1]}`].filter(Boolean).join(', ');
+}
+
+async function openShare() {
+  if (!stored) return;
+  const saved = await vault.get<CardPrefs & { decided?: boolean }>('meta', 'card');
+  decided = !!saved?.decided;
+  prefs = { showName: false, name: stored.profile.identity.name?.split(' ')[0] ?? '', period: 'week', format: 'square', off: [], ...saved };
+  facts = await progressFacts(prefs.period);
+  shareStatus.textContent = '';
+  shareAsk.hidden = true;
+  shareImg.hidden = true;
+  renderShareControls();
+  shareBox.showModal();
+  schedulePreview();
+  // First share: ask about their name before anything else.
+  if (!decided) askName();
+}
+
+/** The link (made once per choice of what to show): counted as one share. */
+async function shareLink() {
+  if (!decided) {
+    askName();
+    shareStatus.textContent = 'First, choose whether your name goes on the card.';
+    return null;
+  }
+  const card = cardFromChoices();
+  const key = JSON.stringify([card, prefs!.format]);
+  if (shared?.key === key) return shared;
+  shareStatus.textContent = 'Making your link…';
+  const res = await deviceFetch('/api/career/card', jsonBody({ mode: 'share', card, format: prefs!.format, day: localDay() })).catch(() => null);
+  if (!res?.ok) {
+    shareStatus.textContent = "Couldn't make your link just now. Try again in a moment.";
+    return null;
+  }
+  const out = (await res.json()) as { url: string; caption: string };
+  await savePrefs();
+  shareStatus.textContent = '';
+  return (shared = { key, url: out.url, caption: out.caption });
+}
+
+const pngFile = () => new File([previewBlob!], 'my-job-search-with-ami.png', { type: 'image/png' });
+
+$<HTMLButtonElement>('[data-share-go]').addEventListener('click', async () => {
+  const link = await shareLink();
+  if (!link) return;
+  try {
+    const file = previewBlob ? pngFile() : null;
+    if (file && navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], text: link.caption, title: 'My job search, with Ami' });
+    else if (navigator.share) await navigator.share({ text: link.caption, url: link.url, title: 'My job search, with Ami' });
+    else {
+      await navigator.clipboard.writeText(link.caption);
+      shareStatus.textContent = 'Caption and link copied. Paste them with the image wherever you post.';
+      return;
+    }
+    shareStatus.textContent = 'Shared. Thank you for spreading the word!';
+  } catch (err) {
+    if ((err as Error).name !== 'AbortError') shareStatus.textContent = "Sharing didn't work here: download the image and copy the caption instead.";
+  }
+});
+$<HTMLButtonElement>('[data-share-download]').addEventListener('click', async () => {
+  if (!previewUrl) return;
+  const link = await shareLink();
+  if (!link) return;
+  const a = document.createElement('a');
+  a.href = previewUrl;
+  a.download = 'my-job-search-with-ami.png';
+  document.body.append(a);
+  a.click();
+  a.remove();
+  shareStatus.textContent = 'Image saved. Post it with your caption: "Copy caption & link" gives you both.';
+});
+$<HTMLButtonElement>('[data-share-copy]').addEventListener('click', async () => {
+  const link = await shareLink();
+  if (!link) return;
+  try {
+    await navigator.clipboard.writeText(link.caption);
+    shareStatus.textContent = 'Caption and link copied.';
+  } catch {
+    shareStatus.textContent = link.caption;
+  }
+});
+for (const b of document.querySelectorAll<HTMLButtonElement>('[data-share-to]')) {
+  b.addEventListener('click', async () => {
+    // Opened now (inside the tap) so it isn't blocked as a pop-up; sent on once the link is made.
+    const win = window.open('about:blank', '_blank');
+    const link = await shareLink();
+    if (!link || !win) return win?.close();
+    win.opener = null;
+    const text = link.caption.replace(` Try it: ${link.url}`, '');
+    const enc = encodeURIComponent;
+    win.location.href = {
+      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${enc(link.url)}`,
+      x: `https://x.com/intent/post?text=${enc(text)}&url=${enc(link.url)}`,
+      whatsapp: `https://wa.me/?text=${enc(link.caption)}`,
+    }[b.dataset.shareTo as 'linkedin' | 'x' | 'whatsapp'];
+  });
+}
+$<HTMLButtonElement>('[data-share-open]').addEventListener('click', () => void openShare());
+
 async function isBreather(res: Response | null) {
   if (res?.status !== 503) return false;
   const { error } = (await res.clone().json().catch(() => ({}))) as { error?: string };
@@ -2179,6 +2469,7 @@ function resultBlock(m: Message) {
     box.append(list);
   }
   if (m.docId) box.append(docCard(m));
+  if (m.scorecard) box.append(withIcon(button('Share my progress', 'btn btn--secondary cc-btn-sm cc-result__share', () => void openShare()), ICONS.sparkle));
   return box;
 }
 
@@ -3354,6 +3645,11 @@ $<HTMLButtonElement>('[data-delete-yes]').addEventListener('click', async () => 
   stored = (await vault.get<StoredProfile>('profile', 'current')) ?? null;
   saved = new Set((await vault.list<RankedJob>('savedJobs')).map((j) => j.id));
   tracker = (await vault.get<Record<string, Track>>('meta', 'tracker')) ?? {};
+  // Arrived from someone's shared progress card: a warm welcome on the first screen (once), then a clean address.
+  if (new URLSearchParams(location.search).get('from') === 'card') {
+    if (!stored) $<HTMLElement>('.cc-empty__lead').prepend(el('strong', 'cc-empty__ref', 'Someone shared their progress with you. Ami is free, and your résumé stays on your device. '));
+    history.replaceState(null, '', location.pathname);
+  }
   goal = (await vault.get<Goal>('meta', 'goal')) ?? null;
   renderResumeCard();
   conversations = (await vault.list<Conversation>('conversations')).sort((a, b) => b.updatedAt - a.updatedAt);
