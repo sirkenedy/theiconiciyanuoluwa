@@ -1953,6 +1953,8 @@ function ivSetupBlock() {
       tapSpeaker = speakMod.makeSpeaker(new FormData(f).get('iv-sound') !== 'device');
       tapSpeaker.unlock();
     }
+    // And the microphone: phones show the permission prompt only for a request made inside the tap.
+    if (canVoice() && new FormData(f).get('iv-by') !== 'typing') listenMod?.askForMicNow();
     const pasted = paste?.value.trim() ?? '';
     if (paste && pasted.length < 200) {
       err.textContent = /^https?:\/\/\S+$/.test(pasted) ? NOTES.urlOnly : 'Paste the full job description (at least a few paragraphs).';
@@ -2211,11 +2213,13 @@ let download = { loaded: 0, total: 0 };
 const mb = (n: number) => Math.round(n / 1_000_000);
 /** Starts the one-off model download in the background (from the setup card), so "Start" rarely waits. */
 let speakMod: typeof import('./voice/speak.ts') | null = null;
+let listenMod: typeof import('./voice/listen.ts') | null = null;
 let tapSpeaker: import('./voice/speak.ts').Speaker | null = null;
 function warmVoice() {
   if (!canVoice()) return;
   import('./voice/speak.ts').then((m) => (speakMod = m)).catch(() => {});
   import('./voice/listen.ts')
+    .then((api: ListenApi) => (listenMod = api))
     .then((api: ListenApi) =>
       api.warmEars((loaded, total) => {
         download = { loaded, total };
@@ -2290,8 +2294,20 @@ async function prepareVoice(): Promise<boolean> {
   const mic = api.makeMic();
   try {
     await mic.open();
-  } catch {
-    await note("I couldn't use your microphone (it may be blocked for this site), so let's do this one by typing. You can allow it in your browser's site settings.");
+  } catch (err) {
+    // Say which problem it is: blocked (and where to allow it), no microphone, or this browser can't listen.
+    const name = (err as Error)?.name ?? '';
+    console.warn('[voice] microphone:', name, (err as Error)?.message);
+    const ios = /iP(hone|ad|od)/.test(navigator.userAgent);
+    await note(
+      name === 'NotAllowedError' || name === 'SecurityError'
+        ? `Your microphone is blocked, so let's do this one by typing. To allow it, ${ios ? 'open Settings → your browser (Chrome or Safari) → turn on Microphone, then reload this page' : "use the lock icon by this site's address → allow Microphone, then reload"}.`
+        : name === 'NotFoundError' || name === 'OverconstrainedError'
+          ? "I couldn't find a microphone on this device, so let's do this one by typing."
+          : "This browser couldn't start listening, so let's do this one by typing. The latest Chrome, Safari or Edge works best.",
+    );
+    // The exact reason, small, so a screenshot from a phone (no console there) says what happened.
+    msgsEl.lastElementChild?.querySelector('.cc-msg__body')?.append(el('small', 'cc-msg__code', `Code: ${name || 'unknown'}`));
     return false;
   }
   const warm = api.warmEars((loaded, total) => {
@@ -3642,6 +3658,9 @@ async function upload(file: File) {
       setOrb('error');
       const code = err instanceof ParseError ? err.code : 'broken';
       await note(PARSE_NOTES[code]);
+      // The real reason, small, so a screenshot from a phone (no console there) says what failed.
+      const detail = err instanceof ParseError ? err.detail : String(err).slice(0, 160);
+      if (detail) msgsEl.lastElementChild?.querySelector('.cc-msg__body')?.append(el('small', 'cc-msg__code', `Code: ${detail}`));
       if (code !== 'type' && code !== 'size') pastePanel();
       return;
     }

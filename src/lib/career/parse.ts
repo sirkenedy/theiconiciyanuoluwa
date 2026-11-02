@@ -5,9 +5,12 @@ export const MAX_BYTES = 5 * 1024 * 1024;
 export type Kind = 'pdf' | 'docx';
 export class ParseError extends Error {
   code: 'type' | 'size' | 'empty' | 'scanned' | 'broken';
-  constructor(code: ParseError['code']) {
+  /** Why a file couldn't be read (the error's name and message, never the file's content), shown for diagnosis. */
+  detail: string;
+  constructor(code: ParseError['code'], detail = '') {
     super(code);
     this.code = code;
+    this.detail = detail;
   }
 }
 
@@ -73,8 +76,11 @@ export async function readResume(file: File): Promise<string> {
   let text: string;
   try {
     text = kind === 'pdf' ? await pdfText(await file.arrayBuffer()) : await docxText(await file.arrayBuffer());
-  } catch {
-    throw new ParseError('broken');
+  } catch (err) {
+    const e = err as Error;
+    const detail = `${kind.toUpperCase()} · ${e?.name ?? 'Error'}: ${String(e?.message ?? err).slice(0, 160)} · ${file.type || 'no type'} · ${Math.round(file.size / 1024)} KB`;
+    console.warn('[résumé] could not read the file:', detail);
+    throw new ParseError('broken', detail);
   }
   // A PDF with pages but (almost) no text layer is a scan: say so and offer to paste instead.
   if (text.replace(/\s/g, '').length < 80) throw new ParseError(kind === 'pdf' ? 'scanned' : 'empty');
