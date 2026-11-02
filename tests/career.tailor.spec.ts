@@ -421,7 +421,7 @@ test('fixed phrases run tools with no AI call; an unusual phrasing goes to Ami, 
   await page.locator('#cc-input').press('Enter');
   await expect(page.locator('.cc-match')).toBeVisible();
   const sent = (await (await request.get(`${CLAUDE}/__requests`)).json()) as { tools?: unknown[]; messages: { content: string }[] }[];
-  expect(sent[0].tools?.length).toBe(4); // Ami routed it...
+  expect(sent[0].tools?.length).toBe(5); // Ami routed it...
   expect(sent[1].messages[0].content).toContain('task = "tailor_analyze"'); // ...to tailoring, for the job above
   expect(sent[1].messages[0].content).toContain('SQL is a plus');
 

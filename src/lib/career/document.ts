@@ -65,7 +65,7 @@ const slug = (s: string | null | undefined) =>
     .slice(0, 40);
 
 /** firstname-lastname-resume-company-role (career-mode.md §3.4). */
-export function fileBase(name: string | null, what: 'resume' | 'cover-letter' | 'interview-prep', company?: string | null, role?: string | null) {
+export function fileBase(name: string | null, what: 'resume' | 'cover-letter' | 'interview-prep' | 'interview-scorecard', company?: string | null, role?: string | null) {
   return [slug(name) || 'my', what, slug(company), slug(role)].filter(Boolean).join('-');
 }
 

@@ -100,6 +100,38 @@ export function startFakeClaude(port = 0) {
         return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ...message(''), content: [cited], usage: { ...usage, server_tool_use: { web_search_requests: 2 } } }));
       }
       const props = params.output_config?.format?.schema?.properties ?? {};
+      // Mock interview turn: an interviewer that follows up on vague answers ("we", no result) and respects <status>.
+      if (props.action) {
+        const blocks = params.messages[0].content;
+        const all = Array.isArray(blocks) ? blocks.map((b) => b.text).join('\n') : blocks;
+        const allowed = props.action.enum;
+        const lines = (all.match(/<interview>\n([\s\S]*?)\n<\/interview>/)?.[1] ?? '').split('\n').filter((l) => /^(Ami|Candidate)/.test(l));
+        const asked = lines.filter((l) => l.startsWith('Ami (ask)')).length;
+        const lastAnswer = [...lines].reverse().find((l) => l.startsWith('Candidate:'))?.slice(11) ?? '';
+        const lastAmi = [...lines].reverse().find((l) => l.startsWith('Ami'));
+        const noBehavioural = /no behaviou?ral/i.test(all.match(/<setup>([\s\S]*?)<\/setup>/)?.[1] ?? '');
+        const QUESTIONS = ['How would you improve checkout for schools?', noBehavioural ? 'How would you prioritise a payments roadmap?' : 'Tell me about a time you disagreed with engineering.', 'How do you measure a launch?', 'Why Sample Pay?', 'What would you do in your first 90 days?', 'How do you work with design?', 'Tell me about a metric you moved.', 'What questions do you have for me?'];
+        const vague = lastAnswer && lastAnswer !== '(skipped)' && (lastAnswer.split(/\s+/).length < 12 || (/\bwe\b/i.test(lastAnswer) && !/\bI\b/.test(lastAnswer)));
+        let turn;
+        if (!lines.length) turn = { action: 'ask', say: `Hi, I'm Ami, and I'll be your interviewer today. Let's begin: ${QUESTIONS[0]}`, note: null };
+        else if (/\?\s*$/.test(lastAnswer) && allowed.includes('reply')) turn = { action: 'reply', say: `Good question. Take it at whatever level you like. ${QUESTIONS[Math.max(0, asked - 1)]}` };
+        else if (vague && allowed.includes('follow_up') && !lastAmi?.startsWith('Ami (follow_up)')) turn = { action: 'follow_up', say: 'What exactly was your own part, and what was the result?' };
+        else if (allowed.includes('ask')) turn = { action: 'ask', say: `Thanks. ${QUESTIONS[asked] ?? 'One more:'}` };
+        else turn = { action: 'end', say: 'That was the last question. Thank you, your scorecard is on its way.' };
+        turn.note ??= lastAnswer === '(skipped)' ? 'Skipped.' : vague ? 'Vague: no result, unclear personal role.' : 'Specific: named the result.';
+        const out = JSON.stringify({ ...turn, action: allowed.includes(turn.action) ? turn.action : allowed[0] });
+        if (params.stream) return streamText(res, params, [out]);
+        return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(message(out)));
+      }
+      // Interview scorecard: one entry per main question asked, stronger answers from the résumé.
+      if (props.readiness) {
+        const sent = params.messages[0].content;
+        const asks = [...sent.matchAll(/^Ami \(ask\): (?:Hi, I'm Ami, and I'll be your interviewer today\. Let's begin: |Thanks\. )?(.+)$/gm)].map((m) => m[1]);
+        const fb = { score: 3.5, readiness: 'almost', summary: 'Clear examples, but results were often missing until you were asked.', strengths: ['Named the checkout redesign'], fixes: ['Lead with the result'], practise: ['Answer in situation, action, result'], questions: asks.map((q) => ({ question: q, score: 3, strong: ['Relevant example'], missing: ['A measurable result'], followups: 'Gave your role when asked.', better: ['Open with the checkout redesign at Example Fintech.', 'Say what you changed and what happened.'] })) };
+        const out = JSON.stringify(fb);
+        if (params.stream) return streamText(res, params, [out]);
+        return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(message(out)));
+      }
       // Prep guide: follows <instructions> ("3-day" → Day sections; "no behavioural" → none), answers from the résumé.
       if (props.sections) {
         const sent = params.messages[0].content;
@@ -175,6 +207,7 @@ function routeLike(params) {
   if (/^i('| a)?m eligible/.test(line)) return { name: 'make_document', input: { kind: 'tailor', job: 'pasted', title: 'Senior Product Manager', company: 'Sample Pay' } };
   if (/NOT-A-JOB/.test(text)) return { say: "That looks like a résumé, not a job description. Paste the job description and I'll tailor your résumé to it." };
   if (/\?\s*$/.test(line) && /^(should|how|what|why|is|do|does|which)\b/.test(line)) return null;
+  if (/\b(mock|practi[sc]e|simulat\w*)\b/.test(line) && /interview/.test(line)) return { name: 'mock_interview', input: { job: pasted.length >= 200 ? 'pasted' : 'current', instructions: null, title: null, company: null } };
   if (/\b(prep|interview|likely questions|study plan)\b/.test(line) && !/\?\s*$/.test(line)) return { name: 'prep_guide', input: { job: pasted.length >= 200 ? 'pasted' : 'current', instructions: line, title: null, company: null } };
   if (/\b(cards?|show)\b/.test(line) && /\b(seen|recent|shown)\b/.test(line)) return { name: 'show_jobs', input: { which: 'recent' } };
   // A model mistake to guard against: picking a new search for jobs they already have.

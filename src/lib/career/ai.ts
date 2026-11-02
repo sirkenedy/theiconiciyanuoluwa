@@ -16,7 +16,7 @@ export const anthropic = () => (client ??= new Anthropic({ maxRetries: 1 }));
 export const SYSTEM: Anthropic.TextBlockParam[] = [{ type: 'text', text: CAREER_PROMPT, cache_control: { type: 'ephemeral' } }];
 
 /** Visitor-supplied text sits inside tags the prompt treats as data; it must not be able to close them early. */
-const TAGS = /<\/?\s*(context|profile|resume|jobs?|answers|summary|today|task|suggest|tailored|changes|ats|letter)\b[^>]*>/gi;
+const TAGS = /<\/?\s*(context|profile|resume|jobs?|answers|summary|today|task|suggest|tailored|changes|ats|letter|setup|interview|status|instructions|research)\b[^>]*>/gi;
 export const asData = (s: string) => s.replace(TAGS, '');
 
 /** The per-request `<context>` block (career-mode.md §4.5): compact, so conversations stay cheap at any length. */

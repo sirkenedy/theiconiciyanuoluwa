@@ -47,7 +47,9 @@ function guideBlocks(d: GuideDoc): Block[] {
       if (item.title) out.push({ kind: 'role', text: item.kind === 'question' || item.kind === 'step' ? `${i + 1}. ${item.title}` : item.title });
       if (item.why) out.push({ kind: 'text', text: `Why they ask: ${item.why}` });
       if (item.text) out.push({ kind: 'text', text: item.text });
-      for (const b of [...item.bullets, ...item.answer]) out.push({ kind: 'bullet', text: b });
+      for (const b of item.bullets) out.push({ kind: 'bullet', text: b });
+      if (item.answer.length) out.push({ kind: 'text', text: g.title === 'Interview scorecard' ? 'A stronger answer:' : 'A strong answer:' });
+      for (const b of item.answer) out.push({ kind: 'bullet', text: b });
     });
   }
   if (g.sources.length) {

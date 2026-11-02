@@ -1,4 +1,4 @@
-// In-memory stand-in for Upstash's REST pipeline (GET, MGET, SET NX/EX, INCR, EXPIRE, HGET/HMGET/HSET/HVALS/HINCRBY, SADD/SMEMBERS/SPOP/SCARD, DEL), for the
+// In-memory stand-in for Upstash's REST pipeline (GET, MGET, SET NX/EX, INCR, EXPIRE, HGET/HMGET/HSET/HSETNX/HDEL/HVALS/HINCRBY, SADD/SMEMBERS/SPOP/SCARD, DEL), for the
 // career API tests. `node tests/fake-upstash.mjs 4329` serves it; tests can also import startFakeUpstash().
 import { createServer } from 'node:http';
 
@@ -52,6 +52,14 @@ export function startFakeUpstash(port = 0) {
         for (let i = 0; i < args.length; i += 2) n += h.has(args[i]) ? 0 : 1, h.set(args[i], String(args[i + 1]));
         return n;
       }
+      case 'HSETNX': {
+        const h = hashes.get(key) ?? new Map();
+        hashes.set(key, h);
+        if (h.has(args[0])) return 0;
+        h.set(args[0], String(args[1]));
+        return 1;
+      }
+      case 'HDEL': return args.reduce((n, f) => n + (hashes.get(key)?.delete(f) ? 1 : 0), 0);
       case 'HVALS': return [...(hashes.get(key)?.values() ?? [])];
       case 'HGETALL': return [...(hashes.get(key)?.entries() ?? [])].flat();
       case 'SPOP': {

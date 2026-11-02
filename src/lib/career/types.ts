@@ -131,6 +131,10 @@ export const ToolCallSchema = z.discriminatedUnion('name', [
   z.object({ name: z.literal('find_jobs'), input: z.object({ anywhere: z.boolean().optional() }) }),
   z.object({ name: z.literal('show_jobs'), input: z.object({ which: z.enum(['saved', 'recent', 'applied']) }) }),
   z.object({
+    name: z.literal('mock_interview'),
+    input: z.object({ job: z.enum(['pasted', 'current', 'none']), instructions: z.string().max(1000).nullable().optional(), title: z.string().max(200).nullable().optional(), company: z.string().max(200).nullable().optional() }),
+  }),
+  z.object({
     name: z.literal('prep_guide'),
     input: z.object({ job: z.enum(['pasted', 'current', 'none']), instructions: z.string().max(1000).nullable().optional(), title: z.string().max(200).nullable().optional(), company: z.string().max(200).nullable().optional() }),
   }),
@@ -156,6 +160,22 @@ export const CHAT_TOOLS = [
     name: 'show_jobs',
     description: 'Show job CARDS (with apply links, tailor and cover-letter buttons) for jobs the visitor already has: "saved" = jobs they saved, "recent" = jobs shown to them in the last 7 days, "applied" = jobs they are tracking as applied, interviewing, offer or not selected. Use when they want to see, get or open those jobs as cards. Free: no new search.',
     input_schema: { type: 'object', properties: { which: { type: 'string', enum: ['saved', 'recent', 'applied'] } }, required: ['which'], additionalProperties: false },
+  },
+  {
+    name: 'mock_interview',
+    description:
+      'Start a live practice (mock) interview: Ami plays the interviewer for a job, asks one question at a time, follows up on their answers, and scores them at the end. Use when they want to practise or simulate an interview, or be interviewed. Not for a written list of likely questions (prep_guide).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        job: { type: 'string', enum: ['pasted', 'current', 'none'], description: 'as for make_document: the job description pasted in this conversation, the job in <job>, or none' },
+        instructions: { type: ['string', 'null'], description: 'anything they asked for about the interview, in their own words ("focus on payments", "no behavioural questions"), else null' },
+        title: { type: ['string', 'null'] },
+        company: { type: ['string', 'null'] },
+      },
+      required: ['job'],
+      additionalProperties: false,
+    },
   },
   {
     name: 'prep_guide',
@@ -261,3 +281,55 @@ export const JobInputSchema = z.object({ jobId: z.string().max(200).optional(), 
 
 /** Something in the output that isn't in the résumé, the profile or the visitor's answers. */
 export type Flag = { kind: 'number' | 'name' | 'employer' | 'title' | 'date'; text: string };
+
+// ---- mock interviews ----
+/** What the interviewer does next: a new main question, a follow-up on the last answer, a reply to their question, or the close. */
+export const IV_ACTIONS = ['ask', 'follow_up', 'reply', 'end'] as const;
+export type IvAction = (typeof IV_ACTIONS)[number];
+export const IV_STYLES = ['friendly', 'neutral', 'tough'] as const;
+export const IV_LENGTHS = [4, 6, 8] as const;
+export const InterviewSetupSchema = z.object({
+  questions: z.union([z.literal(4), z.literal(6), z.literal(8)]),
+  style: z.enum(IV_STYLES),
+  instructions: z.string().max(1000),
+});
+export type InterviewSetup = z.infer<typeof InterviewSetupSchema>;
+/** The whole interview so far, sent every turn (the server keeps nothing): Ami's lines and the candidate's answers, each
+ * answer with Ami's private note on it. */
+export const TranscriptSchema = z
+  .array(
+    z.discriminatedUnion('who', [
+      z.object({ who: z.literal('ami'), kind: z.enum(IV_ACTIONS), text: z.string().max(1200) }),
+      z.object({ who: z.literal('you'), text: z.string().min(1).max(4000), note: z.string().max(600).nullable().optional() }),
+    ]),
+  )
+  .max(64);
+export type Transcript = z.infer<typeof TranscriptSchema>;
+export const InterviewTurnSchema = z.object({ action: z.enum(IV_ACTIONS), say: clip(900), note: clip(500).nullable() });
+export type InterviewTurn = z.infer<typeof InterviewTurnSchema>;
+/** Only the actions allowed right now (question budget, follow-up cap): the model can't pick anything else. */
+export const interviewTurnJsonSchema = (allowed: readonly IvAction[]) => obj({ action: { type: 'string', enum: [...allowed] }, say: str, note: nullable(str) });
+
+const score = z.number().transform((n) => Math.min(5, Math.max(1, Math.round(n * 2) / 2)));
+export const FeedbackSchema = z.object({
+  score,
+  readiness: z.enum(['ready', 'almost', 'not_yet']),
+  summary: clip(1200),
+  strengths: upTo(clip(400), 3),
+  fixes: upTo(clip(400), 3),
+  practise: upTo(clip(400), 3),
+  questions: upTo(
+    z.object({ question: clip(600), score: score.transform((n) => Math.round(n)), strong: upTo(clip(400), 3), missing: upTo(clip(400), 3), followups: clip(600).nullable(), better: upTo(clip(600), 6) }),
+    10,
+  ),
+});
+export type Feedback = z.infer<typeof FeedbackSchema>;
+export const FEEDBACK_JSON_SCHEMA = obj({
+  score: { type: 'number' },
+  readiness: { type: 'string', enum: ['ready', 'almost', 'not_yet'] },
+  summary: str,
+  strengths: strArr,
+  fixes: strArr,
+  practise: strArr,
+  questions: { type: 'array', items: obj({ question: str, score: { type: 'number' }, strong: strArr, missing: strArr, followups: nullable(str), better: strArr }) },
+});

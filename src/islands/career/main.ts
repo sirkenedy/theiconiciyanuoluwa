@@ -5,7 +5,7 @@ import { ParseError, readResume, withoutContacts } from '../../lib/career/parse.
 import { readEvents } from '../../lib/career/stream.ts';
 import { loadPurifier, renderModelText } from '../../lib/career/render.ts';
 import { REMOTE } from '../../lib/career/constants.ts';
-import type { Analysis, Answer, ChatTurn, Flag, Guide, Profile, RankedJob, StoredProfile, WriteResult } from '../../lib/career/types.ts';
+import type { Analysis, Answer, ChatTurn, Feedback, Flag, Guide, InterviewSetup, InterviewTurn, IvAction, Profile, RankedJob, StoredProfile, Transcript, WriteResult } from '../../lib/career/types.ts';
 import { changedKeys, contactLine, fileBase, getLine, profileToResume, setLine, type Doc, type GuideDoc, type LetterDoc, type ResumeDoc } from '../../lib/career/document.ts';
 import { clearData, openVault, persistStorage, type Vault } from '../../lib/vault.ts';
 
@@ -24,6 +24,8 @@ type Conversation = {
   job?: NonNullable<Task['job']>;
   /** Text typed but not sent in this chat: it comes back when they return to it. */
   draft?: string;
+  /** A mock interview held in this chat (one per chat): its session, job, setup and where it stands. */
+  iv?: IvState;
 };
 /** `then: 'letter'` = "Résumé + cover letter": the letter is written as soon as the résumé is done. */
 type Task = { mode: 'tailor' | 'improve'; then?: 'letter'; tone?: string; job?: { jobId?: string; title?: string; company?: string; description?: string } };
@@ -35,7 +37,7 @@ type Message = {
   role: 'user' | 'coach';
   text: string;
   at: number;
-  kind?: 'profile' | 'note' | 'jobs' | 'match' | 'tailored' | 'letter' | 'guide';
+  kind?: 'profile' | 'note' | 'jobs' | 'match' | 'tailored' | 'letter' | 'guide' | 'iv' | 'ivsetup';
   suggest?: string[];
   jobs?: RankedJob[];
   left?: number;
@@ -50,7 +52,13 @@ type Message = {
   flags?: Flag[];
   /** Job cards brought back (saved or recently shown): no "fresh jobs left" bar, nothing counted. */
   recalled?: boolean;
+  /** Mock interview: what Ami's line was (question, follow-up, reply, close), and her private note on an answer. */
+  ivKind?: IvAction;
+  ivNote?: string | null;
+  /** A mock interview's scorecard (a guide-shaped document): the overall result, for the chat card. */
+  scorecard?: { score: number; readiness: Feedback['readiness'] };
 };
+type IvState = { sid: string | null; job: NonNullable<Task['job']> | null; setup: InterviewSetup; status: 'setup' | 'active' | 'scoring' | 'done' };
 type State = { current: string | null };
 type Orb = 'idle' | 'typing' | 'thinking' | 'streaming' | 'done' | 'error' | 'reading' | 'searching';
 
@@ -113,6 +121,7 @@ const breatherBox = $<HTMLElement>('[data-breather]');
 const nudgeBox = $<HTMLElement>('[data-nudge]');
 const nudgeBody = $<HTMLElement>('[data-nudge-body]');
 const weekStrip = $<HTMLElement>('[data-week-strip]');
+const ivBar = $<HTMLElement>('[data-ivbar]');
 
 /** Today's global AI budget is spent: a friendly resting state until midnight UTC; nothing on the device is lost. */
 /** Dismissed notices stay hidden for the rest of that day (this browser only); the composer stays paused. */
@@ -128,7 +137,7 @@ function setBreather(on: boolean) {
   breatherBox.hidden = !on || dismissedToday();
   cc.toggleAttribute('data-resting', on);
   input.disabled = on;
-  input.placeholder = on ? 'Back tomorrow…' : phone.matches ? 'Message Ami' : 'Ask anything about your job search…';
+  input.placeholder = on ? 'Back tomorrow…' : placeholder();
   if (on) announce('Ami is taking a breather until tomorrow.');
 }
 $<HTMLButtonElement>('[data-breather-close]').addEventListener('click', () => {
@@ -464,7 +473,7 @@ async function openProfileEditor() {
 
 // ---------- jobs ----------
 const TONES = ['peach', 'mint', 'butter', 'lilac'];
-const ICONS = { sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z', calendar: 'M5 6h14v14H5zM5 10h14M9 3v4M15 3v4', wand: 'M5 19L15 9M14 5v2M19 10h-2M17.5 6.5l-1.4 1.4M11 4.5l.5 1M19.5 13l-1 .5', pen: 'M4 20h4L19 9l-4-4L4 16zM13 7l4 4', bookmark: 'M7 4h10v16l-5-4-5 4z' };
+const ICONS = { chat: 'M5 5h14v10H9l-4 4z', sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z', calendar: 'M5 6h14v14H5zM5 10h14M9 3v4M15 3v4', wand: 'M5 19L15 9M14 5v2M19 10h-2M17.5 6.5l-1.4 1.4M11 4.5l.5 1M19.5 13l-1 .5', pen: 'M4 20h4L19 9l-4-4L4 16zM13 7l4 4', bookmark: 'M7 4h10v16l-5-4-5 4z' };
 
 function icon(d: string) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -604,6 +613,7 @@ function trackRow(job: RankedJob) {
     if (t.status === 'applied' && t.remind) since.append(document.createTextNode(t.remind <= Date.now() ? ' · follow-up due' : ` · follow up ${dayName(t.remind)}`));
     row.append(since);
     if (t.status === 'interview' || t.status === 'offer') {
+      row.append(withIcon(button('Mock interview', 'btn cc-job__btn cc-job__mock', () => startMock({ jobId: job.id, title: job.title, company: job.company }, `Mock interview me for the ${job.title} role at ${job.company}.`)), ICONS.chat));
       row.append(withIcon(button('Interview prep', 'btn btn--primary cc-job__btn cc-job__prep', async () => {
         if (busy) return;
         await add({ role: 'user', text: `Prep me for my ${job.title} interview at ${job.company}.` });
@@ -1294,14 +1304,363 @@ async function startGuide(job: NonNullable<Task['job']>, instructions: string) {
   }
 }
 
+// ---------- mock interviews ----------
+// Ami interviews them in a chat of its own: one question at a time, following up like a real interviewer, then a
+// scorecard. The transcript is these messages; every turn sends all of it (the server keeps only a turn counter).
+const IV_ANSWER_MAX = 3000;
+const READINESS: Record<Feedback['readiness'], string> = { ready: 'Ready', almost: 'Almost ready', not_yet: 'Not ready yet' };
+const ivState = () => current()?.iv ?? null;
+const ivActive = () => ivState()?.status === 'active';
+const placeholder = () => (ivActive() ? 'Your answer…' : phone.matches ? 'Message Ami' : 'Ask anything about your job search…');
+
+/** "repeat" and "end" are commands, not answers: they stay out of the transcript. */
+function ivTranscript(): Transcript {
+  return messages
+    .filter((m) => m.kind === 'iv' && !(m.role === 'user' && (IV_END.test(m.text) || IV_REPEAT.test(m.text))))
+    .map((m) => (m.role === 'coach' ? { who: 'ami' as const, kind: m.ivKind ?? 'ask', text: m.text.slice(0, 1200) } : { who: 'you' as const, text: m.text.slice(0, IV_ANSWER_MAX), note: m.ivNote ?? null }));
+}
+
+/** Their own words can set it up: "a tough one", "short", "focus on payments". */
+function setupFrom(text: string): InterviewSetup {
+  const t = text.toLowerCase();
+  const style = /\b(tough|hard|difficult|challenging|grill)\b/.test(t) ? 'tough' : /\b(friendly|easy|gentle|relaxed)\b/.test(t) ? 'friendly' : 'neutral';
+  const questions = /\b(short|quick|brief|4 questions)\b/.test(t) ? 4 : /\b(long|full|thorough|8 questions)\b/.test(t) ? 8 : 6;
+  return { questions, style, instructions: '' };
+}
+
+/** What they asked the interview to cover or skip ("focus on payments, no behavioural questions"), in their words. */
+function mockFocus(text: string) {
+  return (text.match(/\b(focus(ing)? on [^.,;!?]+|(no|only|skip|without|more|mostly) [^.,;!?]*questions?|(about|on) (my|the) [^.,;!?]+)/gi) ?? []).map((x) => x.trim()).join('; ').slice(0, 1000);
+}
+
+/** Opens a new chat with the setup card. `job`: a tracked/saved job, the chat's job, a pasted posting, or none yet. */
+async function startMock(job: NonNullable<Task['job']> | null, userText: string | null, instructions = '') {
+  if (!stored) return userText === null ? note(NOTES.jobsNeedProfile.replace('match jobs to', 'work from')) : needProfile(userText);
+  if (busy) return;
+  if (current() && messages.length) {
+    if (userText === null) await note('Opening your mock interview in a new chat.');
+    await open(null);
+  }
+  if (userText) await add({ role: 'user', text: userText });
+  await add({ role: 'coach', text: '', kind: 'ivsetup' });
+  const c = current()!;
+  const setup = setupFrom(`${userText ?? ''} ${instructions}`);
+  setup.instructions = instructions.slice(0, 1000);
+  c.iv = { sid: null, job, setup, status: 'setup' };
+  c.title = `Mock interview${job?.title ? ` · ${job.title}` : ''}`.slice(0, 44);
+  if (job) c.job = job;
+  await saveConversation(c);
+  renderChats();
+  rerenderSetup();
+  renderIvBar();
+}
+
+function rerenderSetup() {
+  const m = messages.find((x) => x.kind === 'ivsetup');
+  const node = m && msgsEl.querySelector(`[data-id="${m.id}"]`);
+  if (m && node) node.replaceWith(messageNode(m));
+}
+
+function choice(name: string, legend: string, options: [string, string, string?][], value: string) {
+  const set = el('fieldset', 'cc-ivsetup__set');
+  set.append(el('legend', 'cc-ivsetup__legend', legend));
+  const row = el('div', 'cc-choices');
+  for (const [v, label, sub] of options) {
+    const lab = el('label', 'cc-choice');
+    const r = document.createElement('input');
+    r.type = 'radio';
+    r.name = name;
+    r.value = v;
+    r.checked = v === value;
+    r.className = 'sr-only';
+    const face = el('span', 'cc-choice__face');
+    face.append(el('strong', undefined, label));
+    if (sub) face.append(el('span', undefined, sub));
+    lab.append(r, face);
+    row.append(lab);
+  }
+  set.append(row);
+  return set;
+}
+
+function ivSetupBlock() {
+  const iv = ivState();
+  const box = el('div', 'cc-ivsetup');
+  if (!iv) return box;
+  const job = iv.job;
+  const what = job?.title ? `${job.title}${job.company ? ` at ${job.company}` : ''}` : job?.description ? 'the job you pasted' : null;
+  if (iv.status !== 'setup') {
+    const styleName = { friendly: 'Friendly', neutral: 'Neutral', tough: 'Tough' }[iv.setup.style];
+    box.append(el('p', 'cc-ivsetup__done', `Mock interview${what ? ` for ${what}` : ''}: ${iv.setup.questions} questions · ${styleName} interviewer${iv.setup.instructions ? ` · ${iv.setup.instructions}` : ''}`));
+    return box;
+  }
+  const f = el('form', 'cc-ivsetup__form');
+  f.append(el('p', 'cc-ivsetup__title', 'Mock interview'), el('p', 'cc-ivsetup__lead', what ? `I'll interview you for ${what}, one question at a time, and follow up like a real interviewer. You'll get a scorecard at the end.` : "Paste the job description and I'll interview you for it, one question at a time, then give you a scorecard."));
+  let paste: HTMLTextAreaElement | null = null;
+  if (!job?.jobId && !job?.description) {
+    const field = el('label', 'cc-field');
+    field.append(el('span', 'cc-field__label', 'Job description'));
+    paste = el('textarea', 'cc-field__input cc-ivsetup__paste');
+    paste.rows = 5;
+    paste.maxLength = 15_000;
+    paste.placeholder = 'Paste the full job description here';
+    field.append(paste);
+    f.append(field);
+  }
+  f.append(
+    choice('iv-length', 'Length', [['4', 'Short', '4 questions'], ['6', 'Standard', '6 questions'], ['8', 'Long', '8 questions']], String(iv.setup.questions)),
+    choice('iv-style', 'Interviewer', [['friendly', 'Friendly', 'Warm and encouraging'], ['neutral', 'Neutral', 'Professional, like most'], ['tough', 'Tough', 'Sharper follow-ups']], iv.setup.style),
+  );
+  const focus = el('label', 'cc-field');
+  focus.append(el('span', 'cc-field__label', 'Anything to focus on or avoid? (optional)'));
+  const extra = el('input', 'cc-field__input');
+  extra.maxLength = 1000;
+  extra.value = iv.setup.instructions;
+  extra.placeholder = 'e.g. focus on payments; no behavioural questions';
+  focus.append(extra);
+  const err = el('p', 'cc-ivsetup__error');
+  err.setAttribute('role', 'alert');
+  const start = withIcon(el('button', 'btn btn--primary', 'Start interview'), ICONS.sparkle);
+  start.type = 'submit';
+  const foot = el('div', 'cc-ivsetup__foot');
+  foot.append(start, el('span', 'cc-ivsetup__hint', `About ${iv.setup.questions * 2 + 3} minutes · uses 1 of today's ${DAILY_LIMITS.interviews} mock interviews. Say "repeat", "skip" or "end" any time.`));
+  f.append(focus, err, foot);
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (busy || iv.status !== 'setup') return;
+    const pasted = paste?.value.trim() ?? '';
+    if (paste && pasted.length < 200) {
+      err.textContent = /^https?:\/\/\S+$/.test(pasted) ? NOTES.urlOnly : 'Paste the full job description (at least a few paragraphs).';
+      paste.focus();
+      return;
+    }
+    const data = new FormData(f);
+    iv.setup = { questions: Number(data.get('iv-length')) as 4 | 6 | 8, style: data.get('iv-style') as InterviewSetup['style'], instructions: extra.value.trim().slice(0, 1000) };
+    if (paste) iv.job = { description: pasted };
+    await saveConversation(current()!);
+    beginInterview();
+  });
+  box.append(f);
+  return box;
+}
+
+async function ivRequest(phase: 'start' | 'turn' | 'feedback') {
+  const iv = ivState()!;
+  return deviceFetch('/api/career/interview', jsonBody({ phase, sid: iv.sid, job: phase === 'start' ? iv.job : {}, setup: iv.setup, transcript: phase === 'start' ? [] : ivTranscript(), profile: stored!.profile, resume: resumeForAI(), day: localDay(), today: localDay() })).catch(() => null);
+}
+
+/** What went wrong, said plainly. `true` when the interview can't go on (expired, or ended on the server). */
+async function ivProblem(res: Response | null): Promise<boolean> {
+  if (!res) return note(NOTES.offline).then(() => false);
+  if (await isBreather(res)) return false;
+  const { error, kind } = (await res.json().catch(() => ({}))) as { error?: string; kind?: string };
+  if (error === 'limit' && kind === 'interviews') return note(`You've done today's ${DAILY_LIMITS.interviews} mock interviews. New ones after midnight.`).then(() => true);
+  if (error === 'limit' && kind === 'turns') return note("We've reached this interview's length limit. Say \"end\" for your scorecard.").then(() => false);
+  if (error === 'session-expired') return note('This interview timed out (they last 3 hours), so I can’t continue it. Start a new one any time.').then(() => true);
+  if (error === 'job-expired') return note(NOTES.jobExpired.replace('carry on', 'start the interview')).then(() => false);
+  if (error === 'job-too-short') return note(NOTES.jobShort).then(() => false);
+  if (error === 'devices') return note(NOTES.devices).then(() => true);
+  if (error === 'unavailable' || res.status === 503) return note(NOTES.offline).then(() => false);
+  return note("I couldn't respond just now. Send your answer again in a moment.").then(() => false);
+}
+
+async function beginInterview() {
+  const c = current()!;
+  const iv = c.iv!;
+  if (busy) return;
+  setBusy(true);
+  try {
+    setOrb('thinking');
+    const live = liveNode('Getting ready…');
+    const res = await ivRequest('start');
+    live.li.remove();
+    if (!res?.ok) {
+      setOrb('error');
+      const { error } = res ? ((await res.clone().json().catch(() => ({}))) as { error?: string }) : {};
+      const over = await ivProblem(res);
+      if (error === 'job-expired') {
+        iv.job = { title: iv.job?.title, company: iv.job?.company };
+        await saveConversation(c);
+      }
+      if (over) iv.status = 'done';
+      await saveConversation(c);
+      rerenderSetup();
+      return;
+    }
+    const out = (await res.json()) as { sid: string; turn: InterviewTurn };
+    iv.sid = out.sid;
+    iv.status = 'active';
+    await saveConversation(c);
+    rerenderSetup();
+    await add({ role: 'coach', text: out.turn.say, kind: 'iv', ivKind: out.turn.action });
+    setOrb('done');
+    input.focus();
+  } finally {
+    setBusy(false);
+    renderIvBar();
+    loadUsage();
+  }
+}
+
+const IV_REPEAT = /^(please )?(can you |could you )?(repeat|say (that|it) again|come again|pardon)\b[^.?!]{0,30}[.?!]*$/i;
+const IV_SKIP = /^(skip|pass|next question)( (this|that)( one| question)?)?( please)?[.!]*$/i;
+const IV_END = /^(end|stop|finish)( (the|this))?( interview)?( now| here| please)?[.!]*$|^let'?s (stop|end)( (here|now|there))?[.!]*$/i;
+
+/** Their answer (or "repeat" / "skip" / "end", handled here with no AI call). */
+async function interviewAnswer(text: string) {
+  const c = current()!;
+  const iv = c.iv!;
+  if (IV_END.test(text)) {
+    await add({ role: 'user', text, kind: 'iv' });
+    return endInterview(true);
+  }
+  if (IV_REPEAT.test(text)) {
+    const last = [...messages].reverse().find((m) => m.kind === 'iv' && m.role === 'coach' && (m.ivKind === 'ask' || m.ivKind === 'follow_up'));
+    if (last) {
+      await add({ role: 'user', text, kind: 'iv' });
+      await add({ role: 'coach', text: last.text, kind: 'iv', ivKind: 'reply' });
+      return;
+    }
+  }
+  const answer = IV_SKIP.test(text) ? '(skipped)' : text.slice(0, IV_ANSWER_MAX);
+  if (text.length > IV_ANSWER_MAX) announce(`Long answer: I'll read the first ${IV_ANSWER_MAX.toLocaleString()} characters.`);
+  const mine = await add({ role: 'user', text: answer, kind: 'iv' });
+  setBusy(true);
+  try {
+    setOrb('thinking');
+    const live = liveNode('');
+    const res = await ivRequest('turn');
+    live.li.remove();
+    if (!res?.ok) {
+      setOrb('error');
+      const over = await ivProblem(res);
+      // The answer wasn't heard: it goes back in the box to send again.
+      if (!over && answer !== '(skipped)') {
+        messages.splice(messages.indexOf(mine), 1);
+        await vault.removeRecord('messages', mine.id);
+        msgsEl.querySelector(`[data-id="${mine.id}"]`)?.remove();
+        input.value = text;
+        fit();
+      }
+      if (over) {
+        iv.status = 'done';
+        await saveConversation(c);
+      }
+      return;
+    }
+    const { turn } = (await res.json()) as { turn: InterviewTurn };
+    mine.ivNote = turn.note;
+    await vault.put('messages', mine.id, mine, c.id);
+    await add({ role: 'coach', text: turn.say, kind: 'iv', ivKind: turn.action });
+    setOrb('done');
+    if (turn.action === 'end') return endInterview(false);
+  } finally {
+    setBusy(false);
+    renderIvBar();
+  }
+}
+
+/** Closes the interview (by voice, the bar, or Ami's own close) and asks for the scorecard. */
+async function endInterview(byThem: boolean) {
+  const c = current()!;
+  const iv = c.iv!;
+  const answered = ivTranscript().some((e) => e.who === 'you' && e.text !== '(skipped)');
+  if (byThem) await add({ role: 'coach', text: answered ? "Let's stop there. Thank you, that was useful. Your scorecard is on its way." : "Let's stop there. You didn't answer any questions, so there's nothing to score this time.", kind: 'iv', ivKind: 'end' });
+  iv.status = answered ? 'scoring' : 'done';
+  await saveConversation(c);
+  renderIvBar();
+  if (answered) await requestScorecard();
+}
+
+async function requestScorecard() {
+  const c = current()!;
+  const iv = c.iv!;
+  if (busy) return;
+  setBusy(true);
+  renderIvBar();
+  try {
+    setOrb('thinking');
+    const live = liveNode('Scoring your interview…');
+    const res = await ivRequest('feedback');
+    if (!res?.ok || !res.body) {
+      live.li.remove();
+      setOrb('error');
+      const { error } = res ? ((await res.clone().json().catch(() => ({}))) as { error?: string }) : {};
+      if (error === 'feedback-done') {
+        iv.status = 'done';
+        await saveConversation(c);
+        return note("I've already scored this interview: its scorecard is above.");
+      }
+      if (await ivProblem(res)) {
+        iv.status = 'done';
+        await saveConversation(c);
+      }
+      return;
+    }
+    type Scored = { feedback: Feedback; guide: Guide; flags: Flag[] };
+    let out = null as Scored | null;
+    for await (const { event, data } of readEvents(res)) {
+      if (event === 'progress') {
+        const p = data as { text: string; chars?: number };
+        setOrb('streaming');
+        live.p.textContent = p.chars ? `${p.text} ${Math.min(99, Math.round(p.chars / 80))}%` : p.text;
+      } else if (event === 'result') out = data as Scored;
+    }
+    live.li.remove();
+    if (!out) {
+      setOrb('error');
+      return note("I couldn't finish your scorecard. Tap \"Get my scorecard\" to try again.");
+    }
+    const job = iv.job ?? {};
+    const d: GuideDoc = {
+      id: uid(),
+      kind: 'guide',
+      title: ['Interview scorecard', job.title, job.company].filter(Boolean).join(' · '),
+      fileBase: fileBase(stored!.profile.identity.name ?? '', 'interview-scorecard', job.company, job.title),
+      guide: out.guide,
+      flags: out.flags,
+      createdAt: Date.now(),
+    };
+    await vault.put('documents', d.id, d);
+    iv.status = 'done';
+    await saveConversation(c);
+    await add({ role: 'coach', text: out.feedback.summary.slice(0, 400), kind: 'guide', docId: d.id, flags: out.flags, scorecard: { score: out.feedback.score, readiness: out.feedback.readiness } });
+    await openDoc(d.id);
+    announce(`Your scorecard is ready: ${out.feedback.score} out of 5, ${READINESS[out.feedback.readiness].toLowerCase()}.`);
+    setOrb('done');
+  } finally {
+    setBusy(false);
+    renderIvBar();
+  }
+}
+
+/** "Mock interview · Question 3 of 6", with End (or Get my scorecard), above the chat while one is on. */
+function renderIvBar() {
+  const iv = ivState();
+  const on = !!iv && (iv.status === 'active' || iv.status === 'scoring');
+  ivBar.hidden = !on;
+  if (!input.disabled) input.placeholder = placeholder();
+  if (!on) return;
+  const asked = ivTranscript().filter((e) => e.who === 'ami' && e.kind === 'ask').length;
+  const text = el('span', 'cc-ivbar__text');
+  text.append(el('strong', undefined, 'Mock interview'), document.createTextNode(iv.status === 'active' ? ` · Question ${Math.max(1, asked)} of ${iv.setup.questions}` : ' · Finished'));
+  const action =
+    iv.status === 'active'
+      ? button('End interview', 'btn cc-ivbar__btn', () => !busy && interviewAnswer('End interview'))
+      : busy
+        ? null
+        : button('Get my scorecard', 'btn btn--primary cc-ivbar__btn', () => requestScorecard());
+  ivBar.replaceChildren(text, ...(action ? [action] : []));
+}
+
 const FLAG_LABEL: Record<Flag['kind'], string> = { number: 'number', name: 'name or tool', employer: 'employer', title: 'job title', date: 'date' };
 
 function resultBlock(m: Message) {
   const box = el('div', 'cc-result');
   const flags = m.flags ?? [];
-  const what = m.kind === 'guide' ? 'Your interview prep guide is ready.' : m.kind === 'letter' ? 'Your cover letter is ready.' : m.critique?.length ? 'Your stronger résumé is ready. Every highlighted line changed.' : 'Your tailored résumé is ready. Every highlighted line changed.';
+  const what = m.scorecard ? `Your interview scorecard is ready: ${m.scorecard.score}/5 · ${READINESS[m.scorecard.readiness]}.` : m.kind === 'guide' ? 'Your interview prep guide is ready.' : m.kind === 'letter' ? 'Your cover letter is ready.' : m.critique?.length ? 'Your stronger résumé is ready. Every highlighted line changed.' : 'Your tailored résumé is ready. Every highlighted line changed.';
   if (!flags.length) {
-    box.append(el('p', 'cc-result__lead', m.kind === 'guide' ? `${what} The answer outlines use only your real experience.` : `${what} Nothing was invented: numbers come only from your résumé${m.kind === 'letter' ? '' : ' and your answers'}.`));
+    box.append(el('p', 'cc-result__lead', m.scorecard ? `${what} Each question has notes and a stronger answer built only from your real experience.` : m.kind === 'guide' ? `${what} The answer outlines use only your real experience.` : `${what} Nothing was invented: numbers come only from your résumé${m.kind === 'letter' ? '' : ' and your answers'}.`));
   } else {
     box.append(el('p', 'cc-result__lead', what));
     const warn = el('div', 'cc-flags');
@@ -1362,7 +1721,7 @@ function docCard(m: Message) {
   const id = m.docId!;
   const letter = m.kind === 'letter';
   const guide = m.kind === 'guide';
-  const what = guide ? 'prep guide' : letter ? 'cover letter' : 'résumé';
+  const what = m.scorecard ? 'scorecard' : guide ? 'prep guide' : letter ? 'cover letter' : 'résumé';
   const card = el('div', 'cc-doccard');
   card.dataset.docCard = id;
   if (Date.now() - m.at < 5000) card.classList.add('is-new');
@@ -1374,7 +1733,7 @@ function docCard(m: Message) {
   const text = el('span', 'cc-doccard__text');
   const sub = el('span', 'cc-doccard__sub', 'Ready to download');
   const cta = el('span', 'cc-doccard__cta');
-  text.append(el('span', 'cc-doccard__kind', guide ? 'Interview prep guide' : letter ? 'Cover letter' : m.critique?.length ? 'Stronger résumé' : 'Tailored résumé'), sub, cta);
+  text.append(el('span', 'cc-doccard__kind', m.scorecard ? 'Interview scorecard' : guide ? 'Interview prep guide' : letter ? 'Cover letter' : m.critique?.length ? 'Stronger résumé' : 'Tailored résumé'), sub, cta);
   const dot = el('span', 'cc-doccard__dot');
   dot.setAttribute('aria-hidden', 'true');
   open.append(sheet, text, dot);
@@ -1394,7 +1753,7 @@ function docCard(m: Message) {
   card.append(open, dl, status);
   syncCard(card);
   vault.get<Doc>('documents', id).then((d) => {
-    const title = d?.title.replace(/^(Cover letter|Stronger résumé|Tailored résumé|Interview prep)( · )?/, '');
+    const title = d?.title.replace(/^(Cover letter|Stronger résumé|Tailored résumé|Interview scorecard|Interview prep)( · )?/, '');
     if (title) sub.textContent = title;
   });
   return card;
@@ -1463,6 +1822,9 @@ async function openDoc(id: string) {
 }
 
 /** The guide as a clean, readable page (the same content the PDF gets). Flagged phrases are underlined. */
+/** A scorecard's answers improve on theirs; a prep guide's are from scratch. */
+const answerLabel = (g: Guide) => (g.title === 'Interview scorecard' ? 'A stronger answer' : 'A strong answer');
+
 function guideNodes(g: Guide, flagged: string[]): Node[] {
   const para = (cls: string, text: string) => {
     const p = el('p', cls);
@@ -1482,17 +1844,17 @@ function guideNodes(g: Guide, flagged: string[]): Node[] {
       if (item.title) box.append(el(item.kind === 'question' ? 'h4' : 'p', 'cc-guide__title', item.title));
       if (item.why) box.append(para('cc-guide__why', `Why they ask: ${item.why}`));
       if (item.text) box.append(para('cc-guide__text', item.text));
-      const points = [...item.bullets, ...item.answer];
-      if (points.length) {
+      const points = (items: string[]) => {
         const ul = el('ul', 'cc-guide__points');
-        for (const b of points) {
+        for (const b of items) {
           const li = el('li');
           li.append(editableText(b, flagged));
           ul.append(li);
         }
-        if (item.answer.length) box.append(el('p', 'cc-guide__label', 'A strong answer'));
-        box.append(ul);
-      }
+        return ul;
+      };
+      if (item.bullets.length) box.append(points(item.bullets));
+      if (item.answer.length) box.append(el('p', 'cc-guide__label', answerLabel(g)), points(item.answer));
       list.append(box);
     }
     sec.append(list);
@@ -1713,6 +2075,14 @@ function messageNode(m: Message) {
     li.append(resultBlock(m));
     return li;
   }
+  if (m.kind === 'ivsetup') {
+    li.append(ivSetupBlock());
+    return li;
+  }
+  if (m.kind === 'iv' && m.role === 'user' && m.text === '(skipped)') {
+    li.append(el('p', 'cc-msg__text cc-msg__skipped', 'Skipped'));
+    return li;
+  }
   const body = el('div', 'cc-msg__body');
   body.append(el('span', 'sr-only', m.role === 'user' ? 'You: ' : 'Ami: '));
   const content = el('div', 'cc-msg__text');
@@ -1810,6 +2180,7 @@ function editMessage(m: Message, content: HTMLElement, bar: HTMLElement) {
 type ToolCall =
   | { name: 'find_jobs'; input: { anywhere?: boolean } }
   | { name: 'show_jobs'; input: { which: 'saved' | 'recent' | 'applied' } }
+  | { name: 'mock_interview'; input: { job: 'pasted' | 'current' | 'none'; instructions?: string | null; title?: string | null; company?: string | null } }
   | { name: 'prep_guide'; input: { job: 'pasted' | 'current' | 'none'; instructions?: string | null; title?: string | null; company?: string | null } }
   | { name: 'make_document'; input: { kind: 'tailor' | 'letter' | 'both' | 'improve'; job: 'pasted' | 'current' | 'none'; title?: string | null; company?: string | null; tone?: string | null } };
 
@@ -1823,6 +2194,12 @@ async function runTool(tool: ToolCall, userText: string) {
     return findJobs(false, { anywhere: !!tool.input.anywhere, silent: true });
   }
   if (tool.name === 'show_jobs') return showJobs(tool.input.which, null);
+  if (tool.name === 'mock_interview') {
+    const { job: from, instructions, title: t, company: co } = tool.input;
+    const posting = from === 'pasted' ? latestPasted(userText) : null;
+    const job = posting ? { description: posting, ...(t ? { title: t } : {}), ...(co ? { company: co } : {}) } : from === 'current' ? (current()?.job ?? null) : null;
+    return startMock(job, null, instructions ?? '');
+  }
   if (tool.name === 'prep_guide') {
     if (!stored) return note(NOTES.jobsNeedProfile.replace('match jobs to', 'work from'));
     const { job: from, instructions, title: t, company: co } = tool.input;
@@ -1880,10 +2257,12 @@ const LEAD_RE = /^(?:(?:hi|hey|ok(?:ay)?|great|thanks|now|please|so|also|and|the
 const JOBS_RE = /\b(jobs?|roles?|openings?|positions?|vacanc(?:y|ies)|opportunit(?:y|ies))\b/;
 
 /** Clear, common requests map to a tool without any model call. Anything else goes to Ami (who can still pick a tool). */
-function intentOf(text: string): 'saved' | 'applied' | 'jobs' | 'both' | 'tailor' | 'letter' | 'improve' | null {
+function intentOf(text: string): 'saved' | 'applied' | 'mock' | 'jobs' | 'both' | 'tailor' | 'letter' | 'improve' | null {
   const t = text.trim().toLowerCase();
   // "show my saved jobs", "get ,y saved jobs": the saved cards, straight from this device.
   if (/\b(saved|bookmarked)\b/.test(t) && JOBS_RE.test(t) && !/\b(how|why|which|should)\b/.test(t)) return 'saved';
+  // "mock interview me", "let's practise the interview", "simulate an interview": a practice interview, not a question about one.
+  if (/\binterview/.test(t) && /\b(mock|practi[sc]e|simulat\w*|rehears\w*|role[- ]?play|run me through|interview me)\b/.test(t) && !/\b(how|why|what|tips?|advice|should)\b/.test(t)) return 'mock';
   // "show my applications", "jobs I applied to": the tracked cards.
   if ((/\bmy applications\b/.test(t) || (/\bi('ve| have)? applied\b/.test(t) && JOBS_RE.test(t))) && /^(show|list|get|see|view|where|what|which|my|can|could)\b/.test(t.replace(LEAD_RE, '')) && !/\b(how|why|should)\b/.test(t)) return 'applied';
   const polite = /^(can|could|would) you\b/.test(t);
@@ -1907,11 +2286,13 @@ function intentOf(text: string): 'saved' | 'applied' | 'jobs' | 'both' | 'tailor
 async function send(text: string) {
   const q = text.trim();
   if (!q || busy) return;
+  if (ivActive()) return interviewAnswer(q);
   const [first, ...rest] = q.split('\n');
   const pasted = rest.join('\n').trim().length >= 200;
   const intent = intentOf(pasted ? first : q);
   if (intent && !pasted) {
     if (intent === 'saved' || intent === 'applied') return showJobs(intent, q);
+    if (intent === 'mock') return startMock(current()?.job ?? null, q, mockFocus(q));
     if (intent === 'jobs') return findJobs(false, { userText: q });
     if (intent === 'improve') return startTailor({ mode: 'improve' }, q);
     return forThisJob(intent, q);
@@ -1990,6 +2371,7 @@ async function openNow(id: string | null, { restoreScroll = false } = {}) {
   if (input.value === typed) input.value = draft;
   draftFor = id;
   fit();
+  renderIvBar();
   await saveState();
 }
 
@@ -2060,7 +2442,9 @@ function transcript(): ChatTurn[] {
         return coach(`(I analysed ${m.task?.mode === 'improve' ? 'their résumé against their target role' : `the job${a?.role ? ` ${a.role}` : ''}${a?.company ? ` at ${a.company}` : ''}`}: ${(a?.match ?? []).map((x) => x.text).join('; ')}.${qa ? ` Their answers: ${qa}.` : ''})`);
       }
       if (m.kind === 'tailored') return coach(`(I built ${m.critique?.length ? 'a stronger résumé' : 'a tailored résumé'}${m.ats ? `, keyword match ${m.ats.before} → ${m.ats.after}` : ''}. Changes: ${(m.changes ?? []).map((c) => `${c.section}: ${c.why}`).join('; ') || 'none listed'}.${m.flags?.length ? ` Flagged to check: ${m.flags.map((f) => f.text).join(', ')}.` : ''})`);
+      if (m.kind === 'guide' && m.scorecard) return coach(`(I scored their mock interview: ${m.scorecard.score}/5, ${READINESS[m.scorecard.readiness].toLowerCase()}. ${m.text})`);
       if (m.kind === 'guide') return coach(`(I made an interview prep guide${m.text ? `: ${m.text}` : ''}.)`);
+      if (m.kind === 'iv') return m.role === 'coach' ? coach(`(As the interviewer) ${m.text}`) : { role: 'user', content: `(Interview answer) ${m.text}` };
       if (m.kind === 'letter') return coach(`(I wrote a cover letter${m.flags?.length ? `; flagged to check: ${m.flags.map((f) => f.text).join(', ')}` : ''}.)`);
       return null;
     })

@@ -27,6 +27,7 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
   { key: 'tailored', label: 'Tailored résumés', tone: 'peach' },
   { key: 'letters', label: 'Cover letters', tone: 'butter' },
   { key: 'guides', label: 'Interview prep guides', tone: 'lilac' },
+  { key: 'interviews', label: 'Mock interviews', tone: 'mint' },
 ];
 ---
 
@@ -171,6 +172,7 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
             </ul>
           </section>
 
+          <div class="cc-ivbar" data-ivbar role="status" hidden></div>
           <ol class="cc-msgs" role="list" data-msgs aria-label="Conversation"></ol>
         </div>
       </div>
