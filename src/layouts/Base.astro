@@ -5,6 +5,7 @@ import '../styles/base.css';
 import '../styles/motion.css';
 import '../styles/twin.css';
 import { darkTokens, lightTokens } from '../lib/tokens';
+import SpeedInsights from '@vercel/speed-insights/astro';
 
 interface Props {
   title: string;
@@ -62,5 +63,6 @@ const speculation = JSON.stringify({ prerender: [{ where: { href_matches: ['/blo
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <slot />
+    <SpeedInsights />
   </body>
 </html>
