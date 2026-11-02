@@ -64,6 +64,7 @@ const live = [ADZUNA && 'Adzuna', JOOBLE && 'Jooble'].filter(Boolean).join(' and
         <li>The jobs already shown to your device, for 30 days, so you never see the same job twice.</li>
         <li>When no job fits, a count of searches per country and the target roles asked for there (no names, no devices), so Ami can look for job boards in that country.</li>
         <li>Your device's public key (not the private one, which never leaves your browser), so requests can be checked as really coming from you. It expires after 90 days unused.</li>
+        <li>If you share a progress card, what you chose to show (your numbers, and your first name if you added it) is written into the card's link itself, so it isn't stored anywhere; the link is signed so nobody can change it. We count how many cards are shared and how many times card links are opened each day, as totals only.</li>
         <li>No résumés, no chat content, no cookies and no analytics.</li>
       </ul>
     </section>

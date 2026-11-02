@@ -14,14 +14,16 @@ interface Props {
   noindex?: boolean;
   /** Alt text for the shared /og.png card. Passed in, so the layout never imports the résumé (on-demand pages would ship it). */
   ogAlt: string;
+  /** A page's own link-preview image (a shared progress card), instead of /og.png. Always 1200×630. */
+  ogImage?: string;
 }
-const { title, description, noindex = false, ogAlt } = Astro.props;
+const { title, description, noindex = false, ogAlt, ogImage: ownImage } = Astro.props;
 
 // theme-color must be a literal; it comes from the tokens so they stay the single source.
 const bgLight = lightTokens.bg;
 const bgDark = darkTokens.bg;
 const canonical = new URL(Astro.url.pathname, Astro.site);
-const ogImage = new URL('/og.png', Astro.site);
+const ogImage = new URL(ownImage ?? '/og.png', Astro.site);
 // Prerender likely next pages on hover (Chromium); other browsers ignore this.
 const speculation = JSON.stringify({ prerender: [{ where: { href_matches: ['/blog/*', '/resume/'] }, eagerness: 'moderate' }] });
 ---

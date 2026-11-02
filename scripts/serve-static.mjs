@@ -30,7 +30,7 @@ async function resolveFile(urlPath) {
 
 // Same routing as .vercel/output/config.json: on-demand pages build their images at runtime through /_image.
 // /career itself is on demand; /career/privacy is a static file (Vercel serves files first, so must we).
-const ON_DEMAND = /^\/(career\/?(\?|$)|api\/device\/|api\/career\/|_image\?)/;
+const ON_DEMAND = /^\/(career\/?(\?|$)|career\/card\/|api\/device\/|api\/career\/|_image\?)/;
 let renderFn;
 const render = async (req, res) => {
   renderFn ??= (await import(new URL('../.vercel/output/functions/_render.func/dist/server/entry.mjs', import.meta.url))).default;

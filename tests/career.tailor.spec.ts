@@ -540,11 +540,14 @@ test('with a document open, the "taking a breather" notice sits at the top of th
   await page.getByLabel('Job description').fill(JD);
   await page.getByRole('button', { name: 'Letter only' }).click();
   await expect(page.locator('.cc')).toHaveClass(/has-preview/);
-  await page.evaluate(() => {
+  // Shown and measured in one step: a usage refresh a moment later could hide it again.
+  const [notice, log, dock, preview] = await page.evaluate(() => {
     document.querySelector<HTMLElement>('[data-breather]')!.hidden = false;
+    return ['[data-breather]', '.cc-log', '.cc-dock', '[data-preview]'].map((sel) => {
+      const r = document.querySelector(sel)!.getBoundingClientRect();
+      return { x: r.x, y: r.y, width: r.width, height: r.height };
+    });
   });
-  const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
-  const [notice, log, dock, preview] = [await box('[data-breather]'), await box('.cc-log'), await box('.cc-dock'), await box('[data-preview]')];
   expect(notice.y + notice.height).toBeLessThanOrEqual(log.y + 1); // above the conversation
   expect(notice.y).toBeLessThan(dock.y);
   expect(notice.x + notice.width).toBeLessThanOrEqual(preview.x); // in the chat column

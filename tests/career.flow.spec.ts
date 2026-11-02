@@ -261,3 +261,12 @@ test('while Ami replies the send arrow is a spinner; a second message waits in t
   await input.press('Enter');
   await expect(page.locator('.cc-msg--user')).toHaveCount(2);
 });
+
+test('a file that will not open says why, in small print (phones have no console to look in)', async ({ page }) => {
+  await page.goto('/career');
+  await expect(page.locator('[data-usage-ready]')).toHaveCount(1);
+  await page.locator('.cc-consent').click();
+  await page.locator('.cc-drop [data-file]').setInputFiles({ name: 'my-cv.docx 2.pdf', mimeType: 'application/pdf', buffer: Buffer.from('PK\u0003\u0004 this is really a Word file, renamed') });
+  await expect(page.locator('.cc-msg--note').last()).toContainText("I couldn't open that file.");
+  await expect(page.locator('.cc-msg__code').last()).toHaveText(/^Code: PDF · \w+: .+ · application\/pdf · 0 KB$/);
+});
