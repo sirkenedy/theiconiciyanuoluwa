@@ -92,6 +92,7 @@ test('mock interview from a tracked job: setup, follow-up on a vague answer, rep
   // "Repeat" and "skip" need no AI call to understand them.
   const before = (await turns(page)).length;
   await answer(page, 'Can you repeat that?');
+  await expect(coachLines(page)).toHaveCount(4); // the question again
   await expect(coachLines(page).last()).toContainText('How would you prioritise a payments roadmap?');
   expect((await turns(page)).length).toBe(before);
   await answer(page, 'skip');

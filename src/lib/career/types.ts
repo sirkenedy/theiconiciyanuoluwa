@@ -300,15 +300,32 @@ export const TranscriptSchema = z
   .array(
     z.discriminatedUnion('who', [
       z.object({ who: z.literal('ami'), kind: z.enum(IV_ACTIONS), text: z.string().max(1200) }),
-      z.object({ who: z.literal('you'), text: z.string().min(1).max(4000), note: z.string().max(600).nullable().optional() }),
+      z.object({
+        who: z.literal('you'),
+        text: z.string().min(1).max(4000),
+        note: z.string().max(600).nullable().optional(),
+        /** A spoken answer's delivery, measured on the device (no audio is ever sent). */
+        voice: z.object({ seconds: z.number().min(0).max(3600), words: z.number().int().min(0).max(20_000), wpm: z.number().min(0).max(400), fillers: z.number().int().min(0).max(1000), longPauses: z.number().int().min(0).max(200) }).nullable().optional(),
+      }),
     ]),
   )
   .max(64);
 export type Transcript = z.infer<typeof TranscriptSchema>;
-export const InterviewTurnSchema = z.object({ action: z.enum(IV_ACTIONS), say: clip(900), note: clip(500).nullable() });
+/** How Ami's face reacts to their answer (the orb shows it). */
+export const IV_REACTIONS = ['neutral', 'smile', 'nod', 'impressed', 'thoughtful', 'amused'] as const;
+export type IvReaction = (typeof IV_REACTIONS)[number];
+export const InterviewTurnSchema = z.object({
+  say: clip(900),
+  action: z.enum(IV_ACTIONS),
+  react: z.enum(IV_REACTIONS).catch('neutral').optional(),
+  note: clip(500).nullable(),
+  heard: clip(4000).nullable().optional(),
+});
 export type InterviewTurn = z.infer<typeof InterviewTurnSchema>;
 /** Only the actions allowed right now (question budget, follow-up cap): the model can't pick anything else. */
-export const interviewTurnJsonSchema = (allowed: readonly IvAction[]) => obj({ action: { type: 'string', enum: [...allowed] }, say: str, note: nullable(str) });
+/** `say` first: it streams out (and Ami starts speaking) while the rest is still being written. */
+export const interviewTurnJsonSchema = (allowed: readonly IvAction[]) =>
+  obj({ say: str, action: { type: 'string', enum: [...allowed] }, react: { type: 'string', enum: [...IV_REACTIONS] }, note: nullable(str), heard: nullable(str) });
 
 const score = z.number().transform((n) => Math.min(5, Math.max(1, Math.round(n * 2) / 2)));
 export const FeedbackSchema = z.object({

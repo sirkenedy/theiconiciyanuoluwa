@@ -42,6 +42,7 @@ const live = [ADZUNA && 'Adzuna', JOOBLE && 'Jooble'].filter(Boolean).join(' and
         <li>Your résumé, your profile, your chats, tailored résumés, cover letters and saved jobs are stored <strong>only in this browser</strong>, encrypted with a key that this site can use but cannot read out or copy.</li>
         <li>Nothing is stored in an account, because there are no accounts. If you open Ami on another device, it starts fresh.</li>
         <li>Anything you haven't touched for 90 days is deleted automatically.</li>
+        <li>In a mock interview you can answer by speaking. Your voice is turned into text <strong>on this device</strong> by an open-source speech model (Whisper); the audio is <strong>never uploaded or saved</strong>. Only the text is sent to the AI, like a typed answer, along with simple timings measured on your device (how long you spoke, your pace, filler words) for your scorecard.</li>
       </ul>
     </section>
 
@@ -69,7 +70,7 @@ const live = [ADZUNA && 'Adzuna', JOOBLE && 'Jooble'].filter(Boolean).join(' and
 
     <section aria-labelledby="p-bots">
       <h2 id="p-bots">Keeping bots out</h2>
-      <p>The first time a device opens Ami, Cloudflare Turnstile checks it isn't a bot. It is usually invisible. See <a href="https://www.cloudflare.com/turnstile-privacy-policy/" rel="noopener">Cloudflare's Turnstile privacy policy</a>. It is the only third-party service on Ami's pages.</p>
+      <p>The first time a device opens Ami, Cloudflare Turnstile checks it isn't a bot. It is usually invisible. See <a href="https://www.cloudflare.com/turnstile-privacy-policy/" rel="noopener">Cloudflare's Turnstile privacy policy</a>. The only other outside request is a one-off download: the first time you answer a mock interview by speaking, the speech model (about 77 MB) downloads from <a href="https://huggingface.co/privacy" rel="noopener">Hugging Face</a>, which hosts it, and so does Ami's natural voice (about 92 MB) if you choose it; your browser keeps both. Ami's voice is made on your device too. Nothing you say or write is sent there.</p>
     </section>
 
     <section aria-labelledby="p-jobs">
@@ -82,7 +83,7 @@ const live = [ADZUNA && 'Adzuna', JOOBLE && 'Jooble'].filter(Boolean).join(' and
 
     <section aria-labelledby="p-limits">
       <h2 id="p-limits">Daily limits</h2>
-      <p>Per device, resetting at your midnight: {DAILY_LIMITS.messages} messages, {DAILY_LIMITS.jobs} fresh jobs, {DAILY_LIMITS.tailored} tailored résumés and {DAILY_LIMITS.letters} cover letter. There are also limits per network, and a small daily budget for the whole site: if it runs out, Ami takes a breather until tomorrow.</p>
+      <p>Per device, resetting at your midnight: {DAILY_LIMITS.messages} messages, {DAILY_LIMITS.jobs} fresh jobs, {DAILY_LIMITS.tailored} tailored résumés, {DAILY_LIMITS.letters} cover letters, {DAILY_LIMITS.guides} interview prep guides and {DAILY_LIMITS.interviews} mock interviews. There are also limits per network, and a small daily budget for the whole site: if it runs out, Ami takes a breather until tomorrow.</p>
     </section>
 
     <section aria-labelledby="p-delete">

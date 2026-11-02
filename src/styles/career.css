@@ -1369,9 +1369,15 @@ div.cc-guide__items { padding-left: 0; }
   font-size: var(--fs-label);
 }
 .cc-ivbar[hidden] { display: none; }
-.cc-ivbar__btn { min-height: var(--tap); padding: 0 var(--s-4); background: var(--bg); color: var(--ink); font-size: var(--fs-label); box-shadow: none; }
+.cc-ivbar__btn { min-height: var(--tap); padding: 0 var(--s-4); background: var(--bg); color: var(--ink); font-size: var(--fs-label); box-shadow: none; white-space: nowrap; }
+@media (max-width: 560px) {
+  .cc-ivbar { padding-left: var(--s-3); font-size: var(--fs-meta); }
+  .cc-ivbar__btn { padding: 0 var(--s-3); font-size: var(--fs-meta); }
+}
 .cc-ivbar__btn.btn--primary { background: var(--btn-primary-bg); color: var(--btn-primary-fg); box-shadow: var(--ledge-sm) var(--btn-primary-ledge); }
 .cc-msg__skipped { margin: 0; color: var(--ink-muted); font-style: italic; }
+.cc-msg.is-raw .cc-msg__text { opacity: 0.6; }
+.cc-msg__tidy { align-self: flex-end; color: var(--ink-muted); font-size: var(--fs-meta); }
 
 .cc-ivsetup { flex: 1; min-width: 0; }
 .cc-ivsetup__form {
@@ -1416,3 +1422,108 @@ div.cc-guide__items { padding-left: 0; }
   .cc-choice__face { padding: var(--s-2); }
   .cc-ivsetup__form { padding: var(--s-4); }
 }
+
+/* Spoken interviews: the chat box gives way to a water orb. Its waves turn slowly and swell with the sound (the
+   microphone level, or a pulse on each word Ami says: --lv, 0–1). Only transform and opacity move. */
+.cc[data-voicing] .cc-composer,
+.cc[data-voicing] .cc-disclaimer { display: none; }
+.cc-voice {
+  --lv: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4) var(--s-2);
+  text-align: center;
+}
+.cc-voice[hidden] { display: none; }
+.cc-voice__orb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 132px;
+  height: 132px;
+  margin-bottom: var(--s-1);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+.cc-voice__orb:focus-visible { outline: 2px solid var(--lilac-deep); outline-offset: 3px; }
+.cc-voice__waves {
+  position: absolute;
+  inset: 0;
+  transform: scale(calc(0.86 + var(--lv) * 0.34));
+  transition: transform 90ms linear;
+}
+.cc-voice__water { position: absolute; inset: 0; opacity: 0.6; }
+.cc-voice__water--a { border-radius: 58% 42% 52% 48% / 46% 56% 44% 54%; background: var(--mint); }
+.cc-voice__water--b { inset: 6px; border-radius: 44% 56% 40% 60% / 58% 42% 58% 42%; background: var(--lilac); }
+.cc-voice__water--c { inset: 12px; border-radius: 52% 48% 60% 40% / 40% 60% 46% 54%; background: var(--peach); opacity: 0.45; }
+.cc-voice__core {
+  --co: 74px;
+  transform: scale(calc(1 + var(--lv) * 0.08));
+  transition: transform 90ms linear;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cc-voice__water--a { animation: ccWater 9s linear infinite; }
+  .cc-voice__water--b { animation: ccWater 13s linear infinite reverse; }
+  .cc-voice__water--c { animation: ccWater 7s linear infinite; }
+  .cc-voice[data-state='speaking'] .cc-voice__water--a { animation-duration: 5s; }
+  .cc-voice[data-state='speaking'] .cc-voice__water--c { animation-duration: 4s; }
+  .cc-voice[data-state='thinking'] .cc-voice__core,
+  .cc-voice[data-state='loading'] .cc-voice__core { animation: coachThink 0.7s ease-in-out infinite alternate; }
+}
+@keyframes ccWater { to { transform: rotate(360deg); } }
+.cc-voice[data-state='paused'] .cc-voice__waves,
+.cc-voice[data-state='loading'] .cc-voice__waves { opacity: 0.35; }
+.cc-voice__status { margin: 0; font-size: var(--fs-label); font-weight: 700; }
+.cc-voice__live { max-width: 560px; margin: 0; overflow: hidden; color: var(--ink-muted); font-size: var(--fs-label); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.cc-voice__live:empty { display: none; }
+.cc-voice__btns { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-2); }
+.cc-voice__btn { min-height: var(--tap); padding: 0 var(--s-3); background: var(--surface); color: var(--ink); font-size: var(--fs-meta); box-shadow: var(--ledge-sm) var(--line); }
+.cc-voice__btn[aria-pressed='false'] { color: var(--ink-muted); }
+@media (max-width: 560px) {
+  .cc-voice__orb { width: 108px; height: 108px; }
+  .cc-voice__core { --co: 60px; }
+}
+.cc-ivsetup__note { margin: 0; color: var(--ink-muted); font-size: var(--fs-meta); font-weight: 400; }
+@media (prefers-reduced-motion: reduce) {
+  .cc-voice__waves,
+  .cc-voice__core { transform: none; transition: none; }
+}
+
+/* Ami's face on the voice orb: she blinks, nods along, smiles, raises a brow, glances aside to think, and chuckles
+   (data-react on the voice panel). Only transform and opacity move. */
+.cc-voice__core .coach-orb__eyes span { transition: transform 220ms var(--ease-spring); transform-origin: center; }
+.cc-voice__brows,
+.cc-voice__mouth { position: absolute; left: 50%; opacity: 0; transition: opacity 220ms, transform 220ms var(--ease-spring); }
+.cc-voice__brows { top: 24%; display: flex; gap: calc(var(--co) * 0.16); transform: translate(-50%, 2px); }
+.cc-voice__brows span { width: calc(var(--co) * 0.14); height: 3px; border-radius: var(--r-pill); background: var(--on-pastel); }
+.cc-voice__brows span:first-child { transform: rotate(-12deg); }
+.cc-voice__brows span:last-child { transform: rotate(12deg); }
+.cc-voice__mouth {
+  top: 60%;
+  width: calc(var(--co) * 0.3);
+  height: calc(var(--co) * 0.14);
+  border-bottom: 3px solid var(--on-pastel);
+  border-radius: 0 0 50% 50%;
+  transform: translate(-50%, -2px) scaleX(0.6);
+}
+.cc-voice[data-react='smile'] .cc-voice__core .coach-orb__eyes span,
+.cc-voice[data-react='amused'] .cc-voice__core .coach-orb__eyes span { transform: scaleY(0.45) translateY(2px); }
+.cc-voice[data-react='smile'] .cc-voice__mouth,
+.cc-voice[data-react='amused'] .cc-voice__mouth { opacity: 1; transform: translate(-50%, 0) scaleX(1); }
+.cc-voice[data-react='impressed'] .cc-voice__brows { opacity: 1; transform: translate(-50%, -3px); }
+.cc-voice[data-react='impressed'] .cc-voice__core .coach-orb__eyes span { transform: scale(1.18); }
+.cc-voice[data-react='thoughtful'] .cc-voice__core .coach-orb__eyes span { transform: translate(-3px, -3px); }
+.cc-voice[data-react='thoughtful'] .cc-voice__brows { opacity: 0.8; transform: translate(-50%, 0); }
+@media (prefers-reduced-motion: no-preference) {
+  .cc-voice__core .coach-orb__eyes { animation: ccBlink 5.2s infinite; }
+  .cc-voice[data-react='nod'] .cc-voice__core { animation: ccNod 0.7s var(--ease-spring); }
+  .cc-voice[data-react='amused'] .cc-voice__core { animation: ccChuckle 0.9s ease-in-out; }
+}
+@keyframes ccBlink { 0%, 94%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+@keyframes ccNod { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(5px); } 60% { transform: translateY(-1px); } 80% { transform: translateY(3px); } }
+@keyframes ccChuckle { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-5deg) translateY(-2px); } 45% { transform: rotate(4deg); } 70% { transform: rotate(-3deg) translateY(-1px); } }

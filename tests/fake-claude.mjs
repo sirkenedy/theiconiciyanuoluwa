@@ -119,7 +119,10 @@ export function startFakeClaude(port = 0) {
         else if (allowed.includes('ask')) turn = { action: 'ask', say: `Thanks. ${QUESTIONS[asked] ?? 'One more:'}` };
         else turn = { action: 'end', say: 'That was the last question. Thank you, your scorecard is on its way.' };
         turn.note ??= lastAnswer === '(skipped)' ? 'Skipped.' : vague ? 'Vague: no result, unclear personal role.' : 'Specific: named the result.';
-        const out = JSON.stringify({ ...turn, action: allowed.includes(turn.action) ? turn.action : allowed[0] });
+        turn.react = !lines.length ? 'smile' : vague ? 'thoughtful' : 'impressed';
+        // A spoken answer comes back with recognition slips fixed (and one invented sentence, when asked to test the guard).
+        turn.heard = /was spoken/.test(all) ? (/INVENT/.test(lastAnswer) ? `${lastAnswer} I also led a team of 40 engineers across three countries.` : lastAnswer.replace(/\bcheck out\b/gi, 'checkout').replace(/\bsample pay\b/gi, 'Sample Pay')) : null;
+        const out = JSON.stringify({ say: turn.say, action: allowed.includes(turn.action) ? turn.action : allowed[0], react: turn.react, note: turn.note, heard: turn.heard ?? null });
         if (params.stream) return streamText(res, params, [out]);
         return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(message(out)));
       }

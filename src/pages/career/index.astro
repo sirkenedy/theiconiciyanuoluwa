@@ -178,6 +178,23 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
       </div>
 
       <div class="cc-dock">
+        <div class="cc-voice" data-voice hidden>
+          <button class="cc-voice__orb" type="button" data-voice-orb aria-label="Pause listening">
+            <span class="cc-voice__waves" aria-hidden="true"><span class="cc-voice__water cc-voice__water--a"></span><span class="cc-voice__water cc-voice__water--b"></span><span class="cc-voice__water cc-voice__water--c"></span></span>
+            <span class="cc-voice__core coach-orb" aria-hidden="true">
+              <span class="cc-voice__brows"><span></span><span></span></span>
+              <span class="coach-orb__eyes"><span></span><span></span></span>
+              <span class="cc-voice__mouth"></span>
+            </span>
+          </button>
+          <p class="cc-voice__status" data-voice-status role="status"></p>
+          <p class="cc-voice__live" data-voice-live></p>
+          <div class="cc-voice__btns">
+            <button class="btn cc-voice__btn" type="button" data-voice-pause>Pause</button>
+            <button class="btn cc-voice__btn" type="button" data-voice-mute aria-pressed="true">Ami’s voice: on</button>
+            <button class="btn cc-voice__btn" type="button" data-voice-type>Type instead</button>
+          </div>
+        </div>
         <form class="cc-composer" data-composer>
           <button class="cc-icon-btn cc-attach" type="button" data-attach aria-label="Attach your résumé"><Icon name="clip" size={18} /></button>
           <input type="file" accept=".pdf,.docx" data-file hidden />

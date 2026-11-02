@@ -30,7 +30,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // Vite injects styles through JS in dev, which a nonce can't cover: report there, enforce in production.
   headers.set(import.meta.env.DEV ? 'content-security-policy-report-only' : 'content-security-policy', csp(nonce));
   headers.set('referrer-policy', 'no-referrer');
-  headers.set('permissions-policy', 'camera=(), microphone=(), geolocation=()');
+  // The microphone is for spoken mock-interview answers, turned into text on the device (never uploaded).
+  headers.set('permissions-policy', 'camera=(), microphone=(self), geolocation=()');
   headers.set('x-content-type-options', 'nosniff');
   headers.set('cache-control', 'no-store');
   headers.delete('content-length');

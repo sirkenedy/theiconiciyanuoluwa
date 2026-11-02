@@ -53,7 +53,9 @@ async function call(d: Device, payload: Record<string, unknown>) {
   }
   return { res, body: (await res.json()) as Record<string, unknown> };
 }
-type Turn = { action: string; say: string; note: string | null };
+type Turn = { action: string; say: string; note: string | null; react?: string; heard?: string | null };
+/** A turn streams (SSE): its `say` pieces, then the whole turn. */
+const turnOf = (r: { body: Record<string, unknown> }) => ((r.body.turn as { turn: Turn }[] | Turn | undefined) && Array.isArray(r.body.turn) ? (r.body.turn as { turn: Turn }[])[0].turn : (r.body.turn as Turn));
 type Entry = { who: 'ami'; kind: string; text: string } | { who: 'you'; text: string; note?: string | null };
 
 test('interview: start takes one interview, asks the first question, and keeps the job with the session', async () => {
@@ -79,7 +81,9 @@ test('interview: a turn sends the whole transcript with notes; allowed actions f
   const sid = body.sid as string;
   const t: Entry[] = [{ who: 'ami', kind: 'ask', text: 'Q1?' }, { who: 'you', text: 'We did stuff.' }];
   const first = await call(d, { phase: 'turn', sid, transcript: t });
-  assert.equal((first.body.turn as Turn).action, 'follow_up');
+  assert.equal(turnOf(first).action, 'follow_up');
+  assert.equal((first.body.say as { text: string }[]).map((x) => x.text).join(''), turnOf(first).say, 'say streams first');
+  assert.equal(turnOf(first).react, 'thoughtful');
   const req = claude.requests.at(-1) as { messages: { content: { text: string }[] }[]; output_config: { format: { schema: { properties: { action: { enum: string[] } } } } } };
   assert.deepEqual(req.output_config.format.schema.properties.action.enum, ['ask', 'follow_up', 'reply']);
   assert.match(req.messages[0].content[1].text, /Candidate: We did stuff\./);
@@ -94,7 +98,7 @@ test('interview: a turn sends the whole transcript with notes; allowed actions f
   // All 4 main questions asked: only a reply or the close.
   const done: Entry[] = [1, 2, 3, 4].flatMap((i) => [{ who: 'ami' as const, kind: 'ask', text: `Q${i}?` }, { who: 'you' as const, text: 'I led it and the result was a 20% lift in completion over the quarter.' }]);
   const last = await call(d, { phase: 'turn', sid, transcript: done });
-  assert.equal((last.body.turn as Turn).action, 'end');
+  assert.equal(turnOf(last).action, 'end');
 });
 
 test('interview: no session, no turn; the turn cap; a turn must answer something', async () => {
@@ -142,4 +146,41 @@ test('interview: 2 a day per device; a failed start gives the interview back', a
   const short = await call(e, { phase: 'start', job: { description: 'Too short.' } });
   assert.equal(short.res.status, 422);
   assert.equal(await rc(['HGET', `career:use:${e.id}:${localDay()}`, 'interviews']), null, 'nothing taken for a bad job');
+});
+
+test('interview: spoken answers carry delivery to the scorer and into the scorecard ("How you sounded")', async () => {
+  const d = await device();
+  const { body } = await call(d, { phase: 'start', job: JOB });
+  const t = [
+    { who: 'ami', kind: 'ask', text: 'How would you improve checkout for schools?' },
+    { who: 'you', text: 'Um, I redesigned the checkout flow and completion went up.', voice: { seconds: 30, words: 70, wpm: 140, fillers: 2, longPauses: 1 } },
+    { who: 'ami', kind: 'end', text: 'Thanks.' },
+  ];
+  const out = await call(d, { phase: 'feedback', sid: body.sid, transcript: t });
+  const sentText = (claude.requests.at(-1) as { messages: { content: string }[] }).messages[0].content;
+  assert.match(sentText, /\[spoken: 30 s, 140 words a minute, 2 filler words, 1 long pause\]/);
+  const guide = ((out.body as Record<string, unknown[]>).result[0] as { guide: { sections: { items: { title: string | null; bullets: string[] }[] }[] } }).guide;
+  const sounded = guide.sections[0].items.find((i) => i.title === 'How you sounded')!;
+  assert.ok(sounded.bullets[0].startsWith('Pace: 140 words a minute'));
+  assert.ok(guide.sections[1].items[0].bullets.includes('Delivery: 30 s · 140 words a minute · 2 filler words · 1 long pause'));
+  const bad = await call(d, { phase: 'turn', sid: body.sid, transcript: [{ who: 'ami', kind: 'ask', text: 'Q?' }, { who: 'you', text: 'x', voice: { seconds: -1, words: 1, wpm: 1, fillers: 0, longPauses: 0 } }] });
+  assert.equal(bad.res.status, 400, 'delivery numbers are validated');
+});
+
+test('interview: a corrected speech transcript is kept only if it is still their answer', async () => {
+  const { sameAnswer } = await import('../src/pages/api/career/interview.ts');
+  assert.equal(sameAnswer('I redesigned the check out flow at sample pay', 'I redesigned the checkout flow at Sample Pay'), true);
+  assert.equal(sameAnswer('We shipped it in six weeks', 'We shipped it in six weeks. I also led a team of 40 engineers across three countries.'), false, 'added claims');
+  assert.equal(sameAnswer('um so basically I led the pricing work', 'I spearheaded a strategic pricing transformation initiative'), false, 'rewritten');
+  assert.equal(sameAnswer('', 'anything'), false);
+});
+
+test('interview: the spoken words are read out of half-written JSON (escapes included), so Ami can talk at once', async () => {
+  const { partialSay } = await import('../src/pages/api/career/interview.ts');
+  assert.equal(partialSay('{"say":"Thanks. Now tell me'), 'Thanks. Now tell me');
+  assert.equal(partialSay('{"say":"She said \\"hi\\" and'), 'She said "hi" and');
+  assert.equal(partialSay('{"say":"Line one\\nLine two", "action":"ask"}'), 'Line one\nLine two');
+  assert.equal(partialSay('{"say":"Cut mid-escape \\'), 'Cut mid-escape ');
+  assert.equal(partialSay('{"say":"caf\\u00e9 time"'), 'café time');
+  assert.equal(partialSay('{"act'), '');
 });

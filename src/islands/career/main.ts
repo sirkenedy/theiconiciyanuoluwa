@@ -5,7 +5,8 @@ import { ParseError, readResume, withoutContacts } from '../../lib/career/parse.
 import { readEvents } from '../../lib/career/stream.ts';
 import { loadPurifier, renderModelText } from '../../lib/career/render.ts';
 import { REMOTE } from '../../lib/career/constants.ts';
-import type { Analysis, Answer, ChatTurn, Feedback, Flag, Guide, InterviewSetup, InterviewTurn, IvAction, Profile, RankedJob, StoredProfile, Transcript, WriteResult } from '../../lib/career/types.ts';
+import type { Analysis, Answer, ChatTurn, Feedback, Flag, Guide, InterviewSetup, InterviewTurn, IvAction, IvReaction, Profile, RankedJob, StoredProfile, Transcript, WriteResult } from '../../lib/career/types.ts';
+import { deliveryLine, type Delivery } from '../../lib/career/voice.ts';
 import { changedKeys, contactLine, fileBase, getLine, profileToResume, setLine, type Doc, type GuideDoc, type LetterDoc, type ResumeDoc } from '../../lib/career/document.ts';
 import { clearData, openVault, persistStorage, type Vault } from '../../lib/vault.ts';
 
@@ -37,7 +38,7 @@ type Message = {
   role: 'user' | 'coach';
   text: string;
   at: number;
-  kind?: 'profile' | 'note' | 'jobs' | 'match' | 'tailored' | 'letter' | 'guide' | 'iv' | 'ivsetup';
+  kind?: 'profile' | 'note' | 'jobs' | 'match' | 'tailored' | 'letter' | 'guide' | 'iv' | 'ivsetup' | 'ivreview';
   suggest?: string[];
   jobs?: RankedJob[];
   left?: number;
@@ -55,10 +56,12 @@ type Message = {
   /** Mock interview: what Ami's line was (question, follow-up, reply, close), and her private note on an answer. */
   ivKind?: IvAction;
   ivNote?: string | null;
+  /** A spoken answer's delivery (pace, filler words, pauses), measured on the device. */
+  ivVoice?: Delivery;
   /** A mock interview's scorecard (a guide-shaped document): the overall result, for the chat card. */
   scorecard?: { score: number; readiness: Feedback['readiness'] };
 };
-type IvState = { sid: string | null; job: NonNullable<Task['job']> | null; setup: InterviewSetup; status: 'setup' | 'active' | 'scoring' | 'done' };
+type IvState = { sid: string | null; job: NonNullable<Task['job']> | null; setup: InterviewSetup; status: 'setup' | 'active' | 'review' | 'scoring' | 'done'; voice?: boolean; natural?: boolean };
 type State = { current: string | null };
 type Orb = 'idle' | 'typing' | 'thinking' | 'streaming' | 'done' | 'error' | 'reading' | 'searching';
 
@@ -1317,7 +1320,11 @@ const placeholder = () => (ivActive() ? 'Your answer…' : phone.matches ? 'Mess
 function ivTranscript(): Transcript {
   return messages
     .filter((m) => m.kind === 'iv' && !(m.role === 'user' && (IV_END.test(m.text) || IV_REPEAT.test(m.text))))
-    .map((m) => (m.role === 'coach' ? { who: 'ami' as const, kind: m.ivKind ?? 'ask', text: m.text.slice(0, 1200) } : { who: 'you' as const, text: m.text.slice(0, IV_ANSWER_MAX), note: m.ivNote ?? null }));
+    .map((m) =>
+      m.role === 'coach'
+        ? { who: 'ami' as const, kind: m.ivKind ?? 'ask', text: m.text.slice(0, 1200) }
+        : { who: 'you' as const, text: m.text.slice(0, IV_ANSWER_MAX), note: m.ivNote ?? null, voice: m.ivVoice ? { seconds: m.ivVoice.seconds, words: m.ivVoice.words, wpm: m.ivVoice.wpm, fillers: m.ivVoice.fillers, longPauses: m.ivVoice.longPauses } : null },
+    );
 }
 
 /** Their own words can set it up: "a tough one", "short", "focus on payments". */
@@ -1391,7 +1398,7 @@ function ivSetupBlock() {
   const what = job?.title ? `${job.title}${job.company ? ` at ${job.company}` : ''}` : job?.description ? 'the job you pasted' : null;
   if (iv.status !== 'setup') {
     const styleName = { friendly: 'Friendly', neutral: 'Neutral', tough: 'Tough' }[iv.setup.style];
-    box.append(el('p', 'cc-ivsetup__done', `Mock interview${what ? ` for ${what}` : ''}: ${iv.setup.questions} questions · ${styleName} interviewer${iv.setup.instructions ? ` · ${iv.setup.instructions}` : ''}`));
+    box.append(el('p', 'cc-ivsetup__done', `Mock interview${what ? ` for ${what}` : ''}: ${iv.setup.questions} questions · ${styleName} interviewer${iv.voice ? ' · spoken answers' : ''}${iv.setup.instructions ? ` · ${iv.setup.instructions}` : ''}`));
     return box;
   }
   const f = el('form', 'cc-ivsetup__form');
@@ -1411,6 +1418,15 @@ function ivSetupBlock() {
     choice('iv-length', 'Length', [['4', 'Short', '4 questions'], ['6', 'Standard', '6 questions'], ['8', 'Long', '8 questions']], String(iv.setup.questions)),
     choice('iv-style', 'Interviewer', [['friendly', 'Friendly', 'Warm and encouraging'], ['neutral', 'Neutral', 'Professional, like most'], ['tough', 'Tough', 'Sharper follow-ups']], iv.setup.style),
   );
+  if (canVoice()) {
+    const by = choice('iv-by', 'Answer by', [['voice', 'Speaking', 'Hands-free: just talk'], ['typing', 'Typing', 'Write your answers']], iv.voice === false ? 'typing' : 'voice');
+    const sound = choice('iv-sound', 'Ami’s voice', [['natural', 'Natural', 'Lifelike, downloads once (92 MB)'], ['device', 'This device', 'Built in, nothing to download']], iv.natural === false ? 'device' : 'natural');
+    by.append(el('p', 'cc-ivsetup__note', 'Speaking: Ami asks out loud and you just talk. Your voice is turned into text on this device and never uploaded. The first time, a one-off 77 MB speech model downloads (it starts now, in the background). Best with headphones.'));
+    f.append(by);
+    f.append(sound);
+    if (iv.voice !== false) warmVoice();
+    by.addEventListener('change', () => (new FormData(f).get('iv-by') === 'voice' ? warmVoice() : undefined));
+  }
   const focus = el('label', 'cc-field');
   focus.append(el('span', 'cc-field__label', 'Anything to focus on or avoid? (optional)'));
   const extra = el('input', 'cc-field__input');
@@ -1428,6 +1444,12 @@ function ivSetupBlock() {
   f.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (busy || iv.status !== 'setup') return;
+    // Speech must be allowed inside this tap (some browsers refuse it later).
+    // The speaker is made inside this tap and kept: browsers only let a page play sound after a tap.
+    if (canVoice() && new FormData(f).get('iv-by') !== 'typing' && speakMod) {
+      tapSpeaker = speakMod.makeSpeaker(new FormData(f).get('iv-sound') !== 'device');
+      tapSpeaker.unlock();
+    }
     const pasted = paste?.value.trim() ?? '';
     if (paste && pasted.length < 200) {
       err.textContent = /^https?:\/\/\S+$/.test(pasted) ? NOTES.urlOnly : 'Paste the full job description (at least a few paragraphs).';
@@ -1436,6 +1458,8 @@ function ivSetupBlock() {
     }
     const data = new FormData(f);
     iv.setup = { questions: Number(data.get('iv-length')) as 4 | 6 | 8, style: data.get('iv-style') as InterviewSetup['style'], instructions: extra.value.trim().slice(0, 1000) };
+    iv.voice = canVoice() && data.get('iv-by') !== 'typing';
+    iv.natural = data.get('iv-sound') !== 'device';
     if (paste) iv.job = { description: pasted };
     await saveConversation(current()!);
     beginInterview();
@@ -1444,9 +1468,9 @@ function ivSetupBlock() {
   return box;
 }
 
-async function ivRequest(phase: 'start' | 'turn' | 'feedback') {
+async function ivRequest(phase: 'start' | 'turn' | 'feedback', acked = '') {
   const iv = ivState()!;
-  return deviceFetch('/api/career/interview', jsonBody({ phase, sid: iv.sid, job: phase === 'start' ? iv.job : {}, setup: iv.setup, transcript: phase === 'start' ? [] : ivTranscript(), profile: stored!.profile, resume: resumeForAI(), day: localDay(), today: localDay() })).catch(() => null);
+  return deviceFetch('/api/career/interview', jsonBody({ phase, acked, sid: iv.sid, job: phase === 'start' ? iv.job : {}, setup: iv.setup, transcript: phase === 'start' ? [] : ivTranscript(), profile: stored!.profile, resume: resumeForAI(), day: localDay(), today: localDay() })).catch(() => null);
 }
 
 /** What went wrong, said plainly. `true` when the interview can't go on (expired, or ended on the server). */
@@ -1470,6 +1494,11 @@ async function beginInterview() {
   if (busy) return;
   setBusy(true);
   try {
+    // The microphone and the speech model come first: if either fails, no interview is used up.
+    if (iv.voice && !(await prepareVoice())) {
+      iv.voice = false;
+      await saveConversation(c);
+    }
     setOrb('thinking');
     const live = liveNode('Getting ready…');
     const res = await ivRequest('start');
@@ -1493,8 +1522,10 @@ async function beginInterview() {
     await saveConversation(c);
     rerenderSetup();
     await add({ role: 'coach', text: out.turn.say, kind: 'iv', ivKind: out.turn.action });
+    setFace(out.turn.react ?? 'smile');
     setOrb('done');
-    input.focus();
+    if (voice && iv.voice) void voiceTurn(out.turn.say);
+    else input.focus();
   } finally {
     setBusy(false);
     renderIvBar();
@@ -1507,9 +1538,18 @@ const IV_SKIP = /^(skip|pass|next question)( (this|that)( one| question)?)?( ple
 const IV_END = /^(end|stop|finish)( (the|this))?( interview)?( now| here| please)?[.!]*$|^let'?s (stop|end)( (here|now|there))?[.!]*$/i;
 
 /** Their answer (or "repeat" / "skip" / "end", handled here with no AI call). */
-async function interviewAnswer(text: string) {
+/** The answer in flight: if they keep talking before Ami replies, it's taken back (stale) and continued. */
+let ivPending: { mine: Message | null; stale: boolean } | null = null;
+let ivSeq = 0;
+
+/** Their answer (or "repeat" / "skip" / "end", handled here with no AI call), typed or spoken. */
+async function interviewAnswer(said: string, spoken?: Delivery, acked = '') {
   const c = current()!;
   const iv = c.iv!;
+  // Spoken: a command at the end of a short utterance counts ("Thank you. Hello, please repeat" → "please repeat").
+  const tail = said.split(/(?<=[.!?,])\s+/).at(-1) ?? said;
+  const text = spoken && said.split(/\s+/).length <= 8 && (IV_REPEAT.test(tail) || IV_SKIP.test(tail) || IV_END.test(tail)) ? tail : said;
+  const relisten = (say = '') => voice && iv.voice && iv.status === 'active' && void voiceTurn(say);
   if (IV_END.test(text)) {
     await add({ role: 'user', text, kind: 'iv' });
     return endInterview(true);
@@ -1517,58 +1557,423 @@ async function interviewAnswer(text: string) {
   if (IV_REPEAT.test(text)) {
     const last = [...messages].reverse().find((m) => m.kind === 'iv' && m.role === 'coach' && (m.ivKind === 'ask' || m.ivKind === 'follow_up'));
     if (last) {
-      await add({ role: 'user', text, kind: 'iv' });
-      await add({ role: 'coach', text: last.text, kind: 'iv', ivKind: 'reply' });
+      setBusy(true); // nothing else is sent until the question is back on screen (keeps the transcript in order)
+      try {
+        await add({ role: 'user', text, kind: 'iv' });
+        await add({ role: 'coach', text: last.text, kind: 'iv', ivKind: 'reply' });
+      } finally {
+        setBusy(false);
+      }
+      relisten(last.text);
       return;
     }
   }
   const answer = IV_SKIP.test(text) ? '(skipped)' : text.slice(0, IV_ANSWER_MAX);
   if (text.length > IV_ANSWER_MAX) announce(`Long answer: I'll read the first ${IV_ANSWER_MAX.toLocaleString()} characters.`);
-  const mine = await add({ role: 'user', text: answer, kind: 'iv' });
+  // Registered before anything is saved: if they carry on talking even a moment later, this answer is taken back.
+  const pending = (ivPending = { mine: null as Message | null, stale: false });
+  const mine = await add({ role: 'user', text: answer, kind: 'iv', ...(spoken && answer !== '(skipped)' ? { ivVoice: spoken } : {}) });
+  pending.mine = mine;
+  if (pending.stale) {
+    await dropMessage(mine);
+    if (ivPending === pending) ivPending = null;
+    return;
+  }
+  // What was heard, until Ami returns it with recognition slips fixed.
+  const raw = spoken && answer !== '(skipped)' ? msgsEl.querySelector<HTMLElement>(`[data-id="${mine.id}"]`) : null;
+  raw?.classList.add('is-raw');
+  raw?.append(el('span', 'cc-msg__tidy', 'Tidying what I heard…'));
+  const seq = ++ivSeq;
   setBusy(true);
+  setVoiceStatus('thinking');
+  let live: ReturnType<typeof liveNode> | null = null;
   try {
     setOrb('thinking');
-    const live = liveNode('');
-    const res = await ivRequest('turn');
+    live = liveNode('');
+    const res = await ivRequest('turn', acked);
+    if (pending.stale) return; // they carried on talking: this answer was taken back
+    // Her reply streams in: shown as it's written, and spoken sentence by sentence (she starts within a second).
+    type TurnOut = InterviewTurn & { heard?: string | null };
+    let turn = null as TurnOut | null;
+    let talk = null as Promise<void> | null;
+    if (res?.ok && res.headers.get('content-type')?.includes('event-stream')) {
+      let said = '';
+      let flushed = 0;
+      const speakOut = (all: boolean) => {
+        if (!voice || !iv.voice || muted || pending.stale) return;
+        const rest = said.slice(flushed);
+        const ready = all ? rest : (rest.match(/^[\s\S]*[.!?]["')\]]*(?=\s)/)?.[0] ?? '');
+        if (!ready.trim()) return;
+        flushed += ready.length;
+        if (!talk) {
+          voice.hold(); // she's talking now: the microphone rests so she doesn't hear herself
+          speaking = true;
+          setVoiceStatus('speaking');
+        }
+        talk = voice.speaker.speak(ready.trim(), (v) => pulse(v));
+      };
+      for await (const { event, data } of readEvents(res)) {
+        if (pending.stale) break;
+        const d = data as { text?: string; turn?: TurnOut };
+        if (event === 'say' && d.text) {
+          said += d.text;
+          live.p.textContent = said;
+          speakOut(false);
+        } else if (event === 'replace' && d.text) {
+          said = d.text;
+          flushed = Math.min(flushed, said.length);
+          live.p.textContent = said;
+        } else if (event === 'turn' && d.turn) turn = d.turn;
+      }
+      if (pending.stale) return;
+      if (turn) speakOut(true);
+    } else if (res?.ok) turn = ((await res.json()) as { turn: TurnOut }).turn;
     live.li.remove();
-    if (!res?.ok) {
+    if (!res?.ok || !turn) {
       setOrb('error');
-      const over = await ivProblem(res);
+      const over = res?.ok ? false : await ivProblem(res);
+      if (res?.ok) await note("I couldn't respond just now. Send your answer again in a moment.");
       // The answer wasn't heard: it goes back in the box to send again.
       if (!over && answer !== '(skipped)') {
-        messages.splice(messages.indexOf(mine), 1);
-        await vault.removeRecord('messages', mine.id);
-        msgsEl.querySelector(`[data-id="${mine.id}"]`)?.remove();
+        await dropMessage(mine);
         input.value = text;
         fit();
       }
       if (over) {
         iv.status = 'done';
         await saveConversation(c);
-      }
+        stopVoice();
+        msgsEl.querySelector(`[data-id="${mine.id}"]`)?.replaceWith(messageNode(mine));
+      } else relisten();
       return;
     }
-    const { turn } = (await res.json()) as { turn: InterviewTurn };
     mine.ivNote = turn.note;
+    setFace(turn.react ?? 'neutral');
+    // A spoken answer comes back with recognition slips fixed (names, terms, homophones): that's what they meant.
+    if (spoken && turn.heard && turn.heard !== mine.text) mine.text = turn.heard;
+    msgsEl.querySelector(`[data-id="${mine.id}"]`)?.replaceWith(messageNode(mine));
     await vault.put('messages', mine.id, mine, c.id);
     await add({ role: 'coach', text: turn.say, kind: 'iv', ivKind: turn.action });
     setOrb('done');
-    if (turn.action === 'end') return endInterview(false);
+    if (turn.action === 'end') {
+      if (talk) await talk;
+      else if (voice && !muted) await voice.speaker.speak(turn.say, (v) => pulse(v));
+      return endInterview(false);
+    }
+    if (voice && iv.voice && iv.status === 'active') void voiceTurn(talk ?? turn.say);
   } finally {
-    setBusy(false);
-    renderIvBar();
+    live?.li.remove();
+    if (ivPending === pending) ivPending = null;
+    if (seq === ivSeq) {
+      setBusy(false);
+      renderIvBar();
+    }
   }
 }
+
+async function dropMessage(m: Message) {
+  const at = messages.indexOf(m);
+  if (at >= 0) messages.splice(at, 1);
+  await vault.removeRecord('messages', m.id);
+  msgsEl.querySelector(`[data-id="${m.id}"]`)?.remove();
+}
+
+// ---------- voice interviews (hands-free) ----------
+// Ami speaks each line (the browser's own voice), then listens. The chat box gives way to a water orb that moves with
+// whoever is talking. The speech model starts downloading as soon as the setup card appears.
+type ListenApi = typeof import('./voice/listen.ts');
+type Voice = { listen(): void; finishNow(): boolean; hold(): void; pause(): void; resume(): void; stop(): void; ready: Promise<void>; isReady(): boolean; speaker: import('./voice/speak.ts').Speaker };
+let voice: Voice | null = null;
+let voicePaused = false;
+let speaking = false;
+const voiceBox = $<HTMLElement>('[data-voice]');
+const voiceStatus = $<HTMLElement>('[data-voice-status]');
+const voiceLive = $<HTMLElement>('[data-voice-live]');
+const voiceOrb = $<HTMLButtonElement>('[data-voice-orb]');
+const voicePauseBtn = $<HTMLButtonElement>('[data-voice-pause]');
+const voiceMuteBtn = $<HTMLButtonElement>('[data-voice-mute]');
+const MUTE_KEY = 'cc-ami-muted';
+let muted = (() => {
+  try {
+    return localStorage.getItem(MUTE_KEY) === '1';
+  } catch {
+    return false;
+  }
+})();
+const canVoice = () =>
+  (window as { __ccVoiceTest?: { supported?: boolean } }).__ccVoiceTest?.supported ??
+  (!!navigator.mediaDevices?.getUserMedia && typeof AudioWorkletNode !== 'undefined' && typeof WebAssembly === 'object' && typeof Worker !== 'undefined');
+
+let download = { loaded: 0, total: 0 };
+const mb = (n: number) => Math.round(n / 1_000_000);
+/** Starts the one-off model download in the background (from the setup card), so "Start" rarely waits. */
+let speakMod: typeof import('./voice/speak.ts') | null = null;
+let tapSpeaker: import('./voice/speak.ts').Speaker | null = null;
+function warmVoice() {
+  if (!canVoice()) return;
+  import('./voice/speak.ts').then((m) => (speakMod = m)).catch(() => {});
+  import('./voice/listen.ts')
+    .then((api: ListenApi) =>
+      api.warmEars((loaded, total) => {
+        download = { loaded, total };
+        if (voiceBox.dataset.state === 'loading') setVoiceStatus('loading');
+      }).ready,
+    )
+    .catch(() => {});
+}
+
+type VoiceState = 'loading' | 'listening' | 'reading' | 'thinking' | 'speaking' | 'paused' | 'nudge';
+function setVoiceStatus(s: VoiceState) {
+  if (!voice) return;
+  voiceBox.dataset.state = s;
+  voiceStatus.textContent = {
+    loading: download.total ? `Getting ready to listen… ${mb(download.loaded)} of ${mb(download.total)} MB (only the first time)` : 'Getting ready to listen…',
+    listening: 'Listening… tap the orb when you’re done',
+    reading: 'Got it… reading what you said',
+    thinking: 'Ami is thinking…',
+    speaking: 'Ami is speaking… tap the orb to answer now',
+    paused: 'Paused',
+    nudge: 'Take your time. I’m listening.',
+  }[s];
+  voicePauseBtn.textContent = s === 'paused' ? 'Resume' : 'Pause';
+  voiceOrb.setAttribute('aria-label', s === 'speaking' ? 'Stop Ami speaking and answer' : s === 'paused' ? 'Resume listening' : 'I’m done answering');
+}
+
+/** The orb moves with the sound: the microphone level while they talk, a pulse on each word Ami says. */
+let level = 0;
+let target = 0;
+let raf = 0;
+function animateLevel() {
+  level = Math.max(target, level * 0.9);
+  target *= 0.85;
+  voiceBox.style.setProperty('--lv', level.toFixed(3)); // CSSOM: allowed by the CSP
+  raf = voice && level > 0.002 ? requestAnimationFrame(animateLevel) : 0;
+}
+function pulse(v: number) {
+  target = Math.max(target, v);
+  if (!raf) raf = requestAnimationFrame(animateLevel);
+}
+
+/** What she says the moment an answer ends, by interviewer style (made in advance, so it plays at once). */
+const ACKS: Record<InterviewSetup['style'], string[]> = {
+  friendly: ['Mm-hm, thank you.', 'Lovely, thanks for that.', 'Okay, thank you.', 'Got it, thanks.'],
+  neutral: ['Okay, thank you.', 'Got it.', 'Mm-hm, thanks.', 'Right, thank you.'],
+  tough: ['Okay.', 'Right.', 'Mm-hm.', 'Noted.'],
+};
+let lastAck = '';
+function acknowledge(text: string) {
+  const iv = ivState();
+  // Not for commands, nor when they asked her something (she answers that instead).
+  if (!iv || muted || /\?\s*$/.test(text) || IV_REPEAT.test(text) || IV_SKIP.test(text) || IV_END.test(text)) return '';
+  const options = ACKS[iv.setup.style].filter((a) => a !== lastAck);
+  return (lastAck = options[Math.floor(Math.random() * options.length)]);
+}
+
+/** Her face: a reaction (smile, nod, impressed, thoughtful, amused) that settles back after a moment. */
+let faceTimer: ReturnType<typeof setTimeout> | undefined;
+function setFace(react: IvReaction) {
+  voiceBox.dataset.react = react;
+  clearTimeout(faceTimer);
+  faceTimer = setTimeout(() => (voiceBox.dataset.react = 'neutral'), react === 'nod' ? 900 : 2800);
+}
+
+/** Microphone permission, the speech model (in the background) and Ami's voice. False if the microphone can't be used. */
+async function prepareVoice(): Promise<boolean> {
+  if (voice) return true;
+  const [api, { makeSpeaker }] = await Promise.all([import('./voice/listen.ts') as Promise<ListenApi>, import('./voice/speak.ts')]);
+  const speaker = tapSpeaker ?? makeSpeaker(ivState()?.natural !== false);
+  tapSpeaker = null;
+  speaker.unlock();
+  const mic = api.makeMic();
+  try {
+    await mic.open();
+  } catch {
+    await note("I couldn't use your microphone (it may be blocked for this site), so let's do this one by typing. You can allow it in your browser's site settings.");
+    return false;
+  }
+  const warm = api.warmEars((loaded, total) => {
+    download = { loaded, total };
+    if (voiceBox.dataset.state === 'loading') setVoiceStatus('loading');
+  });
+  let ready = false;
+  const whenReady = warm.ready.then(() => void (ready = true));
+  mic.on('level', (v) => pulse(v));
+  const turns = new api.VoiceTurns(mic, warm.ears, {
+    onLive: (text) => {
+      voiceLive.textContent = text;
+      if (voiceBox.dataset.state === 'nudge' && text) setVoiceStatus('listening');
+    },
+    onAnswer: (text, d) => {
+      voiceLive.textContent = '';
+      // A real interviewer reacts at once ("Mm-hm, thank you."): instant, while her reply is being written.
+      const ack = acknowledge(text);
+      if (ack) {
+        turns.ignore(ack); // her own "mm-hm" leaking into the microphone isn't them talking
+        void speaker.speak(ack, (v) => pulse(v));
+      }
+      setFace('nod');
+      void interviewAnswer(text, d, ack);
+    },
+    onBargeIn: () => {
+      if (!ivPending || ivPending.stale) return false;
+      ivPending.stale = true;
+      if (ivPending.mine) void dropMessage(ivPending.mine);
+      setVoiceStatus('listening');
+      announce('Still listening.');
+      return true;
+    },
+    onNudge: () => setVoiceStatus('nudge'),
+    onReading: () => voiceBox.dataset.state !== 'reading' && setVoiceStatus('reading'),
+    onSpeech: () => {
+      if (voiceBox.dataset.state === 'reading' || voiceBox.dataset.state === 'nudge') setVoiceStatus('listening');
+      setFace('nod'); // she nods along as their words come in
+    },
+  });
+  voice = {
+    listen: () => {
+      voicePaused = false;
+      turns.listen();
+      setVoiceStatus('listening');
+    },
+    finishNow: () => turns.finishNow(),
+    hold: () => turns.hold(),
+    pause: () => turns.pause(),
+    resume: () => turns.resume(),
+    stop: () => turns.stop(),
+    ready: whenReady,
+    isReady: () => ready,
+    speaker,
+  };
+  // Her natural voice downloads after the recogniser (so they don't compete); the device voice speaks until then.
+  void whenReady.then(() => speaker.prepare?.(ACKS[ivState()?.setup.style ?? 'neutral']).catch((err) => console.warn('[voice] natural voice unavailable:', (err as Error).message)));
+  // If the model can't load, the interview carries on by typing.
+  whenReady.catch(async (err) => {
+    console.error('[voice] speech model failed to load:', (err as Error).message);
+    const iv = ivState();
+    stopVoice();
+    if (iv?.status === 'active') {
+      iv.voice = false;
+      await saveConversation(current()!);
+      await note("I couldn't load the speech model just now, so let's carry on by typing.");
+      renderIvBar();
+    }
+  });
+  return true;
+}
+
+/** Ami said a line: she speaks it (unless muted; or it's already being spoken), then it's their turn. */
+async function voiceTurn(say: string | Promise<void>) {
+  const v = voice;
+  if (!v) return;
+  v.hold();
+  if (typeof say !== 'string') {
+    await say;
+    speaking = false;
+  } else if (say && !muted && v.speaker.available) {
+    speaking = true;
+    setVoiceStatus('speaking');
+    await v.speaker.speak(say, (lv) => pulse(lv));
+    speaking = false;
+  }
+  if (voice !== v) return; // stopped meanwhile (ended, typed instead, another chat)
+  if (!v.isReady()) {
+    setVoiceStatus('loading');
+    try {
+      await v.ready;
+    } catch {
+      return;
+    }
+    if (voice !== v) return;
+  }
+  if (voicePaused) return setVoiceStatus('paused');
+  v.listen();
+}
+
+function stopVoice() {
+  voice?.speaker.stop();
+  voice?.stop();
+  voice = null;
+  speaking = false;
+  voiceBox.hidden = true;
+  cc.removeAttribute('data-voicing');
+}
+
+function togglePause() {
+  if (!voice) return;
+  if (speaking) {
+    voice.speaker.stop(); // answer now: voiceTurn carries on to listening
+    return;
+  }
+  voicePaused = !voicePaused;
+  if (voicePaused) {
+    voice.pause();
+    setVoiceStatus('paused');
+  } else {
+    voice.resume();
+    setVoiceStatus('listening');
+  }
+}
+/** The orb does what the moment needs: cut Ami short, finish your answer, or resume. */
+voiceOrb.addEventListener('click', () => {
+  if (!voice) return;
+  if (speaking || voicePaused) return togglePause();
+  if (!voice.finishNow()) {
+    voiceStatus.textContent = 'Listening… say your answer, then tap the orb';
+    announce('I haven’t heard an answer yet.');
+  }
+});
+voicePauseBtn.addEventListener('click', togglePause);
+function renderMute() {
+  voiceMuteBtn.setAttribute('aria-pressed', String(!muted));
+  voiceMuteBtn.textContent = muted ? 'Ami’s voice: off' : 'Ami’s voice: on';
+}
+renderMute();
+voiceMuteBtn.addEventListener('click', () => {
+  muted = !muted;
+  try {
+    localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
+  } catch {}
+  if (muted && speaking) voice?.speaker.stop();
+  renderMute();
+});
+$<HTMLButtonElement>('[data-voice-type]').addEventListener('click', async () => {
+  const iv = ivState();
+  stopVoice();
+  if (iv) {
+    iv.voice = false;
+    await saveConversation(current()!);
+  }
+  renderIvBar();
+  input.focus();
+});
+// A hidden tab or a locked phone pauses listening; coming back picks up where it was.
+document.addEventListener('visibilitychange', () => {
+  if (!voice || voicePaused || speaking) return;
+  if (document.hidden) voice.pause();
+  else voice.resume();
+});
 
 /** Closes the interview (by voice, the bar, or Ami's own close) and asks for the scorecard. */
 async function endInterview(byThem: boolean) {
   const c = current()!;
   const iv = c.iv!;
   const answered = ivTranscript().some((e) => e.who === 'you' && e.text !== '(skipped)');
-  if (byThem) await add({ role: 'coach', text: answered ? "Let's stop there. Thank you, that was useful. Your scorecard is on its way." : "Let's stop there. You didn't answer any questions, so there's nothing to score this time.", kind: 'iv', ivKind: 'end' });
-  iv.status = answered ? 'scoring' : 'done';
+  const closing = answered ? "Let's stop there. Thank you, that was useful. Your scorecard is on its way." : "Let's stop there. You didn't answer any questions, so there's nothing to score this time.";
+  if (byThem) await add({ role: 'coach', text: closing, kind: 'iv', ivKind: 'end' });
+  if (byThem && voice && !muted) {
+    voice.hold();
+    await voice.speaker.speak(closing, (v) => pulse(v));
+  }
+  stopVoice();
+  // Spoken answers are checked first: speech recognition can mishear a name or a number.
+  const spoken = answered && messages.some((m) => m.kind === 'iv' && m.ivVoice);
+  iv.status = !answered ? 'done' : spoken ? 'review' : 'scoring';
   await saveConversation(c);
   renderIvBar();
+  if (spoken) {
+    await add({ role: 'coach', text: '', kind: 'ivreview' });
+    return;
+  }
   if (answered) await requestScorecard();
 }
 
@@ -1576,6 +1981,8 @@ async function requestScorecard() {
   const c = current()!;
   const iv = c.iv!;
   if (busy) return;
+  iv.status = 'scoring';
+  await saveConversation(c);
   setBusy(true);
   renderIvBar();
   try {
@@ -1634,23 +2041,85 @@ async function requestScorecard() {
   }
 }
 
+/** Back in a spoken interview after a reload or another chat: the microphone needs a tap to start again. */
+async function resumeVoice() {
+  if (busy) return;
+  if (await prepareVoice()) void voiceTurn('');
+  renderIvBar();
+}
+
+/** Before the scorecard: what was heard, editable (a misheard name or number is fixed here, not in the scorecard). */
+function ivReviewBlock() {
+  const box = el('div', 'cc-ivsetup');
+  const iv = ivState();
+  const spoken = messages.filter((m) => m.kind === 'iv' && m.role === 'user' && m.ivVoice);
+  if (iv?.status !== 'review') {
+    box.append(el('p', 'cc-ivsetup__done', `You checked ${spoken.length} spoken ${spoken.length === 1 ? 'answer' : 'answers'}.`));
+    return box;
+  }
+  const f = el('form', 'cc-ivsetup__form');
+  f.append(el('p', 'cc-ivsetup__title', 'Check what I heard'), el('p', 'cc-ivsetup__lead', 'Speech recognition can mishear a name or a number. Fix anything that’s wrong, then get your scorecard. Your audio was never saved.'));
+  const areas = spoken.map((m, i) => {
+    const q = [...messages.slice(0, messages.indexOf(m))].reverse().find((x) => x.kind === 'iv' && x.role === 'coach');
+    const field = el('label', 'cc-field');
+    // Just the question ("…Let's begin: How would you…?" → "How would you…?").
+    const asked = q ? (q.text.match(/[^.!?:]*\?\s*$/)?.[0].trim() || q.text) : '';
+    field.append(el('span', 'cc-field__label', `Answer ${i + 1}${asked ? `: ${asked.length > 90 ? `${asked.slice(0, 88)}…` : asked}` : ''}`));
+    const area = el('textarea', 'cc-field__input');
+    area.value = m.text;
+    area.rows = Math.min(6, Math.max(2, Math.ceil(m.text.length / 90)));
+    area.maxLength = IV_ANSWER_MAX;
+    field.append(area, el('span', 'cc-ivsetup__note', deliveryLine(m.ivVoice!)));
+    f.append(field);
+    return [m, area] as const;
+  });
+  const go = el('button', 'btn btn--primary', 'Get my scorecard');
+  go.type = 'submit';
+  f.append(go);
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    for (const [m, area] of areas) {
+      const text = area.value.trim();
+      if (!text || text === m.text) continue;
+      m.text = text.slice(0, IV_ANSWER_MAX);
+      await vault.put('messages', m.id, m, current()!.id);
+      msgsEl.querySelector(`[data-id="${m.id}"]`)?.replaceWith(messageNode(m));
+    }
+    const review = messages.find((x) => x.kind === 'ivreview');
+    await requestScorecard();
+    if (review) msgsEl.querySelector(`[data-id="${review.id}"]`)?.replaceWith(messageNode(review));
+  });
+  box.append(f);
+  return box;
+}
+
 /** "Mock interview · Question 3 of 6", with End (or Get my scorecard), above the chat while one is on. */
 function renderIvBar() {
   const iv = ivState();
   const on = !!iv && (iv.status === 'active' || iv.status === 'scoring');
-  ivBar.hidden = !on;
+  ivBar.hidden = !(on || iv?.status === 'review');
   if (!input.disabled) input.placeholder = placeholder();
+  voiceBox.hidden = !(voice && iv?.status === 'active' && iv.voice);
+  cc.toggleAttribute('data-voicing', !voiceBox.hidden); // the chat box gives way to the orb
+  if (iv?.status === 'review') {
+    const t = el('span', 'cc-ivbar__text');
+    t.append(el('strong', undefined, 'Mock interview'), document.createTextNode(' · Check what I heard, then get your scorecard'));
+    ivBar.replaceChildren(t);
+    return;
+  }
   if (!on) return;
   const asked = ivTranscript().filter((e) => e.who === 'ami' && e.kind === 'ask').length;
   const text = el('span', 'cc-ivbar__text');
   text.append(el('strong', undefined, 'Mock interview'), document.createTextNode(iv.status === 'active' ? ` · Question ${Math.max(1, asked)} of ${iv.setup.questions}` : ' · Finished'));
+  const resume = iv.status === 'active' && iv.voice && !voice && !busy ? button('Resume speaking', 'btn cc-ivbar__btn', () => resumeVoice()) : null;
   const action =
     iv.status === 'active'
       ? button('End interview', 'btn cc-ivbar__btn', () => !busy && interviewAnswer('End interview'))
       : busy
         ? null
         : button('Get my scorecard', 'btn btn--primary cc-ivbar__btn', () => requestScorecard());
-  ivBar.replaceChildren(text, ...(action ? [action] : []));
+  ivBar.replaceChildren(text, ...(resume ? [resume] : []), ...(action ? [action] : []));
 }
 
 const FLAG_LABEL: Record<Flag['kind'], string> = { number: 'number', name: 'name or tool', employer: 'employer', title: 'job title', date: 'date' };
@@ -2079,6 +2548,10 @@ function messageNode(m: Message) {
     li.append(ivSetupBlock());
     return li;
   }
+  if (m.kind === 'ivreview') {
+    li.append(ivReviewBlock());
+    return li;
+  }
   if (m.kind === 'iv' && m.role === 'user' && m.text === '(skipped)') {
     li.append(el('p', 'cc-msg__text cc-msg__skipped', 'Skipped'));
     return li;
@@ -2356,6 +2829,7 @@ function open(id: string | null, opts: { restoreScroll?: boolean } = {}): Promis
 
 async function openNow(id: string | null, { restoreScroll = false } = {}) {
   const typed = input.value;
+  if (id !== state.current) stopVoice(); // the microphone never listens for a chat that isn't on screen
   await saveDraft(); // keep what was typed with the chat it was typed in
   state.current = id;
   messages = id ? (await vault.byConversation<Message>(id)).sort((a, b) => a.at - b.at) : [];
