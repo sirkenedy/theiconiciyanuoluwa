@@ -9,6 +9,10 @@ const CLAUDE = 'http://127.0.0.1:4331';
 const REDIS = 'http://localhost:4329';
 const JD = `Product Manager, Payments at Sample Pay. ${'You will own discovery, the roadmap and A/B testing for checkout; SQL is a plus. '.repeat(4)}`;
 
+// These are typed interviews (spoken ones are in career.voice.spec.ts): no microphone here, whatever the browser has.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => ((window as unknown as { __ccVoiceTest: { supported: boolean } }).__ccVoiceTest = { supported: false }));
+});
 test.beforeEach(async ({ request }) => {
   await seedJobs(REDIS);
   // Descriptions for the seeded jobs, as the ingest stores them.

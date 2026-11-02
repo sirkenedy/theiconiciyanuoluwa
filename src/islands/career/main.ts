@@ -2000,9 +2000,19 @@ async function beginInterview() {
   setBusy(true);
   try {
     // The microphone and the speech model come first: if either fails, no interview is used up.
+    // They choose what happens next: allow it and try again, or type.
     if (iv.voice && !(await prepareVoice())) {
-      iv.voice = false;
-      await saveConversation(c);
+      setOrb('idle');
+      rerenderSetup();
+      offerMicChoice(
+        () => void beginInterview(),
+        async () => {
+          iv.voice = false;
+          await saveConversation(c);
+          void beginInterview();
+        },
+      );
+      return;
     }
     setOrb('thinking');
     const live = liveNode('Getting ready…');
@@ -2284,6 +2294,34 @@ function setFace(react: IvReaction) {
   faceTimer = setTimeout(() => (voiceBox.dataset.react = 'neutral'), react === 'nod' ? 900 : 2800);
 }
 
+/** Where the last "microphone can't start" note is, so the caller can put its choices under it. */
+let micChoice: Element | null = null;
+/** "Try again" (a tap, so phones can show the permission prompt) or "Type instead", under the microphone note. */
+function offerMicChoice(retry: () => void, typeInstead: () => void) {
+  const at = micChoice;
+  micChoice = null;
+  if (!at) return;
+  const row = el('div', 'cc-micchoice');
+  const done = (fn: () => void) => () => {
+    if (busy) return;
+    row.remove();
+    fn();
+  };
+  row.append(
+    button('Try again', 'btn btn--primary cc-micchoice__btn', done(() => {
+      if (speakMod && !tapSpeaker) {
+        tapSpeaker = speakMod.makeSpeaker(ivState()?.natural !== false);
+        tapSpeaker.unlock();
+      }
+      listenMod?.askForMicNow();
+      retry();
+    })),
+    button('Type instead', 'btn cc-micchoice__btn', done(typeInstead)),
+  );
+  at.append(row);
+  log.scrollTop = log.scrollHeight;
+}
+
 /** Microphone permission, the speech model (in the background) and Ami's voice. False if the microphone can't be used. */
 async function prepareVoice(): Promise<boolean> {
   if (voice) return true;
@@ -2301,13 +2339,15 @@ async function prepareVoice(): Promise<boolean> {
     const ios = /iP(hone|ad|od)/.test(navigator.userAgent);
     await note(
       name === 'NotAllowedError' || name === 'SecurityError'
-        ? `Your microphone is blocked, so let's do this one by typing. To allow it, ${ios ? 'open Settings → your browser (Chrome or Safari) → turn on Microphone, then reload this page' : "use the lock icon by this site's address → allow Microphone, then reload"}.`
+        ? `Your microphone is blocked for this site. To allow it, ${ios ? 'open your iPhone’s Settings → your browser (Chrome or Safari) → turn on Microphone, then come back and tap Try again' : "use the lock icon by this site's address → allow Microphone, then tap Try again"}. Or answer by typing.`
         : name === 'NotFoundError' || name === 'OverconstrainedError'
-          ? "I couldn't find a microphone on this device, so let's do this one by typing."
-          : "This browser couldn't start listening, so let's do this one by typing. The latest Chrome, Safari or Edge works best.",
+          ? "I couldn't find a microphone on this device. Connect one and tap Try again, or answer by typing."
+          : "This browser couldn't start listening. The latest Chrome, Safari or Edge works best. Tap Try again, or answer by typing.",
     );
     // The exact reason, small, so a screenshot from a phone (no console there) says what happened.
-    msgsEl.lastElementChild?.querySelector('.cc-msg__body')?.append(el('small', 'cc-msg__code', `Code: ${name || 'unknown'}`));
+    const body = msgsEl.lastElementChild?.querySelector('.cc-msg__body');
+    body?.append(el('small', 'cc-msg__code', `Code: ${name || 'unknown'}`));
+    micChoice = body ?? null;
     return false;
   }
   const warm = api.warmEars((loaded, total) => {
@@ -2571,7 +2611,41 @@ async function requestScorecard() {
 async function resumeVoice() {
   if (busy) return;
   if (await prepareVoice()) void voiceTurn('');
+  else
+    offerMicChoice(
+      () => void resumeVoice(),
+      async () => {
+        const iv = ivState();
+        if (iv) {
+          iv.voice = false;
+          await saveConversation(current()!);
+        }
+        renderIvBar();
+        input.focus();
+      },
+    );
   renderIvBar();
+}
+
+/** A typed interview can turn into a spoken one at any point (say, once the microphone is allowed). */
+async function switchToSpeaking() {
+  const iv = ivState();
+  if (busy || !iv || iv.status !== 'active') return;
+  // Inside the tap: sound and the microphone prompt need one.
+  if (speakMod && !tapSpeaker) {
+    tapSpeaker = speakMod.makeSpeaker(iv.natural !== false);
+    tapSpeaker.unlock();
+  }
+  listenMod?.askForMicNow();
+  iv.voice = true;
+  await saveConversation(current()!);
+  await resumeVoice();
+}
+
+/** The voice code (not the speech model) is fetched ahead, so a later tap can ask for the microphone at once. */
+function loadVoiceCode() {
+  if (!speakMod) import('./voice/speak.ts').then((m) => (speakMod = m)).catch(() => {});
+  if (!listenMod) import('./voice/listen.ts').then((m: ListenApi) => (listenMod = m)).catch(() => {});
 }
 
 /** Before the scorecard: what was heard, editable (a misheard name or number is fixed here, not in the scorecard). */
@@ -2638,7 +2712,14 @@ function renderIvBar() {
   const asked = ivTranscript().filter((e) => e.who === 'ami' && e.kind === 'ask').length;
   const text = el('span', 'cc-ivbar__text');
   text.append(el('strong', undefined, 'Mock interview'), document.createTextNode(iv.status === 'active' ? ` · Question ${Math.max(1, asked)} of ${iv.setup.questions}` : ' · Finished'));
-  const resume = iv.status === 'active' && iv.voice && !voice && !busy ? button('Resume speaking', 'btn cc-ivbar__btn', () => resumeVoice()) : null;
+  const typed = iv.status === 'active' && !iv.voice && !busy && canVoice();
+  if (typed || (iv.status === 'active' && iv.voice && !voice)) loadVoiceCode();
+  const resume =
+    iv.status === 'active' && iv.voice && !voice && !busy
+      ? button('Resume speaking', 'btn cc-ivbar__btn', () => void switchToSpeaking())
+      : typed
+        ? button('Speak instead', 'btn cc-ivbar__btn', () => void switchToSpeaking())
+        : null;
   const action =
     iv.status === 'active'
       ? button('End interview', 'btn cc-ivbar__btn', () => !busy && interviewAnswer('End interview'))

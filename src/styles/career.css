@@ -1382,6 +1382,8 @@ div.cc-guide__items { padding-left: 0; }
   .cc-ivbar { padding-left: var(--s-3); font-size: var(--fs-meta); }
   .cc-ivbar__btn { padding: 0 var(--s-3); font-size: var(--fs-meta); }
 }
+.cc-micchoice { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-3); }
+.cc-micchoice__btn { min-height: var(--tap); padding: 0 var(--s-4); font-size: var(--fs-label); }
 .cc-ivbar__btn.btn--primary { background: var(--btn-primary-bg); color: var(--btn-primary-fg); box-shadow: var(--ledge-sm) var(--btn-primary-ledge); }
 .cc-msg__skipped { margin: 0; color: var(--ink-muted); font-style: italic; }
 .cc-msg.is-raw .cc-msg__text { opacity: 0.6; }

@@ -33,6 +33,13 @@ const speculation = JSON.stringify({ prerender: [{ where: { href_matches: ['/blo
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- /career enforces Trusted Types: Vercel Analytics and Speed Insights inject their own same-origin scripts, and only those two are allowed. -->
+    <script is:inline>
+      if (window.trustedTypes && !trustedTypes.defaultPolicy) {
+        var vercelScripts = ['/_vercel/insights/script.js', '/_vercel/speed-insights/script.js'];
+        trustedTypes.createPolicy('default', { createScriptURL: function (u) { return vercelScripts.indexOf(u) >= 0 ? u : null; } });
+      }
+    </script>
     <script is:inline>
       (function () {
         var d = document.documentElement;

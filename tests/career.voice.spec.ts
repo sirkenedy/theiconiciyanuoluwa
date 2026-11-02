@@ -48,7 +48,7 @@ async function fakeVoice(page: Page, { denied = false, slowModel = false } = {})
     const emit = (e: string, v?: unknown) => (handlers[e] ?? []).forEach((fn) => fn(v));
     const mic = {
       open: async () => {
-        if (denied) throw Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+        if ((window as unknown as { __micDenied?: boolean }).__micDenied ?? denied) throw Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
         live = true;
       },
       pause: () => (live = false),
@@ -210,14 +210,38 @@ test('"let\'s stop here" by voice: check what I heard (editable), then a scoreca
   await expect(page.locator('.cc-ivsetup__done').last()).toContainText('You checked 1 spoken answer.');
 });
 
-test('a blocked microphone: Ami says so and the interview carries on by typing', async ({ page }) => {
+test('a blocked microphone: Ami says why and lets them choose (nothing starts, no interview used, until they do)', async ({ page }) => {
   await fakeVoice(page, { denied: true });
   await startSpokenDenied(page);
-  await expect(page.locator('.cc-msg--note').first()).toContainText("Your microphone is blocked, so let's do this one by typing. To allow it, use the lock icon by this site's address → allow Microphone, then reload.");
-  await expect(page.locator('.cc-msg--note').first().locator('.cc-msg__code')).toHaveText('Code: NotAllowedError'); // for screenshots from phones
+  const blocked = page.locator('.cc-msg--note', { hasText: 'Your microphone is blocked' });
+  await expect(blocked).toContainText("Your microphone is blocked for this site. To allow it, use the lock icon by this site's address → allow Microphone, then tap Try again. Or answer by typing.");
+  await expect(blocked.locator('.cc-msg__code')).toHaveText('Code: NotAllowedError'); // for screenshots from phones
+  await expect(coach(page)).toHaveCount(0); // not switched to typing by itself, and no interview used up
+
+  // They allow it, then tap Try again: the spoken interview starts.
+  await page.evaluate(() => ((window as unknown as { __micDenied?: boolean }).__micDenied = false));
+  await blocked.getByRole('button', { name: 'Try again' }).click();
+  await expect(coach(page).first()).toContainText('How would you improve checkout for schools?');
+  await expect(page.locator('[data-voice]')).toBeVisible();
+  await expect(blocked.getByRole('button', { name: /Try again|Type instead/ })).toHaveCount(0);
+});
+
+test('a blocked microphone → "Type instead": the interview carries on by typing, and "Speak instead" switches back later', async ({ page }) => {
+  await fakeVoice(page, { denied: true });
+  await startSpokenDenied(page);
+  const blocked = page.locator('.cc-msg--note', { hasText: 'Your microphone is blocked' });
+  await blocked.getByRole('button', { name: 'Type instead' }).click();
   await expect(coach(page).first()).toContainText('How would you improve checkout for schools?');
   await expect(page.locator('[data-voice]')).toBeHidden();
   await expect(page.locator('#cc-input')).toHaveAttribute('placeholder', 'Your answer…');
+
+  // Later (say, after allowing the microphone and reloading), the bar offers speaking again.
+  await page.reload();
+  await expect(page.locator('[data-ivbar]')).toBeVisible();
+  await page.evaluate(() => ((window as unknown as { __micDenied?: boolean }).__micDenied = false));
+  await page.locator('[data-ivbar]').getByRole('button', { name: 'Speak instead' }).click();
+  await expect(page.locator('[data-voice]')).toBeVisible();
+  await expect(page.locator('[data-ivbar]').getByRole('button', { name: 'Speak instead' })).toHaveCount(0);
 });
 
 async function startSpokenDenied(page: Page) {
