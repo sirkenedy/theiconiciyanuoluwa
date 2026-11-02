@@ -13,7 +13,8 @@ export const DEMAND_LAST = 'search:demand:last'; // country code → ms of the l
 export const demandRoles = (country: string) => `search:demand:roles:${country}`; // target roles asked for there
 export const INDEX_TTL_S = 50 * 3600; // Remotive's index is rewritten every 6 h, so the TTL never cuts its week short
 export const SERVED_TTL_S = 30 * 86_400;
-export const MAX_PER_SOURCE = 600;
+// Newest first. ~1 MB per index (~260 boards): within Upstash's free limits (10 MB request, 10 GB bandwidth a month).
+export const MAX_PER_SOURCE = 1500;
 
 /** Same job seen twice (e.g. on a board and on an aggregator): company + title + location, case and spacing ignored. */
 export const dedupeKey = (j: Pick<Job, 'company' | 'title' | 'location'>) =>
