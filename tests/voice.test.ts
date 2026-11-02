@@ -1,7 +1,7 @@
 // Turn-taking and delivery for spoken mock-interview answers (src/lib/career/voice.ts). Pure: no audio. `npm run test:unit`
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { WAIT, checkIn, delivery, deliveryLine, needsNudge, turnDone } from '../src/lib/career/voice.ts';
+import { Resampler, WAIT, checkIn, delivery, deliveryLine, needsNudge, turnDone } from '../src/lib/career/voice.ts';
 
 test('a finished-sounding answer ends after a short pause; a long one sooner than a short one', () => {
   const long = 'I redesigned the checkout flow with the growth team, and completion went up by twelve percent in a month.';
@@ -134,4 +134,30 @@ test('a check-in is answered after a short pause (like a person), not after the 
   assert.equal(turnDone('Hello? Are you there?', WAIT.checkIn - 100), false);
   assert.equal(turnDone('Hello? Are you there?', WAIT.checkIn), true);
   assert.ok(WAIT.checkIn < WAIT.shortSentence);
+});
+
+test('microphone audio converted to 16 kHz in 64 ms blocks: no clicks or drift at block edges, pitch kept (phones run at 44.1/48 kHz)', () => {
+  for (const rate of [44_100, 48_000]) {
+    const seconds = 2;
+    const tone = Float32Array.from({ length: rate * seconds }, (_, i) => Math.sin((2 * Math.PI * 440 * i) / rate));
+    const whole = new Resampler(rate / 16_000).push(tone);
+    const r = new Resampler(rate / 16_000);
+    const parts: Float32Array[] = [];
+    for (let i = 0; i < tone.length; i += 1024) parts.push(r.push(tone.subarray(i, i + 1024)));
+    const streamed = Float32Array.from(parts.flatMap((p) => [...p]));
+    assert.ok(Math.abs(streamed.length - 16_000 * seconds) <= 1, `${rate}: ${streamed.length} samples (no drift)`);
+    assert.ok(Math.abs(streamed.length - whole.length) <= 1, `${rate}: blocks give the same audio as one piece`);
+    let diff = 0;
+    for (let i = 0; i < Math.min(whole.length, streamed.length); i++) diff = Math.max(diff, Math.abs(whole[i] - streamed[i]));
+    assert.ok(diff < 1e-5, `${rate}: no clicks at block edges (max ${diff})`);
+    // Same pitch: 440 Hz is 880 zero crossings a second.
+    let crossings = 0;
+    for (let i = 1; i < streamed.length; i++) if (streamed[i - 1] < 0 !== streamed[i] < 0) crossings++;
+    assert.ok(Math.abs(crossings / seconds - 880) <= 2, `${rate}: ${crossings / seconds} crossings a second`);
+    // A steady level stays steady (the old per-block version dipped at every edge).
+    const flat = new Resampler(rate / 16_000);
+    const out: number[] = [];
+    for (let i = 0; i < 20; i++) out.push(...flat.push(new Float32Array(1024).fill(0.5)));
+    assert.ok(out.every((v) => Math.abs(v - 0.5) < 1e-6), `${rate}: steady`);
+  }
 });

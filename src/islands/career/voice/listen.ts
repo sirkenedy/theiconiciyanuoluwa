@@ -1,7 +1,7 @@
 // Hands-free answers: the microphone, a voice detector, on-device speech-to-text, and the turn-taking that decides when
 // an answer is finished. Loaded only when a voice interview starts. Tests swap the microphone and the recogniser for
 // scripted fakes (window.__ccVoiceTest) and drive the same turn-taking code.
-import { SPOKEN_COMMAND, SpeechGate, checkIn, decisive, delivery, isWords, needsNudge, turnDone, type CheckIn, type Delivery } from '../../../lib/career/voice.ts';
+import { Resampler, SPOKEN_COMMAND, SpeechGate, checkIn, decisive, delivery, isWords, needsNudge, turnDone, type CheckIn, type Delivery } from '../../../lib/career/voice.ts';
 import workletUrl from './mic-worklet.js?url&no-inline';
 import workerUrl from './whisper.worker.ts?worker&url';
 
@@ -64,19 +64,23 @@ class RealMic implements Mic {
   async open() {
     // Asked for inside the Start tap when possible (phones only show the permission prompt for a tap).
     this.stream = await (takeEarlyMic() ?? requestMic());
-    try {
-      this.ctx = new AudioContext({ sampleRate: RATE });
-    } catch {
-      this.ctx = new AudioContext();
-    }
+    // Chrome and Firefox turn the microphone into 16 kHz cleanly. WebKit (Safari, and every browser on an iPhone or
+    // iPad) garbles a microphone run at a rate other than its own, so there it stays native and is converted here.
+    if (webkit()) this.ctx = new AudioContext();
+    else
+      try {
+        this.ctx = new AudioContext({ sampleRate: RATE });
+      } catch {
+        this.ctx = new AudioContext();
+      }
     await this.ctx.audioWorklet.addModule(scriptUrl(workletUrl));
     const src = this.ctx.createMediaStreamSource(this.stream);
     const node = new AudioWorkletNode(this.ctx, 'cc-mic');
     const mute = this.ctx.createGain();
     mute.gain.value = 0; // keeps the graph running without playing the microphone back
     src.connect(node).connect(mute).connect(this.ctx.destination);
-    const ratio = this.ctx.sampleRate / RATE;
-    node.port.onmessage = (e: MessageEvent<Float32Array>) => this.feed(ratio === 1 ? e.data : downsample(e.data, ratio));
+    const resample = new Resampler(this.ctx.sampleRate / RATE);
+    node.port.onmessage = (e: MessageEvent<Float32Array>) => this.feed(resample.push(e.data));
     this.live = true;
   }
   pause() {
@@ -157,16 +161,10 @@ function concat(parts: Float32Array[]) {
   return out;
 }
 /** To 16 kHz by averaging each window (a simple low-pass): picking single samples would alias and blur the words. */
-function downsample(input: Float32Array, ratio: number) {
-  const out = new Float32Array(Math.floor(input.length / ratio));
-  for (let i = 0; i < out.length; i++) {
-    const from = Math.floor(i * ratio);
-    const to = Math.min(input.length, Math.floor((i + 1) * ratio));
-    let sum = 0;
-    for (let j = from; j < to; j++) sum += input[j];
-    out[i] = sum / Math.max(1, to - from);
-  }
-  return out;
+/** Safari's engine: Safari itself, and every browser on iPhone and iPad (Apple requires it). */
+function webkit() {
+  const ua = navigator.userAgent;
+  return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) || (/AppleWebKit/.test(ua) && !/Chrome|Chromium|Edg|OPR|Android/.test(ua));
 }
 
 /** Whisper in a worker, so the page never freezes while it listens. */

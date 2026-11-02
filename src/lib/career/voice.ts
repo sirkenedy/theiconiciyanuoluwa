@@ -198,3 +198,37 @@ export class SpeechGate {
     this.run = this.quiet = 0;
   }
 }
+
+/**
+ * Streaming conversion to 16 kHz (Whisper's rate). Each output sample is the average of exactly the input it covers,
+ * fractional edges included (a simple anti-alias filter), and the position carries over between blocks, so there are
+ * no clicks or drift at block edges (the old per-block version lost a sample or two every 64 ms at 44.1 kHz).
+ */
+export class Resampler {
+  private buf = new Float32Array(0);
+  private pos = 0;
+  private ratio: number;
+  constructor(ratio: number) {
+    this.ratio = ratio;
+  }
+  push(input: Float32Array): Float32Array {
+    if (this.ratio === 1) return input;
+    const all = new Float32Array(this.buf.length + input.length);
+    all.set(this.buf);
+    all.set(input, this.buf.length);
+    const n = Math.max(0, Math.floor((all.length - this.pos) / this.ratio));
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const a = this.pos + i * this.ratio;
+      const b = a + this.ratio;
+      let sum = 0;
+      for (let j = Math.floor(a); j < b; j++) sum += all[j] * (Math.min(b, j + 1) - Math.max(a, j));
+      out[i] = sum / this.ratio;
+    }
+    const used = this.pos + n * this.ratio;
+    const keep = Math.floor(used);
+    this.buf = all.slice(keep);
+    this.pos = used - keep;
+    return out;
+  }
+}
