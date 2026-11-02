@@ -109,6 +109,7 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
       <div class="cc-breather" data-breather role="status" hidden>
         <span class="coach-orb coach-orb--sm coach-orb--asleep" aria-hidden="true"><span class="coach-orb__eyes"><span></span><span></span></span></span>
         <span><strong>Taking a breather until tomorrow.</strong> Today's free coaching is used up. Your chats and résumé are saved on this device, and <a href="/">Ask about {firstName}</a> still works.</span>
+        <button class="cc-icon-btn cc-breather__close" type="button" data-breather-close aria-label="Dismiss this notice"><Icon name="close" size={18} /></button>
       </div>
       <div class="cc-log" data-log>
         <div class="cc-scroll" data-scroll>

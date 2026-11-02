@@ -891,12 +891,15 @@ a.cc-job__btn::after { content: '↗'; margin-left: 6px; }
   .cc.has-preview .cc-main {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(380px, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
+    /* Notices (welcome back, breather) on top of the chat column, then the conversation, then the composer. */
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
     column-gap: var(--s-6);
     padding-right: var(--s-6);
   }
-  .cc.has-preview .cc-log { grid-column: 1; grid-row: 1; }
-  .cc.has-preview .cc-dock { grid-column: 1; grid-row: 2; }
+  .cc.has-preview .cc-welcome { grid-column: 1; grid-row: 1; }
+  .cc.has-preview .cc-breather { grid-column: 1; grid-row: 2; max-width: 640px; }
+  .cc.has-preview .cc-log { grid-column: 1; grid-row: 3; }
+  .cc.has-preview .cc-dock { grid-column: 1; grid-row: 4; }
   /* Stretch to the column and scroll inside it: a long résumé must never make the page itself scroll. */
   .cc.has-preview .cc-main { overflow: hidden; }
   .cc.has-preview .cc-preview { grid-column: 2; grid-row: 1 / -1; align-self: stretch; min-height: 0; margin-block: var(--s-6); overflow-y: auto; overscroll-behavior: contain; }
@@ -980,6 +983,7 @@ a.cc-job__btn::after { content: '↗'; margin-left: 6px; }
   box-shadow: var(--ledge-sm) var(--butter-ledge);
 }
 .cc-breather[hidden] { display: none; }
+.cc-breather__close { flex: none; margin-left: auto; }
 .coach-orb--asleep .coach-orb__eyes span { height: calc(var(--co) * 0.035); border-radius: var(--r-pill); }
 .cc[data-resting] .cc-send { opacity: 0.5; pointer-events: none; }
 .cc-consent-link,

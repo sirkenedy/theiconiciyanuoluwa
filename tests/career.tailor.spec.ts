@@ -532,3 +532,28 @@ test('interview prep: "prep me…, a 3-day plan" builds a guide that follows it;
   expect(write.messages[0].content).toContain('<instructions>prep me for the interview with a 3-day plan</instructions>');
   await expect(page.locator('[data-usage="guides"] [data-left]')).toHaveText('1 of 2 left');
 });
+
+test('with a document open, the "taking a breather" notice sits at the top of the chat column, not under the composer', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await withProfile(page);
+  await page.evaluate(() => document.querySelector<HTMLButtonElement>('.cc-starter[data-start="tailor"]')!.click());
+  await page.getByLabel('Job description').fill(JD);
+  await page.getByRole('button', { name: 'Letter only' }).click();
+  await expect(page.locator('.cc')).toHaveClass(/has-preview/);
+  await page.evaluate(() => {
+    document.querySelector<HTMLElement>('[data-breather]')!.hidden = false;
+  });
+  const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
+  const [notice, log, dock, preview] = [await box('[data-breather]'), await box('.cc-log'), await box('.cc-dock'), await box('[data-preview]')];
+  expect(notice.y + notice.height).toBeLessThanOrEqual(log.y + 1); // above the conversation
+  expect(notice.y).toBeLessThan(dock.y);
+  expect(notice.x + notice.width).toBeLessThanOrEqual(preview.x); // in the chat column
+
+  // It can be dismissed, and stays dismissed for the rest of the day.
+  await page.evaluate(() => {
+    document.querySelector<HTMLElement>('[data-breather]')!.hidden = false;
+  });
+  await page.getByRole('button', { name: 'Dismiss this notice' }).click();
+  await expect(page.locator('[data-breather]')).toBeHidden();
+  expect(await page.evaluate(() => localStorage.getItem('cc-breather-dismissed'))).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+});

@@ -110,13 +110,29 @@ const drop = $<HTMLElement>('.cc-drop__zone');
 const breatherBox = $<HTMLElement>('[data-breather]');
 
 /** Today's global AI budget is spent: a friendly resting state until midnight UTC; nothing on the device is lost. */
+/** Dismissed notices stay hidden for the rest of that day (this browser only); the composer stays paused. */
+const BREATHER_KEY = 'cc-breather-dismissed';
+const dismissedToday = () => {
+  try {
+    return localStorage.getItem(BREATHER_KEY) === localDay();
+  } catch {
+    return false;
+  }
+};
 function setBreather(on: boolean) {
-  breatherBox.hidden = !on;
+  breatherBox.hidden = !on || dismissedToday();
   cc.toggleAttribute('data-resting', on);
   input.disabled = on;
   input.placeholder = on ? 'Back tomorrow…' : phone.matches ? 'Message Ami' : 'Ask anything about your job search…';
   if (on) announce('Ami is taking a breather until tomorrow.');
 }
+$<HTMLButtonElement>('[data-breather-close]').addEventListener('click', () => {
+  try {
+    localStorage.setItem(BREATHER_KEY, localDay());
+  } catch {}
+  breatherBox.hidden = true;
+  input.focus();
+});
 async function isBreather(res: Response | null) {
   if (res?.status !== 503) return false;
   const { error } = (await res.clone().json().catch(() => ({}))) as { error?: string };
