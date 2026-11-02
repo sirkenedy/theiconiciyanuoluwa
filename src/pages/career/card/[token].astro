@@ -1,0 +1,75 @@
+---
+import Base from '../../../layouts/Base.astro';
+import Header from '../../../components/Header.astro';
+import owner from '../../../content/owner.json';
+import { cardSecret, readCardToken } from '../../../lib/career/card';
+import { visitsKey } from '../../api/career/card';
+import { pipeline, redisConfig } from '../../../lib/redis';
+
+// A shared "progress" card: the link carries the card (signed), so nothing is looked up or stored. Visits are counted
+// per day, as a number only. Personal, so never indexed.
+export const prerender = false;
+
+const token = Astro.params.token ?? '';
+const card = await readCardToken(token, cardSecret());
+const redis = redisConfig();
+if (card && redis) await pipeline(redis, [['INCR', visitsKey()], ['EXPIRE', visitsKey(), 400 * 86_400]]).catch(() => {});
+
+const who = card?.name ? card.name.split(' ')[0] : null;
+const title = who ? `${who}'s job search, with Ami` : 'A job search, with Ami';
+const facts = card
+  ? [
+      card.applied !== null ? `${card.applied} applications` : '',
+      card.interviews !== null ? `${card.interviews} interviews` : '',
+      card.practice !== null ? `${card.practice} mock interviews` : '',
+      card.score ? `interview practice score ${card.score[0]} to ${card.score[1]} out of 5` : '',
+    ].filter(Boolean)
+  : [];
+const description = `${facts.length ? `${facts.join(', ')}. ` : ''}Ami is a free AI career coach: fresh jobs matched to you, your CV tailored to any role, and mock interviews that talk back.`;
+const image = card ? `/career/card/${token}.png` : undefined;
+---
+
+<Base title={title} description={description} noindex ogAlt={`${title}: ${facts.join(', ') || 'a progress card'}`} ogImage={image}>
+  <Header brand={owner.firstName} home={false} />
+  <main id="main" tabindex="-1" class="container cardpage">
+    {
+      card ? (
+        <img class="cardpage__card" src={`/career/card/${token}.png?f=square`} width="1080" height="1080" alt={`${title}. ${facts.join(', ')}.`} />
+      ) : (
+        <p class="label">This card link isn't valid any more, but Ami is still here.</p>
+      )
+    }
+    <div class="cardpage__copy">
+      <h1 class="cardpage__title">{who ? `${who} is practising with Ami.` : 'Practise your job search with Ami.'}</h1>
+      <p class="cardpage__lead">A free AI career coach: fresh jobs matched to you, your CV tailored to any role, and mock interviews that talk back. Your résumé stays on your device.</p>
+      <a class="btn btn--primary cardpage__cta" href="/career?from=card">Try Ami free</a>
+      <p class="cardpage__note">No account. Make your own card once you've started.</p>
+    </div>
+  </main>
+</Base>
+
+<style>
+  .cardpage {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--s-8, 48px);
+    align-items: center;
+    min-height: 70vh;
+    padding-block: var(--s-8, 48px);
+  }
+  .cardpage__card {
+    width: 100%;
+    height: auto;
+    border: 2px solid var(--line);
+    border-radius: var(--r-xl);
+    box-shadow: var(--ledge-md) var(--line);
+  }
+  .cardpage__copy { display: flex; flex-direction: column; gap: var(--s-4); align-items: flex-start; }
+  .cardpage__title { margin: 0; font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; }
+  .cardpage__lead { margin: 0; color: var(--ink-muted); font-size: var(--fs-lead); }
+  .cardpage__cta { min-height: var(--tap); padding: 0 var(--s-6); }
+  .cardpage__note { margin: 0; color: var(--ink-subtle); font-size: var(--fs-meta); }
+  @media (max-width: 760px) {
+    .cardpage { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>

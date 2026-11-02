@@ -48,7 +48,7 @@ async function fakeVoice(page: Page, { denied = false, slowModel = false } = {})
     const emit = (e: string, v?: unknown) => (handlers[e] ?? []).forEach((fn) => fn(v));
     const mic = {
       open: async () => {
-        if (denied) throw new Error('NotAllowedError');
+        if (denied) throw Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
         live = true;
       },
       pause: () => (live = false),
@@ -213,7 +213,8 @@ test('"let\'s stop here" by voice: check what I heard (editable), then a scoreca
 test('a blocked microphone: Ami says so and the interview carries on by typing', async ({ page }) => {
   await fakeVoice(page, { denied: true });
   await startSpokenDenied(page);
-  await expect(page.locator('.cc-msg--note').first()).toContainText("I couldn't use your microphone");
+  await expect(page.locator('.cc-msg--note').first()).toContainText("Your microphone is blocked, so let's do this one by typing. To allow it, use the lock icon by this site's address → allow Microphone, then reload.");
+  await expect(page.locator('.cc-msg--note').first().locator('.cc-msg__code')).toHaveText('Code: NotAllowedError'); // for screenshots from phones
   await expect(coach(page).first()).toContainText('How would you improve checkout for schools?');
   await expect(page.locator('[data-voice]')).toBeHidden();
   await expect(page.locator('#cc-input')).toHaveAttribute('placeholder', 'Your answer…');
