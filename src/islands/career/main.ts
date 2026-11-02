@@ -6,7 +6,7 @@ import { readEvents } from '../../lib/career/stream.ts';
 import { loadPurifier, renderModelText } from '../../lib/career/render.ts';
 import { REMOTE } from '../../lib/career/constants.ts';
 import type { Analysis, Answer, ChatTurn, Feedback, Flag, Guide, InterviewSetup, InterviewTurn, IvAction, IvReaction, Profile, RankedJob, StoredProfile, Transcript, WriteResult } from '../../lib/career/types.ts';
-import { deliveryLine, type Delivery } from '../../lib/career/voice.ts';
+import { checkIn, deliveryLine, type CheckIn, type Delivery } from '../../lib/career/voice.ts';
 import { changedKeys, contactLine, fileBase, getLine, profileToResume, setLine, type Doc, type GuideDoc, type LetterDoc, type ResumeDoc } from '../../lib/career/document.ts';
 import { clearData, openVault, persistStorage, type Vault } from '../../lib/vault.ts';
 
@@ -1923,10 +1923,10 @@ function ivSetupBlock() {
   );
   if (canVoice()) {
     const by = choice('iv-by', 'Answer by', [['voice', 'Speaking', 'Hands-free: just talk'], ['typing', 'Typing', 'Write your answers']], iv.voice === false ? 'typing' : 'voice');
-    const sound = choice('iv-sound', 'Ami’s voice', [['natural', 'Natural', 'Lifelike, downloads once (92 MB)'], ['device', 'This device', 'Built in, nothing to download']], iv.natural === false ? 'device' : 'natural');
     by.append(el('p', 'cc-ivsetup__note', 'Speaking: Ami asks out loud and you just talk. Your voice is turned into text on this device and never uploaded. The first time, a one-off 77 MB speech model downloads (it starts now, in the background). Best with headphones.'));
     f.append(by);
-    f.append(sound);
+    // Phones speak with their own voice: a second AI model on top of the speech recogniser is more than a phone browser allows a page.
+    if (naturalVoiceOk()) f.append(choice('iv-sound', 'Ami’s voice', [['natural', 'Natural', 'Lifelike, downloads once (92 MB)'], ['device', 'This device', 'Built in, nothing to download']], iv.natural === false ? 'device' : 'natural'));
     if (iv.voice !== false) warmVoice();
     by.addEventListener('change', () => (new FormData(f).get('iv-by') === 'voice' ? warmVoice() : undefined));
   }
@@ -1950,7 +1950,7 @@ function ivSetupBlock() {
     // Speech must be allowed inside this tap (some browsers refuse it later).
     // The speaker is made inside this tap and kept: browsers only let a page play sound after a tap.
     if (canVoice() && new FormData(f).get('iv-by') !== 'typing' && speakMod) {
-      tapSpeaker = speakMod.makeSpeaker(new FormData(f).get('iv-sound') !== 'device');
+      tapSpeaker = speakMod.makeSpeaker(naturalVoiceOk() && new FormData(f).get('iv-sound') !== 'device');
       tapSpeaker.unlock();
     }
     // And the microphone: phones show the permission prompt only for a request made inside the tap.
@@ -1964,7 +1964,7 @@ function ivSetupBlock() {
     const data = new FormData(f);
     iv.setup = { questions: Number(data.get('iv-length')) as 4 | 6 | 8, style: data.get('iv-style') as InterviewSetup['style'], instructions: extra.value.trim().slice(0, 1000) };
     iv.voice = canVoice() && data.get('iv-by') !== 'typing';
-    iv.natural = data.get('iv-sound') !== 'device';
+    iv.natural = naturalVoiceOk() && data.get('iv-sound') !== 'device';
     if (paste) iv.job = { description: pasted };
     await saveConversation(current()!);
     beginInterview();
@@ -1973,9 +1973,10 @@ function ivSetupBlock() {
   return box;
 }
 
-async function ivRequest(phase: 'start' | 'turn' | 'feedback', acked = '') {
+async function ivRequest(phase: 'start' | 'turn' | 'feedback', acked = '', signal?: AbortSignal) {
   const iv = ivState()!;
-  return deviceFetch('/api/career/interview', jsonBody({ phase, acked, sid: iv.sid, job: phase === 'start' ? iv.job : {}, setup: iv.setup, transcript: phase === 'start' ? [] : ivTranscript(), profile: stored!.profile, resume: resumeForAI(), day: localDay(), today: localDay() })).catch(() => null);
+  const body = jsonBody({ phase, acked, sid: iv.sid, job: phase === 'start' ? iv.job : {}, setup: iv.setup, transcript: phase === 'start' ? [] : ivTranscript(), profile: stored!.profile, resume: resumeForAI(), day: localDay(), today: localDay() });
+  return deviceFetch('/api/career/interview', { ...body, signal }).catch(() => null);
 }
 
 /** What went wrong, said plainly. `true` when the interview can't go on (expired, or ended on the server). */
@@ -2052,10 +2053,17 @@ const IV_REPEAT = /^(please )?(can you |could you )?(repeat|say (that|it) again|
 const IV_SKIP = /^(skip|pass|next question)( (this|that)( one| question)?)?( please)?[.!]*$/i;
 const IV_END = /^(end|stop|finish)( (the|this))?( interview)?( now| here| please)?[.!]*$|^let'?s (stop|end)( (here|now|there))?[.!]*$/i;
 
-/** Their answer (or "repeat" / "skip" / "end", handled here with no AI call). */
-/** The answer in flight: if they keep talking before Ami replies, it's taken back (stale) and continued. */
-let ivPending: { mine: Message | null; stale: boolean } | null = null;
+/**
+ * The answer in flight: if they keep talking before Ami replies, it's taken back (stale) and continued. `since` and
+ * `kick` let a "hello, are you there?" cut a slow reply short and ask again.
+ */
+type IvPending = { mine: Message | null; stale: boolean; since: number; kick: () => void };
+let ivPending: IvPending | null = null;
 let ivSeq = 0;
+/** A spoken answer whose reply was lost (a dropped connection): whatever they say next brings it back. */
+let ivLost: Message | null = null;
+/** No word of her reply for this long: the connection has stalled, so ask again. */
+const IV_STALL = { first: 25_000, between: 15_000 } as const;
 
 /** Their answer (or "repeat" / "skip" / "end", handled here with no AI call), typed or spoken. */
 async function interviewAnswer(said: string, spoken?: Delivery, acked = '') {
@@ -2086,7 +2094,7 @@ async function interviewAnswer(said: string, spoken?: Delivery, acked = '') {
   const answer = IV_SKIP.test(text) ? '(skipped)' : text.slice(0, IV_ANSWER_MAX);
   if (text.length > IV_ANSWER_MAX) announce(`Long answer: I'll read the first ${IV_ANSWER_MAX.toLocaleString()} characters.`);
   // Registered before anything is saved: if they carry on talking even a moment later, this answer is taken back.
-  const pending = (ivPending = { mine: null as Message | null, stale: false });
+  const pending = (ivPending = newPending());
   const mine = await add({ role: 'user', text: answer, kind: 'iv', ...(spoken && answer !== '(skipped)' ? { ivVoice: spoken } : {}) });
   pending.mine = mine;
   if (pending.stale) {
@@ -2098,21 +2106,36 @@ async function interviewAnswer(said: string, spoken?: Delivery, acked = '') {
   const raw = spoken && answer !== '(skipped)' ? msgsEl.querySelector<HTMLElement>(`[data-id="${mine.id}"]`) : null;
   raw?.classList.add('is-raw');
   raw?.append(el('span', 'cc-msg__tidy', 'Tidying what I heard…'));
-  const seq = ++ivSeq;
-  setBusy(true);
-  setVoiceStatus('thinking');
-  let live: ReturnType<typeof liveNode> | null = null;
+  await ivReply(pending, mine, { text, answer, spoken, acked });
+}
+
+const newPending = (): IvPending => ({ mine: null, stale: false, since: Date.now(), kick: () => {} });
+
+type TurnOut = InterviewTurn & { heard?: string | null };
+
+/**
+ * One try at Ami's reply: streamed in, shown as it's written and spoken sentence by sentence. A connection that goes
+ * quiet (no word for a while) or drops is cut off here rather than left hanging.
+ */
+async function fetchTurn(pending: IvPending, acked: string, live: ReturnType<typeof liveNode>) {
+  const iv = ivState()!;
+  const ctl = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const arm = (ms: number) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => ctl.abort(), ms);
+  };
+  pending.kick = () => ctl.abort();
+  pending.since = Date.now();
+  arm(IV_STALL.first);
+  let res: Response | null = null;
+  let turn: TurnOut | null = null;
+  let talk: Promise<void> | null = null;
+  let said = '';
   try {
-    setOrb('thinking');
-    live = liveNode('');
-    const res = await ivRequest('turn', acked);
-    if (pending.stale) return; // they carried on talking: this answer was taken back
-    // Her reply streams in: shown as it's written, and spoken sentence by sentence (she starts within a second).
-    type TurnOut = InterviewTurn & { heard?: string | null };
-    let turn = null as TurnOut | null;
-    let talk = null as Promise<void> | null;
+    res = await ivRequest('turn', acked, ctl.signal);
+    if (pending.stale) return { res, turn, talk, said };
     if (res?.ok && res.headers.get('content-type')?.includes('event-stream')) {
-      let said = '';
       let flushed = 0;
       const speakOut = (all: boolean) => {
         if (!voice || !iv.voice || muted || pending.stale) return;
@@ -2127,7 +2150,9 @@ async function interviewAnswer(said: string, spoken?: Delivery, acked = '') {
         }
         talk = voice.speaker.speak(ready.trim(), (v) => pulse(v));
       };
+      arm(IV_STALL.between);
       for await (const { event, data } of readEvents(res)) {
+        arm(IV_STALL.between);
         if (pending.stale) break;
         const d = data as { text?: string; turn?: TurnOut };
         if (event === 'say' && d.text) {
@@ -2140,18 +2165,53 @@ async function interviewAnswer(said: string, spoken?: Delivery, acked = '') {
           live.p.textContent = said;
         } else if (event === 'turn' && d.turn) turn = d.turn;
       }
-      if (pending.stale) return;
-      if (turn) speakOut(true);
+      if (turn && !pending.stale) speakOut(true);
     } else if (res?.ok) turn = ((await res.json()) as { turn: TurnOut }).turn;
+  } catch (err) {
+    // Dropped or stalled mid-reply: no turn, and the caller decides (ask again, or say so).
+    console.warn('[interview] reply lost:', (err as Error)?.name, (err as Error)?.message);
+    turn = null;
+  } finally {
+    clearTimeout(timer);
+    pending.kick = () => {};
+  }
+  return { res, turn, talk, said };
+}
+
+/** Ami's reply to an answer already in the transcript (`mine`): asked for again once if the connection drops. */
+async function ivReply(pending: IvPending, mine: Message, o: { text: string; answer: string; spoken?: Delivery; acked: string }) {
+  const c = current()!;
+  const iv = c.iv!;
+  const relisten = (say = '') => voice && iv.voice && iv.status === 'active' && void voiceTurn(say);
+  const seq = ++ivSeq;
+  setBusy(true);
+  setVoiceStatus('thinking');
+  let live: ReturnType<typeof liveNode> | null = null;
+  try {
+    setOrb('thinking');
+    live = liveNode('');
+    let got = await fetchTurn(pending, o.acked, live);
+    // Nothing came back at all (a dropped or stalled connection, not a refusal): one more try, quietly.
+    if (!pending.stale && !got.turn && !got.said && !(got.res && !got.res.ok)) got = await fetchTurn(pending, '', live);
+    if (pending.stale) return; // they carried on talking: this answer was taken back
+    const { res, turn, talk } = got;
     live.li.remove();
     if (!res?.ok || !turn) {
       setOrb('error');
+      // Spoken: their answer stays where it is, and whatever they say next ("hello?") asks for her reply again.
+      if (voice && iv.voice && iv.status === 'active' && !(res && !res.ok)) {
+        voice.speaker.stop();
+        ivLost = mine;
+        msgsEl.querySelector(`[data-id="${mine.id}"]`)?.replaceWith(messageNode(mine));
+        relisten(LOST_LINE);
+        return;
+      }
       const over = res?.ok ? false : await ivProblem(res);
       if (res?.ok) await note("I couldn't respond just now. Send your answer again in a moment.");
       // The answer wasn't heard: it goes back in the box to send again.
-      if (!over && answer !== '(skipped)') {
+      if (!over && o.answer !== '(skipped)') {
         await dropMessage(mine);
-        input.value = text;
+        input.value = o.text;
         fit();
       }
       if (over) {
@@ -2165,7 +2225,7 @@ async function interviewAnswer(said: string, spoken?: Delivery, acked = '') {
     mine.ivNote = turn.note;
     setFace(turn.react ?? 'neutral');
     // A spoken answer comes back with recognition slips fixed (names, terms, homophones): that's what they meant.
-    if (spoken && turn.heard && turn.heard !== mine.text) mine.text = turn.heard;
+    if (o.spoken && turn.heard && turn.heard !== mine.text) mine.text = turn.heard;
     msgsEl.querySelector(`[data-id="${mine.id}"]`)?.replaceWith(messageNode(mine));
     await vault.put('messages', mine.id, mine, c.id);
     await add({ role: 'coach', text: turn.say, kind: 'iv', ivKind: turn.action });
@@ -2184,6 +2244,30 @@ async function interviewAnswer(said: string, spoken?: Delivery, acked = '') {
       renderIvBar();
     }
   }
+}
+
+/** What Ami says to a check-in that isn't an answer. */
+function checkInLine(kind: CheckIn) {
+  const pick = (lines: string[]) => lines[Math.floor(Math.random() * lines.length)];
+  if (kind === 'wait') return pick(['Of course, take your time.', 'Sure, no rush.', 'Take all the time you need.']);
+  if (kind === 'done') return 'I didn’t catch an answer there. Take your time, or say skip to move on.';
+  if (kind === 'question') {
+    const last = [...messages].reverse().find((m) => m.kind === 'iv' && m.role === 'coach' && (m.ivKind === 'ask' || m.ivKind === 'follow_up'));
+    return last ? `Of course. ${last.text}` : 'Of course. Go ahead whenever you’re ready.';
+  }
+  return pick(['Yes, I’m here and I can hear you. Go ahead whenever you’re ready.', 'I’m here, and I can hear you clearly. Take your time.', 'Yes, I can hear you. Whenever you’re ready.']);
+}
+
+const LOST_LINE = 'Sorry, I lost the connection for a moment. Say hello when you’re ready, and I’ll pick up from your answer.';
+
+/** "Hello? Are you there?" after a lost reply: her reply to the answer they already gave, asked for again. */
+async function resendLost() {
+  const mine = ivLost;
+  ivLost = null;
+  if (!mine || busy || ivState()?.status !== 'active') return;
+  const pending = (ivPending = newPending());
+  pending.mine = mine;
+  await ivReply(pending, mine, { text: mine.text, answer: mine.text, spoken: mine.ivVoice, acked: '' });
 }
 
 async function dropMessage(m: Message) {
@@ -2215,6 +2299,16 @@ let muted = (() => {
     return false;
   }
 })();
+/**
+ * Kokoro (Ami's natural voice) runs a second AI model beside the speech recogniser. Phones and tablets cap a tab's memory
+ * well below that (iOS reloads, then closes, the tab), so there she speaks with the device's own voice.
+ */
+const naturalVoiceOk = () => {
+  const ua = navigator.userAgent;
+  const iPadOS = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+  const memory = (navigator as { deviceMemory?: number }).deviceMemory;
+  return !(/iPhone|iPad|iPod|Android|Mobile/i.test(ua) || iPadOS || (memory !== undefined && memory < 8));
+};
 const canVoice = () =>
   (window as { __ccVoiceTest?: { supported?: boolean } }).__ccVoiceTest?.supported ??
   (!!navigator.mediaDevices?.getUserMedia && typeof AudioWorkletNode !== 'undefined' && typeof WebAssembly === 'object' && typeof Worker !== 'undefined');
@@ -2310,7 +2404,7 @@ function offerMicChoice(retry: () => void, typeInstead: () => void) {
   row.append(
     button('Try again', 'btn btn--primary cc-micchoice__btn', done(() => {
       if (speakMod && !tapSpeaker) {
-        tapSpeaker = speakMod.makeSpeaker(ivState()?.natural !== false);
+        tapSpeaker = speakMod.makeSpeaker(naturalVoiceOk() && ivState()?.natural !== false);
         tapSpeaker.unlock();
       }
       listenMod?.askForMicNow();
@@ -2326,7 +2420,7 @@ function offerMicChoice(retry: () => void, typeInstead: () => void) {
 async function prepareVoice(): Promise<boolean> {
   if (voice) return true;
   const [api, { makeSpeaker }] = await Promise.all([import('./voice/listen.ts') as Promise<ListenApi>, import('./voice/speak.ts')]);
-  const speaker = tapSpeaker ?? makeSpeaker(ivState()?.natural !== false);
+  const speaker = tapSpeaker ?? makeSpeaker(naturalVoiceOk() && ivState()?.natural !== false);
   tapSpeaker = null;
   speaker.unlock();
   const mic = api.makeMic();
@@ -2364,6 +2458,14 @@ async function prepareVoice(): Promise<boolean> {
     },
     onAnswer: (text, d) => {
       voiceLive.textContent = '';
+      const kind = checkIn(text);
+      // Her reply to their last answer was lost: "hello?" (or anything like it) asks for it again.
+      if (ivLost) {
+        if (kind || /^(ok(ay)?,? )?(continue|go on|carry on)\b/i.test(text.trim())) return void resendLost();
+        ivLost = null; // they've moved on to a new answer
+      }
+      // "Hello? Can you hear me?", "One moment", "What was the question?": answered like a person would, at once.
+      if (kind) return void voiceTurn(checkInLine(kind));
       // A real interviewer reacts at once ("Mm-hm, thank you."): instant, while her reply is being written.
       const ack = acknowledge(text);
       if (ack) {
@@ -2380,6 +2482,22 @@ async function prepareVoice(): Promise<boolean> {
       setVoiceStatus('listening');
       announce('Still listening.');
       return true;
+    },
+    onCheckIn: (kind) => {
+      if (ivLost) return void resendLost();
+      const p = ivPending;
+      if (p && !p.stale) {
+        // She's still working on her reply. Slow (a weak connection)? Ask again now rather than leave them waiting.
+        if (Date.now() - p.since > 8000) p.kick();
+        if (kind !== 'wait' && !speaking && !muted) {
+          const line = 'I’m here, just thinking about that.';
+          turns.ignore(line);
+          void speaker.speak(line, (v) => pulse(v));
+        }
+        return;
+      }
+      // Nothing on its way and she isn't talking: she had gone quiet. Pick the conversation back up.
+      if (!speaking) void voiceTurn(kind === 'question' ? checkInLine('question') : 'Sorry about that, I’m here. Go ahead whenever you’re ready.');
     },
     onNudge: () => setVoiceStatus('nudge'),
     onReading: () => voiceBox.dataset.state !== 'reading' && setVoiceStatus('reading'),
@@ -2633,7 +2751,7 @@ async function switchToSpeaking() {
   if (busy || !iv || iv.status !== 'active') return;
   // Inside the tap: sound and the microphone prompt need one.
   if (speakMod && !tapSpeaker) {
-    tapSpeaker = speakMod.makeSpeaker(iv.natural !== false);
+    tapSpeaker = speakMod.makeSpeaker(naturalVoiceOk() && iv.natural !== false);
     tapSpeaker.unlock();
   }
   listenMod?.askForMicNow();

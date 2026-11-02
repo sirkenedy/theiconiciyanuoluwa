@@ -1,7 +1,7 @@
 // Hands-free answers: the microphone, a voice detector, on-device speech-to-text, and the turn-taking that decides when
 // an answer is finished. Loaded only when a voice interview starts. Tests swap the microphone and the recogniser for
 // scripted fakes (window.__ccVoiceTest) and drive the same turn-taking code.
-import { SPOKEN_COMMAND, SpeechGate, decisive, delivery, isWords, needsNudge, turnDone, type Delivery } from '../../../lib/career/voice.ts';
+import { SPOKEN_COMMAND, SpeechGate, checkIn, decisive, delivery, isWords, needsNudge, turnDone, type CheckIn, type Delivery } from '../../../lib/career/voice.ts';
 import workletUrl from './mic-worklet.js?url&no-inline';
 import workerUrl from './whisper.worker.ts?worker&url';
 
@@ -260,6 +260,8 @@ type Callbacks = {
   /** They kept talking after an answer was sent: true if it could be taken back (Ami hadn't replied yet). */
   onBargeIn(): boolean;
   onNudge(): void;
+  /** "Hello? Are you there?" while Ami is working on her reply (not more of the answer). */
+  onCheckIn(kind: CheckIn): void;
   /** They've stopped and the answer is being finished (last words read): show it, so it never looks stuck. */
   onReading(): void;
   /** They (re)started talking. */
@@ -323,6 +325,9 @@ export class VoiceTurns {
           this.carry = 0;
           const seg = { text, ms: s.ms, ...(s.audio instanceof Float32Array ? { audio: s.audio } : {}) };
           if (this.state === 'sent') {
+            // "Hello?" while she's thinking isn't more answer. ("I am done" is: it ends the answer they just gave.)
+            const kind = checkIn(text);
+            if (kind && kind !== 'done') return cb.onCheckIn(kind);
             // More words after the answer went: take it back and continue it, if Ami hasn't replied yet.
             if (!this.sent || !cb.onBargeIn()) return;
             this.segments = this.sent.segments;

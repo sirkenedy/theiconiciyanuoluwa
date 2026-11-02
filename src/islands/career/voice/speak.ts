@@ -208,25 +208,39 @@ class NaturalSpeaker implements Speaker {
           continue;
         }
         if (this.tooSlow(got)) this.slow = true;
-        await this.play(got, run, onLevel);
+        // Sound switched off by the system (a call, the lock screen): the device voice says it instead.
+        if (!(await this.play(got, run, onLevel)) && run === this.run) await this.device.speak(s, onLevel);
       }
     });
     return this.chain;
   }
 
-  private play(m: Made, run: number, onLevel?: (v: number) => void) {
-    return new Promise<void>((done) => {
-      if (run !== this.run) return done();
-      this.ctx ??= new AudioContext();
-      const buffer = this.ctx.createBuffer(1, m.samples.length, m.rate);
+  /** False if the audio can't play (the system suspended it): never left waiting for an end that won't come. */
+  private async play(m: Made, run: number, onLevel?: (v: number) => void): Promise<boolean> {
+    this.ctx ??= new AudioContext();
+    if (this.ctx.state !== 'running') {
+      await Promise.race([this.ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 400))]);
+      if ((this.ctx.state as string) !== 'running') return false;
+    }
+    const ctx = this.ctx;
+    return new Promise<boolean>((resolve) => {
+      if (run !== this.run) return resolve(true);
+      const buffer = ctx.createBuffer(1, m.samples.length, m.rate);
       buffer.copyToChannel(m.samples as Float32Array<ArrayBuffer>, 0);
-      const src = this.ctx.createBufferSource();
-      const analyser = this.ctx.createAnalyser();
+      const src = ctx.createBufferSource();
+      const analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
       src.buffer = buffer;
-      src.connect(analyser).connect(this.ctx.destination);
+      src.connect(analyser).connect(ctx.destination);
       const data = new Uint8Array(analyser.fftSize);
       let raf = 0;
+      let limit: ReturnType<typeof setTimeout> | undefined;
+      const done = () => {
+        clearTimeout(limit);
+        cancelAnimationFrame(raf);
+        if (this.source === src) this.source = null;
+        resolve(true);
+      };
       const tick = () => {
         analyser.getByteTimeDomainData(data);
         let sum = 0;
@@ -234,11 +248,14 @@ class NaturalSpeaker implements Speaker {
         onLevel?.(Math.min(1, Math.sqrt(sum / data.length) * 4));
         raf = requestAnimationFrame(tick);
       };
-      src.onended = () => {
-        cancelAnimationFrame(raf);
-        if (this.source === src) this.source = null;
+      src.onended = done;
+      // "ended" doesn't always fire (an interrupted output): never wait past the clip's own length.
+      limit = setTimeout(() => {
+        try {
+          src.stop();
+        } catch {}
         done();
-      };
+      }, buffer.duration * 1000 + 1500);
       this.source = src;
       src.start();
       if (onLevel) raf = requestAnimationFrame(tick);

@@ -1,7 +1,7 @@
 // Turn-taking and delivery for spoken mock-interview answers (src/lib/career/voice.ts). Pure: no audio. `npm run test:unit`
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { WAIT, delivery, deliveryLine, needsNudge, turnDone } from '../src/lib/career/voice.ts';
+import { WAIT, checkIn, delivery, deliveryLine, needsNudge, turnDone } from '../src/lib/career/voice.ts';
 
 test('a finished-sounding answer ends after a short pause; a long one sooner than a short one', () => {
   const long = 'I redesigned the checkout flow with the growth team, and completion went up by twelve percent in a month.';
@@ -115,4 +115,23 @@ test('stray stock phrases from near-silence are dropped; a command at the end of
   assert.equal(isWords('I led the launch of our brief builder.', 2500, 24), true);
   assert.equal(decisive('Thank you. Hello, please repeat'), true);
   assert.equal(turnDone('Thank you. Hello, please repeat', WAIT.command), true);
+});
+
+test('check-ins are not answers: "Hello? Can you hear me?", "One moment", "What was the question?" (and answers that start like them still are)', () => {
+  const cases: [string, ReturnType<typeof checkIn>][] = [
+    ['Hi', 'presence'], ['Hello?', 'presence'], ['Hellow', 'presence'], ['Hello? Are you there?', 'presence'], ['Can you hear me?', 'presence'],
+    ['Are you still there?', 'presence'], ['Hey Ami', 'presence'], ['Is this working?', 'presence'], ['Hello, can you hear me now?', 'presence'], ['Did you hear me?', 'presence'],
+    ['One moment.', 'wait'], ['Give me a second', 'wait'], ['Let me think.', 'wait'], ['Hold on', 'wait'],
+    ['Sorry?', 'question'], ['What was the question?', 'question'], ["Sorry, I didn't catch that.", 'question'], ['Hello? What was the question?', 'question'],
+    ['I am done.', 'done'], ["Hello? I'm done.", 'done'], ["That's it.", 'done'],
+  ];
+  for (const [t, kind] of cases) assert.equal(checkIn(t), kind, t);
+  for (const t of ['Hi, so I led the checkout redesign at Sample Pay.', 'Sorry, I think the main thing was speed.', 'I am done with the first version and then we shipped it.', 'Yes', 'Okay.', 'Let me think about the metrics we used: completion and time to pay.'])
+    assert.equal(checkIn(t), null, t);
+});
+
+test('a check-in is answered after a short pause (like a person), not after the long "short answer" wait', () => {
+  assert.equal(turnDone('Hello? Are you there?', WAIT.checkIn - 100), false);
+  assert.equal(turnDone('Hello? Are you there?', WAIT.checkIn), true);
+  assert.ok(WAIT.checkIn < WAIT.shortSentence);
 });

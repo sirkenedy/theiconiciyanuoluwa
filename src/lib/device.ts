@@ -77,7 +77,7 @@ export async function getDeviceId(): Promise<string> {
   return deviceId ?? (deviceId = (await getKey<string>('deviceId')) ?? null) ?? register();
 }
 
-async function send(path: string, method: string, body: string) {
+async function send(path: string, method: string, body: string, signal?: AbortSignal) {
   const id = await getDeviceId();
   const timestamp = String(Date.now() + skew);
   const nonce = b64url(crypto.getRandomValues(new Uint8Array(16)));
@@ -92,11 +92,12 @@ async function send(path: string, method: string, body: string) {
       ...(body ? { 'content-type': 'application/json' } : {}),
     },
     body: method === 'GET' ? undefined : body,
+    signal,
   });
 }
 
 /** A signed request to /api/career/*. `path` includes any query string: it is part of what's signed. */
-export async function deviceFetch(path: string, opts: { method?: string; body?: string } = {}): Promise<Response> {
+export async function deviceFetch(path: string, opts: { method?: string; body?: string; signal?: AbortSignal } = {}): Promise<Response> {
   try {
     const res = await signedFetch(path, opts);
     // A momentary outage ("unavailable", e.g. a slow Redis moment) gets one retry; a breather or a limit doesn't.
@@ -111,18 +112,18 @@ export async function deviceFetch(path: string, opts: { method?: string; body?: 
   }
 }
 
-async function signedFetch(path: string, { method = 'GET', body = '' }: { method?: string; body?: string }): Promise<Response> {
-  const res = await send(path, method, body);
+async function signedFetch(path: string, { method = 'GET', body = '', signal }: { method?: string; body?: string; signal?: AbortSignal }): Promise<Response> {
+  const res = await send(path, method, body, signal);
   if (res.status !== 401) return res;
   const { error, now } = (await res.clone().json().catch(() => ({}))) as { error?: string; now?: number };
   if (error === 'unknown-device') {
     // The server forgot this key (expired after 90 days idle): register it again and retry once.
     await register();
-    return send(path, method, body);
+    return send(path, method, body, signal);
   }
   if (error === 'stale' && now) {
     skew = now - Date.now();
-    return send(path, method, body);
+    return send(path, method, body, signal);
   }
   return res;
 }

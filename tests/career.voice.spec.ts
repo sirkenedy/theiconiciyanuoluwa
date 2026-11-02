@@ -461,3 +461,53 @@ test('feels like a person: an instant "mm-hm" when you finish, a face that react
   await expect(coach(page)).toHaveCount(3);
   void ack;
 });
+
+test('"Hello? Can you hear me?" gets a reply like a person would give (no AI call, not an answer), then she listens again', async ({ page }) => {
+  await fakeVoice(page);
+  await startSpoken(page);
+  const before = (await sent(page)).length;
+  await say(page, 'Hello? Can you hear me?', 1200);
+  await quiet(page, 1100);
+  await expect.poll(async () => (await spokenLines(page)).at(-1)).toMatch(/I can hear you/);
+  await expect(page.locator('[data-voice-status]')).toHaveText('Listening… tap the orb when you’re done');
+  await say(page, 'What was the question?', 1200);
+  await quiet(page, 1100);
+  await expect.poll(async () => (await spokenLines(page)).at(-1)).toContain('How would you improve checkout for schools?');
+  expect((await sent(page)).length).toBe(before);
+  await expect(mine(page)).toHaveCount(0);
+});
+
+test('a reply lost to a dropped connection: asked again once, then Ami says so, keeps the answer, and "hello?" brings her back', async ({ page }) => {
+  await fakeVoice(page);
+  let drops = 2;
+  await page.route('**/api/career/interview', async (route) => {
+    const phase = (route.request().postDataJSON() as { phase?: string } | null)?.phase;
+    if (phase === 'turn' && drops > 0) {
+      drops--;
+      return route.abort('connectionreset');
+    }
+    return route.fallback();
+  });
+  await startSpoken(page);
+  await say(page, 'I would interview parents first, find the slowest step in checkout, fix it and measure completion every week.');
+  await quiet(page, 2000);
+  await expect.poll(async () => (await spokenLines(page)).at(-1)).toContain('I lost the connection');
+  expect(drops).toBe(0); // the quiet retry happened first
+  await expect(mine(page)).toHaveCount(1); // their answer is kept, not thrown away
+  await say(page, 'Hello?', 1000);
+  await quiet(page, 1100);
+  await expect(coach(page)).toHaveCount(2); // her reply to that same answer
+  await expect(mine(page)).toHaveCount(1);
+});
+
+test('phones: Ami speaks with the phone’s own voice (no natural-voice download, which a phone browser can’t hold beside the recogniser)', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/130.0 Mobile/15E148 Safari/604.1' }));
+  await fakeVoice(page);
+  await withProfile(page);
+  await page.locator('#cc-input').fill('mock interview me');
+  await page.locator('#cc-input').press('Enter');
+  const setup = page.locator('.cc-ivsetup__form');
+  await expect(setup.getByRole('radio', { name: /Speaking/ })).toBeChecked();
+  await expect(setup).not.toContainText('Ami’s voice');
+  await expect(setup.getByRole('radio', { name: /Natural/ })).toHaveCount(0);
+});
