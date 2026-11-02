@@ -40,6 +40,11 @@ const render = async (req, res) => {
 export function startServer(port = Number(process.env.PORT) || 4321) {
   const server = createServer(async (req, res) => {
     if (ON_DEMAND.test(req.url ?? '')) return render(req, res);
+    // Vercel serves Analytics/Speed Insights itself; locally they're empty scripts (no 404s, nothing sent).
+    if (/^\/_vercel\/(insights|speed-insights)\/script\.js$/.test(req.url ?? '')) {
+      res.writeHead(200, { 'content-type': 'text/javascript' });
+      return res.end('');
+    }
     // Server routes don't exist in the static output; answer like a deployment without Redis configured.
     if (req.url?.startsWith('/api/twin')) {
       if (req.method === 'HEAD') return res.writeHead(204).end();

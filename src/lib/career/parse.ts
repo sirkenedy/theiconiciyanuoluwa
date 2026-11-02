@@ -23,7 +23,30 @@ export function kindOf(file: File): Kind | null {
 
 type TrustedTypesWindow = { trustedTypes?: { createPolicy(name: string, rules: { createScriptURL(u: string): string }): { createScriptURL(u: string): string } } };
 
+/** pdf.js reads page text with `for await` over a ReadableStream, which Safari/WebKit (every iPhone browser) lacks. */
+function streamIteration() {
+  const proto = ReadableStream.prototype as unknown as Record<symbol, unknown>;
+  if (typeof proto[Symbol.asyncIterator] === 'function') return;
+  Object.defineProperty(proto, Symbol.asyncIterator, {
+    configurable: true,
+    writable: true,
+    value: async function* (this: ReadableStream) {
+      const reader = this.getReader();
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) return;
+          yield value;
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    },
+  });
+}
+
 async function pdfText(data: ArrayBuffer): Promise<string> {
+  streamIteration();
   const [pdfjs, { default: workerUrl }] = await Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')]);
   if (!pdfjs.GlobalWorkerOptions.workerPort) {
     // Under Trusted Types a Worker needs a TrustedScriptURL. This policy vouches for exactly one URL: our bundled worker.

@@ -262,6 +262,13 @@ test('while Ami replies the send arrow is a spinner; a second message waits in t
   await expect(page.locator('.cc-msg--user')).toHaveCount(2);
 });
 
+test('PDF: reads on browsers without ReadableStream async iteration (iPhone Safari/Chrome)', async ({ page }) => {
+  await page.addInitScript(() => delete (ReadableStream.prototype as unknown as Record<symbol, unknown>)[Symbol.asyncIterator]);
+  await upload(page, fixtures.pdf);
+  await expect(page.locator('.cc-profile').last()).toContainText('Sample Candidate');
+  await expect(page.locator('.cc-resume__file')).toHaveText('sample-resume.pdf');
+});
+
 test('a file that will not open says why, in small print (phones have no console to look in)', async ({ page }) => {
   await page.goto('/career');
   await expect(page.locator('[data-usage-ready]')).toHaveCount(1);
