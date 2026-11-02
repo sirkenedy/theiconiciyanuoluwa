@@ -119,7 +119,8 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
             <span class="coach-orb coach-orb--lg" aria-hidden="true"><span class="coach-orb__eyes"><span></span><span></span></span></span>
             <h2 id="cc-hello" class="cc-empty__title">Hi, I'm Ami, your career coach.</h2>
             <p class="cc-empty__lead">
-              Upload your résumé and I'll find today's freshest roles for you, tailor your CV to any job, and help you stand out. Free, with {DAILY_LIMITS.jobs} fresh jobs a day.
+              <span class="cc-empty__new">Upload your résumé and I'll find today's freshest roles for you, tailor your CV to any job, and help you stand out. Free, with {DAILY_LIMITS.jobs} fresh jobs a day.</span>
+              <span class="cc-empty__back">Your résumé is ready. Ask me anything, find fresh roles, tailor your CV to a job or prep for an interview. Free, with {DAILY_LIMITS.jobs} fresh jobs a day.</span>
             </p>
             <p class="cc-empty__warn"><Icon name="info" size={16} /><small>AI suggestions can be wrong. Review everything before you send it.</small></p>
 
@@ -165,7 +166,7 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
           <label class="sr-only" for="cc-input">Message Ami</label>
           <textarea id="cc-input" class="cc-composer__input" name="q" rows="1" maxlength="15000" autocomplete="off" placeholder="Ask anything about your job search…" enterkeyhint="enter" aria-describedby="cc-input-hint"></textarea>
           <span id="cc-input-hint" class="sr-only">Enter sends. Shift and Enter adds a new line.</span>
-          <button class="cc-send" type="submit" aria-label="Send"><Icon name="arrow-right" size={18} /></button>
+          <button class="cc-send" type="submit" aria-label="Send"><Icon name="arrow-right" size={18} /><span class="cc-send__dots" aria-hidden="true"><span></span><span></span><span></span></span></button>
         </form>
         <p class="cc-disclaimer"><small>AI suggestions can be wrong. Review everything before you send it.</small></p>
       </div>

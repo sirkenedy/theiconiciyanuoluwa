@@ -9,8 +9,11 @@ export function redisConfig(): Redis | null {
   return url && token ? { url: url.replace(/\/$/, ''), token } : null;
 }
 
-/** `timeoutMs`: 3 s suits small reads; bulk job writes and whole-pool reads pass more (they move hundreds of KB). */
-export async function pipeline(redis: Redis, commands: (string | number)[][], timeoutMs = 3000): Promise<unknown[]> {
+/**
+ * `timeoutMs`: 3 s on Vercel (next to Upstash) suits small reads; bulk job writes and whole-pool reads pass more. Off
+ * Vercel (local dev, scripts) the round trip to Upstash can take seconds, so the default is 10 s there.
+ */
+export async function pipeline(redis: Redis, commands: (string | number)[][], timeoutMs = process.env.VERCEL ? 3000 : 10_000): Promise<unknown[]> {
   const res = await fetch(`${redis.url}/pipeline`, {
     method: 'POST',
     headers: { authorization: `Bearer ${redis.token}`, 'content-type': 'application/json' },

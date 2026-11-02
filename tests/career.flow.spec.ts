@@ -96,6 +96,29 @@ test('consent comes first: no file picker until "Stays on your device" is ticked
   expect(await opened).toBeTruthy();
 });
 
+test('with a résumé saved, a new chat has no upload box or upload card; Replace in the sidebar still works', async ({ page }) => {
+  await page.goto('/career');
+  await expect(page.locator('[data-usage-ready]')).toHaveCount(1);
+  await expect(page.locator('.cc-drop')).toBeVisible();
+  await expect(page.locator('.cc-starter[data-start="upload"]')).toBeVisible();
+  await page.locator('.cc-consent').click();
+  await page.locator('.cc-drop [data-file]').setInputFiles(fixtures.pdf);
+  await expect(page.locator('.cc-resume__file')).toHaveText('sample-resume.pdf');
+  for (const step of ['new chat', 'reload']) {
+    if (step === 'new chat') await page.locator('[data-new-chat]').first().click();
+    else await page.reload();
+    await expect(page.locator('[data-empty]')).toBeVisible();
+    await expect(page.locator('.cc-drop')).toBeHidden();
+    await expect(page.locator('.cc-starter[data-start="upload"]')).toBeHidden();
+    await expect(page.locator('.cc-starter:visible')).toHaveCount(3);
+    await expect(page.locator('.cc-empty__back')).toBeVisible();
+    await expect(page.locator('.cc-empty__new')).toBeHidden();
+  }
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('[data-resume-actions] button', { hasText: 'Replace' }).click();
+  expect(await chooser).toBeTruthy();
+});
+
 test('a scanned PDF is explained plainly, with a paste-instead box that builds the profile', async ({ page }) => {
   await upload(page, fixtures.scanned);
   await expect(page.locator('.cc-msg--note').last()).toContainText('scanned PDF');

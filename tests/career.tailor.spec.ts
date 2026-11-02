@@ -421,7 +421,7 @@ test('fixed phrases run tools with no AI call; an unusual phrasing goes to Ami, 
   await page.locator('#cc-input').press('Enter');
   await expect(page.locator('.cc-match')).toBeVisible();
   const sent = (await (await request.get(`${CLAUDE}/__requests`)).json()) as { tools?: unknown[]; messages: { content: string }[] }[];
-  expect(sent[0].tools?.length).toBe(3); // Ami routed it...
+  expect(sent[0].tools?.length).toBe(4); // Ami routed it...
   expect(sent[1].messages[0].content).toContain('task = "tailor_analyze"'); // ...to tailoring, for the job above
   expect(sent[1].messages[0].content).toContain('SQL is a plus');
 
@@ -556,4 +556,59 @@ test('with a document open, the "taking a breather" notice sits at the top of th
   await page.getByRole('button', { name: 'Dismiss this notice' }).click();
   await expect(page.locator('[data-breather]')).toBeHidden();
   expect(await page.evaluate(() => localStorage.getItem('cc-breather-dismissed'))).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+});
+
+test('the page never becomes scrollable on desktop, through a whole session (only the chat and panels scroll)', async ({ page, context }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await context.route('https://jobs.sample.test/**', (r) => r.fulfill({ status: 200, body: 'job page' }));
+  const fits = async (step: string) => {
+    const m = await page.evaluate(() => ({ doc: document.scrollingElement!.scrollHeight, win: innerHeight, y: scrollY }));
+    expect(m.doc, `page grew taller than the screen after: ${step}`).toBeLessThanOrEqual(m.win);
+    expect(m.y, `page scrolled after: ${step}`).toBe(0);
+  };
+  await withProfile(page);
+  await fits('upload');
+  await page.locator('.cc-suggest').getByRole('button', { name: 'Find jobs for me' }).click();
+  await expect(page.locator('.cc-job')).toHaveCount(5);
+  await fits('find jobs');
+  await page.locator('.cc-job').nth(1).getByRole('button', { name: 'Save' }).click();
+  await fits('save a job');
+  const [tab] = await Promise.all([context.waitForEvent('page'), page.locator('.cc-job').nth(1).getByRole('link', { name: /Open job/ }).click()]);
+  await tab.close();
+  await fits('open job');
+  await page.locator('.cc-job').first().getByRole('button', { name: 'Tailor my résumé' }).click();
+  await page.getByRole('button', { name: 'Skip' }).click();
+  await expect(page.locator('[data-preview]')).toBeVisible();
+  await fits('tailored résumé + preview');
+  await page.locator('[data-dl="pdf"]').click();
+  await fits('download');
+  await page.getByRole('button', { name: 'Close the preview' }).click();
+  await fits('close preview');
+  await page.locator('.cc-job').first().getByRole('button', { name: 'Cover letter' }).click();
+  await expect(page.locator('.cc-doccard')).toHaveCount(2);
+  await fits('cover letter');
+  await page.locator('#cc-input').fill('prep me for the interview');
+  await page.locator('#cc-input').press('Enter');
+  await expect(page.locator('.cc-doccard').filter({ hasText: 'Interview prep guide' })).toBeVisible();
+  await fits('prep guide');
+  await page.locator('#cc-input').fill(`What do you think?\n${'A very long pasted line of text. '.repeat(120)}`);
+  await fits('long text in the composer');
+  await page.locator('#cc-input').press('Enter');
+  await expect(page.locator('.cc-msg--coach:not(.is-live) .cc-msg__text').last()).toContainText('Lead with outcomes');
+  await fits('long message sent');
+  await page.locator('.cc-msg--coach').last().getByRole('button', { name: /Copy/ }).click();
+  await page.locator('.cc-msg--user').last().getByRole('button', { name: 'Edit your message' }).click();
+  await fits('editing a message');
+  await page.keyboard.press('Escape');
+  await page.locator('#cc-input').fill('get my saved jobs');
+  await page.locator('#cc-input').press('Enter');
+  await fits('saved cards');
+  await page.locator('[data-new-chat]').click();
+  await fits('new chat');
+  await page.locator('[data-conv]').first().click(); // back to the session's chat
+  await fits('switch back');
+  await page.reload();
+  await expect(page.locator('[data-usage-ready]')).toHaveCount(1);
+  await fits('reload');
 });

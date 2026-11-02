@@ -117,6 +117,7 @@ export const MATCH_KINDS = ['strong', 'added', 'missing'] as const;
  */
 export const ToolCallSchema = z.discriminatedUnion('name', [
   z.object({ name: z.literal('find_jobs'), input: z.object({ anywhere: z.boolean().optional() }) }),
+  z.object({ name: z.literal('show_jobs'), input: z.object({ which: z.enum(['saved', 'recent']) }) }),
   z.object({
     name: z.literal('prep_guide'),
     input: z.object({ job: z.enum(['pasted', 'current', 'none']), instructions: z.string().max(1000).nullable().optional(), title: z.string().max(200).nullable().optional(), company: z.string().max(200).nullable().optional() }),
@@ -138,6 +139,11 @@ export const CHAT_TOOLS = [
     name: 'find_jobs',
     description: 'Show the visitor NEW job cards matched to their profile (title, fit, apply link). Use when they ask to find, show or get new jobs, roles or openings for themselves. Not for jobs they have already seen, saved or opened (answer those from <recent_jobs> and <saved_jobs>), and not for advice about job hunting.',
     input_schema: { type: 'object', properties: { anywhere: { type: 'boolean', description: 'true only if they ask for remote roles anywhere / outside their area' } }, additionalProperties: false },
+  },
+  {
+    name: 'show_jobs',
+    description: 'Show job CARDS (with apply links, tailor and cover-letter buttons) for jobs the visitor already has: "saved" = jobs they saved, "recent" = jobs shown to them in the last 7 days. Use when they want to see, get or open those jobs as cards. Free: no new search.',
+    input_schema: { type: 'object', properties: { which: { type: 'string', enum: ['saved', 'recent'] } }, required: ['which'], additionalProperties: false },
   },
   {
     name: 'prep_guide',

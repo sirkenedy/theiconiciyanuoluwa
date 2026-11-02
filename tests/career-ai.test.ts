@@ -176,7 +176,7 @@ test('chat: Ami picks a tool from the whole message (job description judged from
   const tool = JSON.parse(text.match(/event: tool\ndata: (.*)\n/)![1]);
   assert.deepEqual(tool, { name: 'make_document', input: { kind: 'tailor', job: 'pasted', title: 'Product Manager, Payments', company: 'Sample Pay' } });
   const sent = claude.requests.at(-1) as { tools: { name: string }[]; messages: { content: string }[] };
-  assert.deepEqual(sent.tools.map((t) => t.name), ['find_jobs', 'prep_guide', 'make_document']);
+  assert.deepEqual(sent.tools.map((t) => t.name), ['find_jobs', 'show_jobs', 'prep_guide', 'make_document']);
   assert.ok(sent.messages.at(-1)!.content.includes('settlement. Senior Product Manager'), 'the whole message reached Ami');
   const { GET } = await import('../src/pages/api/career/usage.ts');
   void GET;

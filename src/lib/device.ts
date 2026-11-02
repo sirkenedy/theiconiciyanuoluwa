@@ -98,7 +98,13 @@ async function send(path: string, method: string, body: string) {
 /** A signed request to /api/career/*. `path` includes any query string: it is part of what's signed. */
 export async function deviceFetch(path: string, opts: { method?: string; body?: string } = {}): Promise<Response> {
   try {
-    return await signedFetch(path, opts);
+    const res = await signedFetch(path, opts);
+    // A momentary outage ("unavailable", e.g. a slow Redis moment) gets one retry; a breather or a limit doesn't.
+    if (res.status === 503 && ((await res.clone().json().catch(() => ({}))) as { error?: string }).error === 'unavailable') {
+      await new Promise((r) => setTimeout(r, 700));
+      return await signedFetch(path, opts);
+    }
+    return res;
   } catch (err) {
     if (err instanceof TooManyDevices) return new Response(JSON.stringify({ error: 'devices' }), { status: 429, headers: { 'content-type': 'application/json' } });
     throw err;

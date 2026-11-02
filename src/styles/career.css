@@ -288,6 +288,10 @@ a.cc-rail__portfolio { display: none; }
   text-align: center;
 }
 .cc-empty[hidden] { display: none; }
+[data-cc]:not([data-has-resume]) .cc-empty__back,
+[data-cc][data-has-resume] .cc-empty__new,
+[data-cc][data-has-resume] .cc-drop,
+[data-cc][data-has-resume] .cc-starters li:has([data-start="upload"]) { display: none; }
 .cc-empty__title {
   font-size: var(--fs-h2);
   line-height: 1;
@@ -1167,21 +1171,29 @@ div.cc-guide__items { padding-left: 0; }
 }
 .cc-preview__dl[hidden] { display: none; }
 
-/* Ami is replying: the send arrow becomes a spinner; sending waits until she's done. */
-.cc-send { position: relative; }
-.cc-send::after {
-  content: '';
-  position: absolute;
-  inset: 11px;
-  border: 2.5px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  opacity: 0;
-}
-[data-cc][data-busy] .cc-send { cursor: progress; opacity: 0.85; }
-[data-cc][data-busy] .cc-send svg { opacity: 0; }
-[data-cc][data-busy] .cc-send::after { opacity: 1; }
+/* Ami is replying: the send key stays pressed onto its ledge and the arrow becomes her typing dots. */
+.cc-send { position: relative; transition: transform var(--dur-2) var(--ease-spring); }
+.cc-send svg { transition: opacity var(--dur-1), transform var(--dur-1); }
+.cc-send__dots { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 3px; opacity: 0; }
+.cc-send__dots span { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+[data-cc][data-busy] .cc-send { cursor: progress; transform: translateY(2px); box-shadow: 0 1px 0 var(--peach-ledge); }
+[data-cc][data-busy] .cc-send svg { opacity: 0; transform: scale(0.6); }
+[data-cc][data-busy] .cc-send__dots { opacity: 1; }
 @media (prefers-reduced-motion: no-preference) {
-  [data-cc][data-busy] .cc-send::after { animation: ccSpin 0.8s linear infinite; }
+  [data-cc][data-busy] .cc-send__dots span { animation: ccDot 1s ease-in-out infinite; }
+  [data-cc][data-busy] .cc-send__dots span:nth-child(2) { animation-delay: 0.15s; }
+  [data-cc][data-busy] .cc-send__dots span:nth-child(3) { animation-delay: 0.3s; }
 }
-@keyframes ccSpin { to { transform: rotate(360deg); } }
+
+/* The app is exactly one screen: only the chat, the sidebar and the preview scroll. Their scroll areas contain their
+   absolutely positioned children (e.g. screen-reader text), so nothing can stretch the page; and the page itself
+   never scrolls on /career (print still flows normally). */
+.cc-log,
+.cc-rail__body,
+.cc-preview { position: relative; }
+:root:has(.cc),
+:root:has(.cc) body { overflow: hidden; }
+@media print {
+  :root:has(.cc),
+  :root:has(.cc) body { overflow: visible; }
+}

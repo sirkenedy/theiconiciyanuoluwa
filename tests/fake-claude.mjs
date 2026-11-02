@@ -176,6 +176,9 @@ function routeLike(params) {
   if (/NOT-A-JOB/.test(text)) return { say: "That looks like a résumé, not a job description. Paste the job description and I'll tailor your résumé to it." };
   if (/\?\s*$/.test(line) && /^(should|how|what|why|is|do|does|which)\b/.test(line)) return null;
   if (/\b(prep|interview|likely questions|study plan)\b/.test(line) && !/\?\s*$/.test(line)) return { name: 'prep_guide', input: { job: pasted.length >= 200 ? 'pasted' : 'current', instructions: line, title: null, company: null } };
+  if (/\b(cards?|show)\b/.test(line) && /\b(seen|recent|shown)\b/.test(line)) return { name: 'show_jobs', input: { which: 'recent' } };
+  // A model mistake to guard against: picking a new search for jobs they already have.
+  if (/^bring back\b/.test(line)) return { name: 'find_jobs', input: { anywhere: false } };
   if (/\b(seen|saved|past)\b/.test(line)) return { say: 'From your saved and recent jobs: Product Manager, Payments at Sample Pay.' };
   if (/\b(find|show|get|any|search)\b.*\b(jobs?|roles?|openings?)\b/.test(line)) return { name: 'find_jobs', input: { anywhere: /anywhere/.test(line) } };
   const cv = /\b(cv|r[eé]s?u?m[eé]?s?)\b/.test(line);

@@ -209,3 +209,51 @@ test('"get me all jobs I have seen" in a new chat: answered from saved and recen
   expect(newest).toMatch(/<saved_jobs>\[\{"title":"Product Manager, Payments"/);
   expect(newest).toContain('<recent_jobs>');
 });
+
+test('saved jobs come back as cards ("get ,y saved jobs", no AI call); Ami shows recently seen jobs as cards on request', async ({ page, request }) => {
+  await withProfile(page);
+  await page.locator('.cc-suggest').getByRole('button', { name: 'Find jobs for me' }).click();
+  const cards = page.locator('.cc-job');
+  await expect(cards).toHaveCount(5);
+  for (const i of [0, 2]) await cards.nth(i).getByRole('button', { name: 'Save' }).click();
+  await request.post(`${CLAUDE}/__reset`);
+  await page.locator('[data-new-chat]').click();
+  await page.locator('#cc-input').fill('get ,y saved jobs');
+  await page.locator('#cc-input').press('Enter');
+  await expect(page.locator('.cc-jobs__intro').last()).toHaveText('Your 2 saved jobs:');
+  await expect(page.locator('.cc-job')).toHaveCount(2);
+  await expect(page.locator('.cc-jobs__left')).toHaveCount(0); // not fresh jobs: nothing counted
+  expect(((await (await request.get(`${CLAUDE}/__requests`)).json()) as unknown[]).length).toBe(0); // no AI call
+  await expect(page.locator('[data-usage="jobs"] [data-left]')).toHaveText('5 of 10 left');
+
+  await page.locator('#cc-input').fill('show me the jobs I have seen as cards');
+  await page.locator('#cc-input').press('Enter');
+  await expect(page.locator('.cc-jobs__intro').last()).toHaveText("Jobs I've shown you in the last 7 days (5):");
+});
+
+test('a momentary "unavailable" (e.g. a slow Redis moment) is retried once, so the message still gets an answer', async ({ page }) => {
+  await withProfile(page);
+  let calls = 0;
+  await page.route('**/api/career/chat', async (route) => {
+    if (++calls === 1) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'unavailable' }) });
+    await route.continue();
+  });
+  await page.locator('#cc-input').fill('How should I prepare for interviews?');
+  await page.locator('#cc-input').press('Enter');
+  await expect(page.locator('.cc-msg--coach:not(.is-live) .cc-msg__text').last()).toContainText('Lead with outcomes');
+  expect(calls).toBe(2);
+});
+
+test('if Ami wrongly picks a new search for jobs the visitor already has, the app shows those cards instead', async ({ page, request }) => {
+  await withProfile(page);
+  await page.locator('.cc-suggest').getByRole('button', { name: 'Find jobs for me' }).click();
+  await expect(page.locator('.cc-job')).toHaveCount(5);
+  await page.locator('.cc-job').first().getByRole('button', { name: 'Save' }).click();
+  await request.post(`${CLAUDE}/__reset`);
+  await page.locator('#cc-input').fill('bring back the ones I bookmarked earlier');
+  await page.locator('#cc-input').press('Enter');
+  await expect(page.locator('.cc-jobs__intro').last()).toHaveText('Your 1 saved job:');
+  const reqs = (await (await request.get(`${CLAUDE}/__requests`)).json()) as { messages: unknown[] }[];
+  expect(reqs.some((r) => JSON.stringify(r.messages).includes('rank_jobs'))).toBe(false); // no new search
+  await expect(page.locator('[data-usage="jobs"] [data-left]')).toHaveText('5 of 10 left');
+});

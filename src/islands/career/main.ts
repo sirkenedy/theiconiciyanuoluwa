@@ -48,6 +48,8 @@ type Message = {
   changes?: WriteResult['changes'];
   critique?: WriteResult['critique'];
   flags?: Flag[];
+  /** Job cards brought back (saved or recently shown): no "fresh jobs left" bar, nothing counted. */
+  recalled?: boolean;
 };
 type State = { current: string | null };
 type Orb = 'idle' | 'typing' | 'thinking' | 'streaming' | 'done' | 'error' | 'reading' | 'searching';
@@ -304,6 +306,7 @@ async function saveProfile(next: StoredProfile) {
 function renderResumeCard() {
   const text = $<HTMLElement>('.cc-resume__text');
   const btns = $<HTMLElement>('[data-resume-actions]');
+  cc.toggleAttribute('data-has-resume', !!stored);
   if (!stored) {
     text.replaceChildren(el('strong', undefined, 'No résumé yet'), el('span', undefined, "Upload one and I'll build your profile."));
     btns.replaceChildren(button('Upload résumé', 'btn btn--secondary cc-card__btn', pickFile));
@@ -440,6 +443,10 @@ async function toggleSave(job: RankedJob, on = !saved.has(job.id)) {
 function jobsBlock(m: Message) {
   const wrap = el('div', 'cc-jobs');
   if (m.text) wrap.append(el('p', 'cc-jobs__intro', m.text));
+  if (m.recalled) {
+    (m.jobs ?? []).forEach((job, i) => wrap.append(jobCard(job, i)));
+    return wrap;
+  }
   wrap.append(profileStrip());
   (m.jobs ?? []).forEach((job, i) => wrap.append(jobCard(job, i)));
   const bar = el('div', 'cc-jobs__left');
@@ -451,6 +458,27 @@ function jobsBlock(m: Message) {
   if (latest && left > 0 && (m.more ?? 0) > 0) bar.append(button(`Show ${Math.min(m.more!, left)} more`, 'btn cc-jobs__more', () => findJobs(true)));
   wrap.append(bar);
   return wrap;
+}
+
+/** Cards for jobs they already have: saved (any time) or shown in the last 7 days. Free: no search, no quota. */
+async function showJobs(which: 'saved' | 'recent', userText: string | null) {
+  if (userText !== null) await add({ role: 'user', text: userText });
+  let jobs: RankedJob[];
+  if (which === 'saved') jobs = await vault.list<RankedJob>('savedJobs');
+  else {
+    const since = Date.now() - 7 * 86_400_000;
+    const seen = new Set<string>();
+    jobs = (await vault.list<Message>('messages'))
+      .filter((m) => m.kind === 'jobs' && !m.recalled && m.at >= since)
+      .sort((a, b) => b.at - a.at)
+      .flatMap((m) => m.jobs ?? [])
+      .filter((j) => !seen.has(j.id) && (seen.add(j.id), true))
+      .slice(0, 20);
+  }
+  if (!jobs.length) return note(which === 'saved' ? "You haven't saved any jobs yet. Tap Save on a job card to keep it here." : "I haven't shown you any jobs in the last 7 days. Ask me to find some.");
+  const intro = which === 'saved' ? `Your ${jobs.length} saved ${jobs.length === 1 ? 'job' : 'jobs'}:` : `Jobs I've shown you in the last 7 days (${jobs.length}):`;
+  await add({ role: 'coach', text: intro, kind: 'jobs', jobs, recalled: true });
+  announce(intro);
 }
 
 /** The cards on screen, compact, so the chat can answer "why is X the top match?". */
@@ -475,7 +503,7 @@ async function recentJobs() {
   const [all, opened] = await Promise.all([vault.list<Message>('messages'), vault.get<Record<string, number>>('meta', 'opened')]);
   const seen = new Set<string>();
   return all
-    .filter((m) => m.kind === 'jobs' && m.at >= since)
+    .filter((m) => m.kind === 'jobs' && !m.recalled && m.at >= since)
     .sort((a, b) => b.at - a.at)
     .flatMap((m) => (m.jobs ?? []).map((j) => ({ j, at: m.at })))
     .filter(({ j }) => !seen.has(j.id) && (seen.add(j.id), true))
@@ -1479,12 +1507,20 @@ function editMessage(m: Message, content: HTMLElement, bar: HTMLElement) {
 // tool (ToolCallSchema) when the phrasing was unusual or text was pasted: the browser then runs that tool's flow.
 type ToolCall =
   | { name: 'find_jobs'; input: { anywhere?: boolean } }
+  | { name: 'show_jobs'; input: { which: 'saved' | 'recent' } }
   | { name: 'prep_guide'; input: { job: 'pasted' | 'current' | 'none'; instructions?: string | null; title?: string | null; company?: string | null } }
   | { name: 'make_document'; input: { kind: 'tailor' | 'letter' | 'both' | 'improve'; job: 'pasted' | 'current' | 'none'; title?: string | null; company?: string | null; tone?: string | null } };
 
 /** Runs the tool Ami picked. The visitor's message is already in the chat, so no second "you" message is added. */
 async function runTool(tool: ToolCall, userText: string) {
-  if (tool.name === 'find_jobs') return findJobs(false, { anywhere: !!tool.input.anywhere, silent: true });
+  if (tool.name === 'find_jobs') {
+    // Jobs they already have are never a new search, whatever the model picked.
+    if (/\b(saved|bookmark(ed)?|seen|saw|shown|previous(ly)?|earlier|already|again|before|last time|history)\b/i.test(userText)) {
+      return showJobs(/\b(saved|bookmark)/i.test(userText) ? 'saved' : 'recent', null);
+    }
+    return findJobs(false, { anywhere: !!tool.input.anywhere, silent: true });
+  }
+  if (tool.name === 'show_jobs') return showJobs(tool.input.which, null);
   if (tool.name === 'prep_guide') {
     if (!stored) return note(NOTES.jobsNeedProfile.replace('match jobs to', 'work from'));
     const { job: from, instructions, title: t, company: co } = tool.input;
@@ -1542,8 +1578,10 @@ const LEAD_RE = /^(?:(?:hi|hey|ok(?:ay)?|great|thanks|now|please|so|also|and|the
 const JOBS_RE = /\b(jobs?|roles?|openings?|positions?|vacanc(?:y|ies)|opportunit(?:y|ies))\b/;
 
 /** Clear, common requests map to a tool without any model call. Anything else goes to Ami (who can still pick a tool). */
-function intentOf(text: string): 'jobs' | 'both' | 'tailor' | 'letter' | 'improve' | null {
+function intentOf(text: string): 'saved' | 'jobs' | 'both' | 'tailor' | 'letter' | 'improve' | null {
   const t = text.trim().toLowerCase();
+  // "show my saved jobs", "get ,y saved jobs": the saved cards, straight from this device.
+  if (/\b(saved|bookmarked)\b/.test(t) && JOBS_RE.test(t) && !/\b(how|why|which|should)\b/.test(t)) return 'saved';
   const polite = /^(can|could|would) you\b/.test(t);
   // "Find jobs for me", "show me roles", "any openings for me?": the jobs tool. Advice questions ("how do I find a job?") stay chat.
   const ask = t.replace(LEAD_RE, '');
@@ -1569,6 +1607,7 @@ async function send(text: string) {
   const pasted = rest.join('\n').trim().length >= 200;
   const intent = intentOf(pasted ? first : q);
   if (intent && !pasted) {
+    if (intent === 'saved') return showJobs('saved', q);
     if (intent === 'jobs') return findJobs(false, { userText: q });
     if (intent === 'improve') return startTailor({ mode: 'improve' }, q);
     return forThisJob(intent, q);
@@ -1708,6 +1747,7 @@ function transcript(): ChatTurn[] {
       if (!m.kind) return m.text.trim() ? { role: m.role === 'user' ? 'user' : 'assistant', content: m.text } : null;
       if (m.kind === 'note') return m.text.trim() ? coach(m.text) : null;
       if (m.kind === 'profile') return coach('(I read their résumé and built their profile.)');
+      if (m.kind === 'jobs' && m.recalled) return coach(`(I showed their ${m.text.toLowerCase().includes('saved') ? 'saved' : 'recent'} jobs again as cards.)`);
       if (m.kind === 'jobs') return coach(`(I showed job cards: ${(m.jobs ?? []).map((j, i) => `${i + 1}. ${j.title}, ${j.company}, ${j.location}, fit ${j.fit}`).join('; ')}.)`);
       if (m.kind === 'match') {
         const a = m.analysis;
