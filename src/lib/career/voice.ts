@@ -10,6 +10,34 @@ const TRAILING = /(\b(and|so|but|because|or|um+|uh+|erm|er|like|then|which|that|
 /** Commands said out loud ("repeat that", "skip", "let's stop here"): answered at once. */
 export const SPOKEN_COMMAND = /^(please )?(can you |could you )?(repeat|say (that|it) again|come again|pardon)\b[^.?!]{0,30}[.?!]*$|^(skip|pass|next question)( (this|that)( one| question)?)?( please)?[.!]*$|^(end|stop|finish)( (the|this))?( interview)?( now| here| please)?[.!]*$|^let'?s (stop|end)( (here|now|there))?[.!]*$/i;
 
+/**
+ * Things people say to the interviewer rather than as an answer. Each clause of a short utterance must be one of these
+ * ("Hello? Can you hear me?"), so an answer that merely starts with "Hi" or "Sorry" is still an answer.
+ */
+const CHECK_IN: [CheckIn, RegExp][] = [
+  ['presence', /^(oh |um+ |uh+ )?(hi+|hello+w?|hel+o|hallo|hey+|yo|ami|excuse me)( (there|again|ami))?$|^(are|r) (you|u) (still )?(there|here|with me|listening|okay|ok)$|^(can|could|do) (you|u) (still )?hear me( now| okay| ok)?$|^(is )?(any(one|body) )?(there|home)$|^you there$|^(is )?(this|it|the mic(rophone)?) (still )?(working|on)$|^(did|have) you (hear|get) (me|that|my answer)$|^testing( testing)?( one two( three)?)?$|^(hello )?ami$/],
+  ['wait', /^(just )?(one|a|give me a|gimme a|let me have a) (sec(ond)?|moment|minute|min)( please)?$|^(let me|lemme) (think|see|gather my thoughts)( (about it|for a (sec(ond)?|moment)))?$|^hold on( a (sec(ond)?|moment))?$|^(wait|hang on)( a (sec(ond)?|moment))?$|^(i need|i'?ll need) (a|some) (moment|minute|second|time)( to think)?$/],
+  ['question', /^(sorry|pardon|what|huh|come again)$|^(sorry,? )?what (was|is) the question( again)?$|^(sorry,? )?i (didn'?t|did not|couldn'?t|could not) (hear|catch|get|understand) (that|you|the question|it)$|^what did you (say|ask)$/],
+  ['done', /^(i'?m|i am) (done|finished|ready)$|^(that'?s|that is) (it|all)$|^(go ahead|over to you|next|your turn)$/],
+];
+export type CheckIn = 'presence' | 'wait' | 'question' | 'done';
+const clause = (s: string) => s.toLowerCase().replace(/[’']/g, "'").replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ').trim();
+/** A short utterance that is only a check-in ("Hello? Are you there?", "One moment", "What was the question?"). */
+export function checkIn(text: string): CheckIn | null {
+  const t = text.trim();
+  if (!t || t.split(/\s+/).length > 10) return null;
+  const parts = t.split(/[.!?,;]+/).map(clause).filter(Boolean);
+  if (!parts.length) return null;
+  let kind: CheckIn | null = null;
+  for (const p of parts) {
+    const hit = CHECK_IN.find(([, re]) => re.test(p))?.[0];
+    if (!hit) return null;
+    // The most useful reading wins: a question or "I'm done" says more than "hello".
+    if (!kind || (kind === 'presence' && hit !== 'presence')) kind = hit;
+  }
+  return kind;
+}
+
 /** They said they're finished ("I am done", "that will be all", a closing "thank you") or gave a command: final. */
 export const decisive = (text: string) => {
   const t = text.trim();
@@ -33,7 +61,7 @@ export function isWords(text: string, ms: number, loud?: number) {
   return n >= 2 ? n / (ms / 1000) >= 0.6 : ms <= 1500;
 }
 
-export const WAIT = { finished: 0, command: 0, sentence: 1800, shortSentence: 2600, unfinished: 4000, trailing: 6000, nudge: 10_000 } as const;
+export const WAIT = { checkIn: 1000, finished: 0, command: 0, sentence: 1800, shortSentence: 2600, unfinished: 4000, trailing: 6000, nudge: 10_000 } as const;
 
 const words = (t: string) => t.split(/\s+/).filter(Boolean).length;
 
@@ -44,6 +72,8 @@ const words = (t: string) => t.split(/\s+/).filter(Boolean).length;
 export function turnDone(text: string, silenceMs: number, pending = false): boolean {
   const t = text.trim();
   if (pending || !t) return false;
+  // "Hello? Are you there?": a person answers that quickly (but not on the first breath, in case they carry on).
+  if (checkIn(t) && !SPOKEN_COMMAND.test(t) && !FINISHED.test(t)) return silenceMs >= WAIT.checkIn;
   if (decisive(t) && !FINISHED.test(t) && !THANKS.test(t)) return silenceMs >= WAIT.command;
   if (FINISHED.test(t) || (THANKS.test(t) && words(t) >= 12)) return silenceMs >= WAIT.finished;
   if (TRAILING.test(t)) return silenceMs >= WAIT.trailing;
