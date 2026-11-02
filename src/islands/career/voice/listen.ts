@@ -62,7 +62,8 @@ class RealMic implements Mic {
   }
 
   async open() {
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    // Asked for inside the Start tap when possible (phones only show the permission prompt for a tap).
+    this.stream = await (takeEarlyMic() ?? requestMic());
     try {
       this.ctx = new AudioContext({ sampleRate: RATE });
     } catch {
@@ -213,6 +214,20 @@ class RealEars implements Ears {
 }
 
 export const makeMic = (): Mic => hooks()?.mic() ?? new RealMic();
+
+const requestMic = () => navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+let early: Promise<MediaStream> | null = null;
+/** Call synchronously inside the tap that starts a spoken interview: the permission prompt appears right then. */
+export function askForMicNow() {
+  if (hooks() || !navigator.mediaDevices?.getUserMedia) return;
+  early = requestMic();
+  early.catch(() => {}); // handled when the microphone is opened
+}
+function takeEarlyMic() {
+  const p = early;
+  early = null;
+  return p;
+}
 
 /** One speech model per page, started early (when the setup card appears) so it's usually ready by "Start". */
 let ears: Ears | null = null;

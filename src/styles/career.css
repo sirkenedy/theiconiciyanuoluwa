@@ -1651,3 +1651,5 @@ div.cc-guide__items { padding-left: 0; }
 .cc-share__story[hidden] { display: none; }
 .cc-share__story-text { resize: vertical; min-height: 84px; font-size: var(--fs-label); line-height: 1.45; }
 .cc-share__hint { color: var(--ink-muted); font-size: var(--fs-meta); align-self: center; }
+
+.cc-msg__code { display: block; margin-top: var(--s-1); color: var(--ink-subtle); font-size: var(--fs-meta); }
