@@ -1296,8 +1296,16 @@ a.cc-job__btn::after { content: '↗'; margin-left: 6px; }
   }
   .cc-rail.is-open + .cc-scrim { opacity: 1; pointer-events: auto; }
 }
-@media (max-width: 400px) {
+/* Small phones: the mode switch and the share icon need the room (the theme follows the system). */
+@media (max-width: 560px) {
   .cc-actions { display: none; }
+}
+/* In the menu's top bar on small phones (moved there by main.ts). */
+.cc-rail__top .theme-toggle { margin-left: auto; margin-right: var(--s-2); }
+/* The smallest phones: a tighter mode switch keeps the share icon on screen. */
+@media (max-width: 360px) {
+  .cc-head { gap: 6px; padding-inline: var(--s-3); }
+  .cc-head .mode__opt { padding-inline: var(--s-2); font-size: var(--fs-meta); }
 }
 
 /* ---------- interview prep guide (styled page; the same content goes to the PDF) ---------- */
@@ -1548,7 +1556,7 @@ div.cc-guide__items { padding-left: 0; }
 .cc-share__title { margin: 0; font-family: var(--font-display); font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
 .cc-share__body { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: var(--s-5); align-items: start; }
 .cc-share__preview { position: relative; display: grid; place-items: center; min-height: 240px; margin: 0; border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--ledge-sm) var(--line); overflow: hidden; }
-.cc-share__preview img { display: block; width: 100%; height: auto; }
+.cc-share__preview img { display: block; width: auto; max-width: 100%; height: auto; max-height: min(62vh, 640px); margin: 0 auto; }
 .cc-share__preview img[hidden] { display: none; }
 .cc-share__wait { padding: var(--s-5); color: var(--ink-muted); font-size: var(--fs-label); }
 .cc-share__wait[hidden] { display: none; }
@@ -1575,3 +1583,71 @@ div.cc-guide__items { padding-left: 0; }
   /* The share buttons stay in reach while the choices scroll. */
   .cc-share__actions { position: sticky; bottom: calc(var(--s-4) * -1); margin: 0 calc(var(--s-4) * -1) calc(var(--s-4) * -1); padding: var(--s-3) var(--s-4) var(--s-4); background: var(--bg); box-shadow: 0 -1px 0 var(--line); }
 }
+
+/* Share, always one tap away once there's progress: a peach clay pill in the header (the menu on phones). */
+.cc-share-pill {
+  gap: var(--s-2);
+  min-height: var(--tap);
+  padding: 0 var(--s-4);
+  background: var(--peach);
+  color: var(--on-pastel);
+  font-size: var(--fs-label);
+  box-shadow: var(--ledge-sm) var(--peach-ledge);
+}
+.cc-share-pill[hidden] { display: none; }
+/* Phones: a round share icon beside the mode switch instead of the pill (the header has no room for words). */
+.cc-share-icon { display: none; background: var(--peach); color: var(--on-pastel); box-shadow: var(--ledge-sm) var(--peach-ledge); }
+@media (max-width: 760px) {
+  .cc-share-pill { display: none; }
+  .cc-share-icon:not([hidden]) { display: grid; flex: none; }
+}
+/* "Your week": a real button that warms up when the weekly goal is reached. */
+.cc-share-open {
+  gap: 6px;
+  min-height: 36px;
+  margin-block: -6px;
+  padding: 0 var(--s-3);
+  background: var(--lilac-hi);
+  color: var(--on-pastel);
+  font-size: var(--fs-meta);
+  box-shadow: 0 2px 0 var(--lilac-ledge);
+}
+.cc-share-open.is-hot { background: var(--peach); box-shadow: 0 2px 0 var(--peach-ledge); }
+@media (prefers-reduced-motion: no-preference) {
+  .cc-share-open.is-hot { animation: ccWarm 2.4s ease-in-out infinite; }
+}
+@keyframes ccWarm { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+
+/* A proud moment in the chat: a mini card of their progress, and an invitation to share. */
+.cc-celebrate {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+  align-items: center;
+  padding: var(--s-4);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--ledge-md) var(--line);
+}
+.cc-celebrate__mini {
+  display: flex;
+  flex: 0 1 260px;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  box-shadow: 0 3px 0 var(--line);
+}
+.cc-celebrate__mini-head { display: flex; align-items: center; gap: var(--s-2); font-family: var(--font-display); font-size: var(--fs-label); letter-spacing: -0.01em; }
+.cc-celebrate__chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; }
+.cc-celebrate__chip { padding: 4px 10px; border-radius: var(--r-pill); color: var(--on-pastel); font-size: var(--fs-meta); }
+.cc-celebrate__copy { display: flex; flex: 1 1 240px; flex-direction: column; gap: var(--s-2); }
+.cc-celebrate__title { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+.cc-celebrate__text { margin: 0; color: var(--ink-muted); }
+.cc-celebrate__btns { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-1); }
+
+.cc-share__story { display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-3); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--ledge-sm) var(--lilac-ledge); }
+.cc-share__story[hidden] { display: none; }
+.cc-share__story-text { resize: vertical; min-height: 84px; font-size: var(--fs-label); line-height: 1.45; }
+.cc-share__hint { color: var(--ink-muted); font-size: var(--fs-meta); align-self: center; }

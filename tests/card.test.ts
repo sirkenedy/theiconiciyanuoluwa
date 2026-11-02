@@ -3,7 +3,23 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cardCaption, cardToken, cleanCard, readCardToken } from '../src/lib/career/card.ts';
 
-const card = { name: 'Ade Bello', period: 'week' as const, applied: 6, interviews: 2, offers: null, practice: 3, score: [2.9, 4.2] as [number, number], highlight: 'Clear, measurable results', goal: [6, 5] as [number, number] };
+const card = {
+  name: 'Ade Bello',
+  period: 'week' as const,
+  applied: 6,
+  interviews: 2,
+  offers: null,
+  practice: 3,
+  score: [2.9, 4.2] as [number, number],
+  highlight: 'Clear, measurable results',
+  goal: [6, 5] as [number, number],
+  role: 'Senior Product Manager',
+  found: 18,
+  docs: 4,
+  companies: ['Moniepoint', 'Paystack'],
+  skills: ['Payments', 'Discovery', 'SQL'],
+  story: 'Dear Moniepoint: the product manager you have been looking for just did 3 mock interviews before lunch.',
+};
 
 test('a card round-trips through its link; any edit to the link is refused', async () => {
   const token = await cardToken(card, 'secret');
@@ -27,6 +43,7 @@ test('only plain, bounded values reach a card', () => {
   assert.equal(c.highlight?.length, 90);
   assert.equal(c.goal, null, 'a goal of 0 is no goal');
   assert.equal(c.period, 'week');
+  assert.deepEqual(cleanCard({ applied: 1, companies: ['A', '', 'B', 'C', 'D'], skills: 'not a list' })!.companies, ['A', 'B', 'C']);
   assert.equal(cleanCard({ name: 'Ade' }), null, 'a card needs something to show');
 });
 

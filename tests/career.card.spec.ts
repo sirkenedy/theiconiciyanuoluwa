@@ -72,7 +72,7 @@ test('share my progress: name asked once (pre-filled), choose what shows, live p
   await expect(dialog.getByRole('checkbox', { name: 'Interviews (1)' })).toBeChecked();
   await expect(dialog.getByRole('checkbox', { name: /Mock interviews/ })).toHaveCount(0); // nothing to show yet
   await dialog.getByRole('checkbox', { name: 'Interviews (1)' }).uncheck();
-  await dialog.locator('label', { hasText: 'Story' }).click();
+  await dialog.locator('[data-share-format] label', { hasText: 'Story' }).click();
   await expect(dialog.locator('[data-share-img]')).toHaveAttribute('alt', 'Your progress card: 2 applications');
 
   await dialog.getByRole('button', { name: 'Copy caption & link' }).click();
@@ -150,3 +150,133 @@ for (const theme of ['light', 'dark'] as const) {
     expect(violations.map((v) => `${v.id}: ${v.nodes.slice(0, 3).map((n) => n.target).join(' | ')}`)).toEqual([]);
   });
 }
+
+test('the Share pill appears once there is progress (header on desktop), and opens the dialog', async ({ page }) => {
+  await withProfile(page);
+  const pill = page.locator('.cc-actions [data-share-pill]');
+  await expect(pill).toBeHidden(); // nothing to share yet
+  await page.locator('.cc-suggest').getByRole('button', { name: 'Find jobs for me' }).click();
+  await page.locator('.cc-job').first().getByLabel(/Application status/).selectOption('applied');
+  await expect(pill).toBeVisible();
+  await pill.click();
+  await expect(page.locator('[data-share]')).toBeVisible();
+});
+
+test('proud moments: the weekly goal is celebrated once (mini card, Share or Not now), and the week button warms up', async ({ page }) => {
+  await withProfile(page);
+  await page.locator('[data-new-chat]').click();
+  await page.locator('[data-week-strip]').getByRole('button', { name: '3 jobs' }).click();
+  await page.locator('[data-week-strip] [data-stat="found"] button').click();
+  const jobs = page.locator('.cc-job');
+  for (const i of [0, 1]) await jobs.nth(i).getByLabel(/Application status/).selectOption('applied');
+  await expect(page.locator('.cc-celebrate')).toHaveCount(0);
+  await jobs.nth(2).getByLabel(/Application status/).selectOption('applied');
+  const moment = page.locator('.cc-celebrate');
+  await expect(moment).toHaveCount(1);
+  await expect(moment.locator('.cc-celebrate__title')).toHaveText('Weekly goal reached');
+  await expect(moment).toContainText("That's 3 of 3 applications this week. Nicely done!");
+  await expect(moment.locator('.cc-celebrate__chip').first()).toHaveText('3 applications');
+  await moment.getByRole('button', { name: 'Share my progress' }).click();
+  await expect(page.locator('[data-share]')).toBeVisible();
+  await expect(page.locator('[data-share]').getByRole('radio', { name: 'This week' })).toBeChecked();
+  await page.locator('[data-share]').getByRole('button', { name: 'Close' }).click();
+
+  // One a day: the first interview the same day waits for another day; an offer is always celebrated.
+  await jobs.nth(0).getByLabel(/Application status/).selectOption('interview');
+  await expect(page.locator('.cc-celebrate')).toHaveCount(1);
+  await jobs.nth(0).getByLabel(/Application status/).selectOption('offer');
+  await expect(page.locator('.cc-celebrate')).toHaveCount(2);
+  await expect(page.locator('.cc-celebrate__title').last()).toHaveText('An offer! 🎉');
+
+  // Not now: gone, and not shown again.
+  await page.locator('.cc-celebrate').first().getByRole('button', { name: 'Not now' }).click();
+  await expect(page.locator('.cc-celebrate')).toHaveCount(1);
+  await page.reload();
+  await expect(page.locator('.cc-celebrate')).toHaveCount(1);
+  await jobs.nth(1).getByLabel(/Application status/).selectOption('rejected');
+  await jobs.nth(1).getByLabel(/Application status/).selectOption('applied');
+  await expect(page.locator('.cc-celebrate')).toHaveCount(1); // the goal was already celebrated this week
+
+  await page.locator('[data-new-chat]').click();
+  await expect(page.locator('[data-share-open]')).toHaveText('Goal reached: share it');
+  await expect(page.locator('[data-share-open]')).toHaveClass(/is-hot/);
+});
+
+test('the first interview is celebrated', async ({ page }) => {
+  await withProfile(page);
+  await page.locator('.cc-suggest').getByRole('button', { name: 'Find jobs for me' }).click();
+  await page.locator('.cc-job').first().getByLabel(/Application status/).selectOption('interview');
+  await expect(page.locator('.cc-celebrate__title')).toHaveText('Your first interview!');
+  await expect(page.locator('.cc-celebrate')).toContainText('Sample Pay wants to talk to you.');
+});
+
+test('more to show; on the Story format Ami writes a fun story (pre-filled, saved, editable, another one)', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await withApplications(page);
+  await page.locator('[data-share-open]').click();
+  const dialog = page.locator('[data-share]');
+  await dialog.getByRole('button', { name: 'Keep it anonymous' }).click();
+  await expect(dialog.getByRole('checkbox', { name: /^The role I'm going for/ })).toBeChecked();
+  await expect(dialog.getByRole('checkbox', { name: 'Jobs Ami found (5)' })).toBeChecked();
+  await expect(dialog.getByRole('checkbox', { name: /^Company names \(Sample Pay, Sample Health\)$/ })).not.toBeChecked();
+  await expect(dialog.getByRole('checkbox', { name: /^My top skills/ })).not.toBeChecked();
+  // Square: no story at all (and no AI call for one).
+  await expect(dialog.getByRole('checkbox', { name: 'A fun story by Ami' })).toHaveCount(0);
+  await expect(dialog.locator('[data-share-story]')).toBeHidden();
+  const stories = async () => ((await (await page.request.get(`${CLAUDE}/__requests`)).json()) as { messages: unknown }[]).filter((r) => JSON.stringify(r.messages).includes('task = \\"card_story\\"')).length;
+  expect(await stories()).toBe(0);
+  // Story: the box is filled by Ami.
+  await dialog.locator('[data-share-format] label', { hasText: 'Story' }).click();
+  const text = dialog.locator('[data-share-story-text]');
+  await expect(text).toHaveValue(/^Dear recruiters: 2 applications in and still smiling\./);
+  await expect(dialog.getByRole('checkbox', { name: 'A fun story by Ami' })).toBeChecked();
+  // Naming a company, then another story that can use it.
+  await dialog.getByRole('checkbox', { name: /^Company names/ }).check();
+  await dialog.getByRole('button', { name: 'Another one' }).click();
+  await expect(text).toHaveValue(/^Dear Sample Pay:/);
+  expect(await stories()).toBe(2);
+  // Hiding the company it names: a ready-made line instead, with no AI call.
+  await dialog.getByRole('checkbox', { name: /^Company names/ }).uncheck();
+  await expect(text).not.toHaveValue(/Sample Pay/);
+  await expect(text).not.toHaveValue('');
+  expect(await stories()).toBe(2);
+  // Their own words, saved: reopening shows them, no new story.
+  await text.fill('Two applications down. Coffee level: heroic.');
+  await expect(dialog.locator('[data-share-img]')).toHaveAttribute('src', /^data:image\/png/);
+  await dialog.getByRole('button', { name: 'Copy caption & link' }).click();
+  await expect(dialog.locator('[data-share-status]')).toHaveText('Caption and link copied.');
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await page.locator('[data-share-open]').click();
+  await expect(text).toHaveValue('Two applications down. Coffee level: heroic.');
+  expect(await stories()).toBe(2);
+  // Back to Square: the story stays out of that card.
+  await dialog.locator('[data-share-format] label', { hasText: 'Square' }).click();
+  await expect(dialog.locator('[data-share-story]')).toBeHidden();
+});
+
+test('when Ami is out of stories for the day, the box is still filled (a ready-made line to edit)', async ({ page }) => {
+  await page.route('**/api/career/card-story', (route) => route.fulfill({ status: 429, contentType: 'application/json', body: '{"error":"limit","kind":"stories"}' }));
+  await withApplications(page);
+  await page.locator('[data-share-open]').click();
+  const dialog = page.locator('[data-share]');
+  await dialog.getByRole('button', { name: 'Keep it anonymous' }).click();
+  await dialog.locator('[data-share-format] label', { hasText: 'Story' }).click();
+  await expect(dialog.locator('[data-share-story-text]')).toHaveValue(/2 applications/);
+  await expect(dialog.locator('[data-share-story-status]')).toHaveText(/Ami's out of new stories for today/);
+});
+
+test('small phones: a share icon in the header, and the theme toggle in the menu (back in the header when there is room)', async ({ page }) => {
+  await withApplications(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.cc-head .cc-share-icon')).toBeVisible();
+  await expect(page.locator('.cc-rail__top [data-theme-toggle]')).toHaveCount(1);
+  await page.locator('[data-rail-toggle]').click();
+  const toggle = page.locator('.cc-rail__top [data-theme-toggle]');
+  await expect(toggle).toBeVisible();
+  const before = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await toggle.click();
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).not.toBe(before);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page.locator('.cc-actions [data-theme-toggle]')).toBeVisible();
+  expect(await page.evaluate(() => document.querySelectorAll('[data-theme-toggle]').length)).toBe(1);
+});

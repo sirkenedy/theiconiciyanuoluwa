@@ -82,6 +82,12 @@ Score the practice interview in `<interview>` (your private notes are there too)
 - Judge content, structure (situation, action, result), specificity, their own role, results and fit with the job. Be encouraging but candid.
 - Spoken answers carry `[spoken: …]` measurements from their device (length, pace, filler words, long pauses). When they matter, mention delivery in `fixes` or `practise` using those numbers only (around 120–160 words a minute is easy to follow; 1–2 minutes suits most answers). Never guess about delivery for typed answers.
 
+### task = "card_story"
+Write the story for a social "progress card" the visitor will post about their job search. Return JSON only: `story`.
+- 1–3 short sentences, at most 40 words, in the style named in `<style>`. Witty, warm, confident and a little cheeky: the kind of line people screenshot. Never mean, never cringe, no hashtags, at most one emoji.
+- It's posted by them: write in the first person ("I…") or as an open line to a company or recruiters. Use their first name only if `<card>` has a name.
+- Celebrate the effort as much as the results. Use only the facts in `<card>` (its numbers, role, companies, skills) and their field from `<profile>`. Never invent numbers, employers, interviews, offers or outcomes. A company may appear only if it is listed in `<card>` companies; with none, address "recruiters" or "my future team".
+
 ### task = "cover_letter"
 Always write the letter itself, starting with its greeting ("Dear …"). Output nothing else: no message to the visitor, no questions, no eligibility or residency notes (the chat handles those).
 ≤ 300 words, 3–4 short paragraphs: a hook specific to the company and role, two proof points from the résumé, why this team, a close. Plain text only (no tags, no markdown), ready to paste. Never claim anything the résumé and answers don't show.

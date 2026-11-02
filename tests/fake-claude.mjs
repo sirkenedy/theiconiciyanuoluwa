@@ -126,6 +126,17 @@ export function startFakeClaude(port = 0) {
         if (params.stream) return streamText(res, params, [out]);
         return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(message(out)));
       }
+      // A progress card's story: names a company from the card when there is one, uses only the card's numbers.
+      if (props.story && Object.keys(props).length === 1) {
+        const sent = String(params.messages.at(-1).content);
+        const card = JSON.parse(sent.match(/<card>([\s\S]*?)<\/card>/)?.[1] ?? '{}');
+        const style = sent.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '';
+        const who = card.companies?.[0] ? `Dear ${card.companies[0]}` : 'Dear recruiters';
+        const story = /INVENT/.test(card.role ?? '') ? `${who}: 42 offers and counting.` : `${who}: ${card.applied ?? 0} applications in and still smiling. (${style.split(' ').slice(0, 3).join(' ')})`;
+        const out = JSON.stringify({ story });
+        if (params.stream) return streamText(res, params, [out]);
+        return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(message(out)));
+      }
       // Interview scorecard: one entry per main question asked, stronger answers from the résumé.
       if (props.readiness) {
         const sent = params.messages[0].content;

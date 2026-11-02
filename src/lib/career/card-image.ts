@@ -48,6 +48,8 @@ function tiles(c: CardData): Tile[] {
   if (c.interviews !== null) out.push({ value: String(c.interviews), label: say(c.interviews, 'interview', 'interviews'), tone: 'mint' });
   if (c.offers) out.push({ value: String(c.offers), label: say(c.offers, 'offer', 'offers'), tone: 'butter' });
   if (c.practice !== null) out.push({ value: String(c.practice), label: say(c.practice, 'mock interview', 'mock interviews'), tone: 'lilac' });
+  if (c.found !== null) out.push({ value: String(c.found), label: say(c.found, 'job found', 'jobs found'), tone: 'mint' });
+  if (c.docs !== null) out.push({ value: String(c.docs), label: say(c.docs, 'document made', 'documents made'), tone: 'butter' });
   return out;
 }
 
@@ -94,11 +96,11 @@ function extras(c: CardData, scale: number) {
         ]),
       ]),
     );
-  if (c.goal && c.goal[0] >= c.goal[1])
+  if (c.goal)
     out.push(
       el({ flexDirection: 'column', flexGrow: 1, flexBasis: 0, padding: 30 * scale, borderRadius: 34 * scale, background: t['mint-hi'], boxShadow: `0 ${8 * scale}px 0 ${t['mint-ledge']}` }, [
-        el({ fontSize: 24 * scale, color: t['ink-subtle'] }, 'Weekly goal reached'),
-        el({ fontFamily: 'Bricolage', fontSize: 52 * scale, letterSpacing: -1.5, marginTop: 10 * scale, lineHeight: 1.05 }, `${c.goal[0]} applications`),
+        el({ fontSize: 24 * scale, color: t['ink-subtle'] }, c.goal[0] >= c.goal[1] ? 'Weekly goal reached' : 'Weekly goal'),
+        el({ fontFamily: 'Bricolage', fontSize: 52 * scale, letterSpacing: -1.5, marginTop: 10 * scale, lineHeight: 1.05 }, c.goal[0] >= c.goal[1] ? `${c.goal[0]} applications` : `${c.goal[0]} of ${c.goal[1]} done`),
       ]),
     );
   return out;
@@ -132,6 +134,36 @@ function footer(host: string, size: number) {
   ]);
 }
 
+/** "Going for: Senior Product Manager" */
+const rolePill = (role: string, size: number) =>
+  el({ alignSelf: 'flex-start', alignItems: 'center', padding: `${size * 0.4}px ${size * 0.8}px`, borderRadius: 999, background: t.surface, boxShadow: `0 ${size * 0.2}px 0 ${t.line}`, fontSize: size }, [
+    el({ color: t['ink-subtle'], marginRight: size * 0.35 }, 'Going for'),
+    el({ fontFamily: 'Bricolage', letterSpacing: -0.5 }, role),
+  ]);
+
+/** Ami's story about them, in a speech bubble from her orb. */
+const storyBubble = (text: string, size: number) =>
+  el({ flexDirection: 'column', padding: `${size * 0.9}px ${size * 1.05}px`, borderRadius: size * 1.2, background: t.surface, boxShadow: `0 ${size * 0.24}px 0 ${t['lilac-ledge']}` }, [
+    el({ alignItems: 'center', marginBottom: size * 0.45 }, [ami(size * 1.5), el({ marginLeft: size * 0.4, fontSize: size * 0.62, color: t['ink-subtle'], textTransform: 'uppercase', letterSpacing: 2 }, 'Ami says')]),
+    el({ fontFamily: 'Bricolage', fontSize: size, lineHeight: 1.22, letterSpacing: -0.5 }, text),
+  ]);
+
+/** Companies and skills as small clay chips. */
+function chips(c: CardData, size: number) {
+  const row = (label: string, items: string[], tone: 'butter' | 'lilac') =>
+    el({ alignItems: 'center', flexWrap: 'wrap', gap: size * 0.45 }, [
+      el({ fontSize: size * 0.85, color: t['ink-subtle'], marginRight: size * 0.15 }, label),
+      ...items.map((x) => el({ padding: `${size * 0.3}px ${size * 0.7}px`, borderRadius: 999, background: t[tone], boxShadow: `0 ${size * 0.15}px 0 ${t[`${tone}-ledge`]}`, color: t['on-pastel'], fontSize: size }, x)),
+    ]);
+  const out: Node[] = [];
+  if (c.companies?.length) out.push(row(c.interviews ? 'Talking to' : 'Applied to', c.companies, 'butter'));
+  if (c.skills?.length) out.push(row('Strengths', c.skills, 'lilac'));
+  return out;
+}
+
+/** Rough text height, so the square card only takes what fits. */
+const textHeight = (text: string, size: number, width: number, lineHeight = 1.22) => Math.ceil(text.length / Math.max(1, Math.floor(width / (size * 0.52)))) * size * lineHeight;
+
 function layout(c: CardData, format: CardFormat, host: string): Node {
   const { width, height } = CARD_SIZES[format];
   const [h1, h2] = headline(c);
@@ -150,7 +182,14 @@ function layout(c: CardData, format: CardFormat, host: string): Node {
       ...decor,
       el({ flexDirection: 'column', width: 600, justifyContent: 'space-between' }, [
         brand(64),
-        el({ flexDirection: 'column', fontFamily: 'Bricolage', fontSize: 72, lineHeight: 0.98, letterSpacing: -3 }, [el({}, h1), el({ color: t['ink-accent'] }, h2)]),
+        el({ flexDirection: 'column' }, [
+          el({ flexDirection: 'column', fontFamily: 'Bricolage', fontSize: c.story && c.story.length <= 150 ? 60 : 72, lineHeight: 0.98, letterSpacing: -3 }, [el({}, h1), el({ color: t['ink-accent'] }, h2)]),
+          ...(c.story && c.story.length <= 150
+            ? [el({ marginTop: 18, fontSize: 24, lineHeight: 1.3, color: t['ink-muted'] }, c.story)]
+            : c.role
+              ? [el({ marginTop: 22 }, [rolePill(c.role, 22)])]
+              : []),
+        ]),
         el({ flexDirection: 'column' }, [el({ fontSize: 24, color: t['ink-subtle'], marginBottom: 18 }, `${host}/career`), pill('Try Ami free', 30, true, true)]),
       ]),
       el({ flexDirection: 'column', marginLeft: 'auto', marginTop: 40, justifyContent: 'center', gap: 22 }, [
@@ -164,27 +203,80 @@ function layout(c: CardData, format: CardFormat, host: string): Node {
   const pad = story ? 88 : 72;
   const inner = width - pad * 2;
   const gap = 24;
-  const perRow = story || list.length <= 2 ? 2 : list.length;
+
+  if (story) {
+    // Tall: Ami's story front and centre, then what else fits; the content sits centred between headline and footer.
+    const long = h1.length > 18;
+    const hSize = long ? 92 : 104;
+    let room = height - pad * 2 - 100 - 64 - (long ? 3 : 2) * hSize * 0.98 - 130;
+    const blocks: Node[] = [];
+    const fit = (h: number, node: Node) => {
+      if (h > room) return false;
+      room -= h;
+      blocks.push(node);
+      return true;
+    };
+    const tw = Math.floor((inner - gap) / 2);
+    // Little else to show: the story and tiles grow to fill the card instead of leaving gaps.
+    const roomy = !c.score && !c.goal && !c.highlight && list.length <= 2;
+    if (c.role) fit(80, el({}, [rolePill(c.role, roomy ? 34 : 30)]));
+    if (c.story) {
+      const size = c.story.length > 200 ? 40 : roomy && c.story.length <= 160 ? 58 : 46;
+      fit(textHeight(c.story, size, inner - 100) + 170, el({ flexDirection: 'column' }, [storyBubble(c.story, size)]));
+    }
+    const shown = list.slice(0, 4);
+    if (shown.length) {
+      const rows = Math.ceil(shown.length / 2);
+      const th = roomy ? 320 : c.story ? 210 : 290;
+      fit(rows * th + (rows - 1) * gap + 40, el({ flexWrap: 'wrap', gap }, shown.map((x) => tile(x, tw, th, roomy ? 140 : c.story ? 100 : 128))));
+    }
+    const more = extras(c, 1.1);
+    if (more.length) fit(220, el({ gap }, more));
+    if (c.highlight) fit(190, el({ flexDirection: 'column' }, [quote(c, 1.05)]));
+    for (const r of chips(c, roomy ? 34 : 30)) fit(86, el({}, [r]));
+    return el({ width, height, background: t.bg, position: 'relative', flexDirection: 'column', fontFamily: 'DM Sans', color: t.ink, padding: pad }, [
+      ...decor,
+      brand(100),
+      el({ flexDirection: 'column', marginTop: 64, fontFamily: 'Bricolage', fontSize: hSize, lineHeight: 0.98, letterSpacing: -3.5 }, [el({}, h1), el({ color: t['ink-accent'] }, h2)]),
+      el({ flexDirection: 'column', flexGrow: 1, justifyContent: 'center', gap: 36, padding: '40px 0' }, blocks),
+      el({ flexDirection: 'column' }, [footer(host, 30)]),
+    ]);
+  }
+
+  // Square: blocks in order of importance, each only if it still fits above the footer.
+  let room = height - pad * 2 - 84 - 52 - 2 * 84 * 0.98 - 96; // brand, gap, headline, footer
+  const blocks: Node[] = [];
+  const fit = (h: number, node: Node) => {
+    if (h > room) return false;
+    room -= h;
+    blocks.push(node);
+    return true;
+  };
+  const perRow = Math.min(4, Math.max(1, list.length));
   const tw = Math.floor((inner - gap * (perRow - 1)) / perRow);
-  const more = extras(c, story ? 1.15 : 1);
-  // Few things to show: bigger tiles fill the card instead of leaving a gap.
-  const sparse = !story && !more.length && !c.highlight;
-  const th = story ? 300 : sparse ? 340 : perRow === 2 ? 250 : 220;
-  const big = story ? 132 : sparse ? 156 : perRow === 2 ? 118 : 92;
-  return el({ width, height, background: t.bg, position: 'relative', flexDirection: 'column', fontFamily: 'DM Sans', color: t.ink, padding: pad, justifyContent: story ? 'center' : 'flex-start' }, [
+  const few = !c.story && !c.score && !c.goal && !c.highlight;
+  const th = few && perRow <= 2 ? 340 : perRow <= 2 ? 250 : 210;
+  const big = few && perRow <= 2 ? 156 : perRow <= 2 ? 118 : 88;
+  if (c.role) fit(70, el({ marginTop: 22 }, [rolePill(c.role, 26)]));
+  if (list.length) fit(th + 40, el({ gap, marginTop: 40 }, list.slice(0, 4).map((x) => tile(x, tw, th, big))));
+  if (c.story) {
+    const size = c.story.length > 150 ? 30 : 34;
+    fit(textHeight(c.story, size, inner - 80) + 110, el({ marginTop: 30, flexDirection: 'column' }, [storyBubble(c.story, size)]));
+  }
+  const more = extras(c, 1);
+  // The highlight shares a row with a lone score or goal card; with two of those it gets its own row (if it fits).
+  const paired = more.length < 2 && !!c.highlight;
+  const pairRow = paired ? [...more, quote(c, more.length ? 0.85 : 0.9, true)!] : more;
+  if (pairRow.length) fit(180, el({ gap, marginTop: 30 }, pairRow));
+  if (c.highlight && !paired) fit(150, el({ marginTop: 30, flexDirection: 'column' }, [quote(c, 0.9)]));
+  const chipRows = chips(c, 24);
+  for (const r of chipRows) fit(64, el({ marginTop: 22 }, [r]));
+  return el({ width, height, background: t.bg, position: 'relative', flexDirection: 'column', fontFamily: 'DM Sans', color: t.ink, padding: pad }, [
     ...decor,
-    el({ alignItems: 'center' }, [brand(story ? 104 : 84)]),
-    el({ flexDirection: 'column', marginTop: story ? 96 : 52, fontFamily: 'Bricolage', fontSize: story ? 112 : 84, lineHeight: 0.98, letterSpacing: -3.5 }, [el({}, h1), el({ color: t['ink-accent'] }, h2)]),
-    el({ flexWrap: 'wrap', gap, marginTop: story ? 80 : 44 }, list.map((x) => tile(x, tw, th, big))),
-    // Square: the highlight sits beside a lone score card; with two cards there it has a row of its own only if tiles fit on one row.
-    ...(more.length || c.highlight
-      ? story
-        ? [...(more.length ? [el({ gap, marginTop: 40 }, more)] : []), ...(c.highlight ? [el({ marginTop: 40, flexDirection: 'column' }, [quote(c, 1.15)])] : [])]
-        : more.length < 2 && c.highlight
-          ? [el({ gap, marginTop: 30 }, [...more, quote(c, more.length ? 0.85 : 0.9, true)])]
-          : [...(more.length ? [el({ gap, marginTop: 30 }, more)] : []), ...(c.highlight && list.length <= 2 ? [el({ marginTop: 30, flexDirection: 'column' }, [quote(c, 0.9)])] : [])]
-      : []),
-    el({ marginTop: 'auto', paddingTop: story ? 80 : 30, flexDirection: 'column' }, [footer(host, story ? 30 : 26)]),
+    el({ alignItems: 'center' }, [brand(84)]),
+    el({ flexDirection: 'column', marginTop: 52, fontFamily: 'Bricolage', fontSize: 84, lineHeight: 0.98, letterSpacing: -3.5 }, [el({}, h1), el({ color: t['ink-accent'] }, h2)]),
+    el({ flexDirection: 'column', flexGrow: 1, justifyContent: 'center', paddingBottom: 24 }, blocks),
+    el({ flexDirection: 'column' }, [footer(host, 26)]),
   ]);
 }
 

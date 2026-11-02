@@ -22,8 +22,20 @@ export type CardData = {
   score: [number, number] | null;
   /** One line from their latest scorecard ("Clear, measurable results"). */
   highlight: string | null;
-  /** This week's applications goal: done, of. */
+  /** This week's applications goal: done, of (reached or not). */
   goal: [number, number] | null;
+  /** The role they're going for ("Senior Product Manager"). */
+  role: string | null;
+  /** Jobs Ami found for them. */
+  found: number | null;
+  /** Tailored résumés, cover letters and prep guides made. */
+  docs: number | null;
+  /** Companies they've applied to or are interviewing with (only if they chose to name them). */
+  companies: string[] | null;
+  /** Their top skills. */
+  skills: string[] | null;
+  /** A short, fun story Ami wrote about their search (they can edit it). */
+  story: string | null;
 };
 
 const count = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(999, Math.round(v))) : null);
@@ -45,6 +57,11 @@ export function cleanCard(input: unknown): CardData | null {
     const b = f(v[1]);
     return a === null || b === null ? null : [a, b];
   };
+  const list = (v: unknown, n: number, max: number) => {
+    if (!Array.isArray(v)) return null;
+    const out = v.map((x) => line(x, max)).filter((x): x is string => !!x).slice(0, n);
+    return out.length ? out : null;
+  };
   const card: CardData = {
     name: line(c.name, 30),
     period: c.period === 'all' ? 'all' : 'week',
@@ -55,9 +72,15 @@ export function cleanCard(input: unknown): CardData | null {
     score: pair(c.score, score),
     highlight: line(c.highlight, 90),
     goal: pair(c.goal, count),
+    role: line(c.role, 60),
+    found: count(c.found),
+    docs: count(c.docs),
+    companies: list(c.companies, 3, 30),
+    skills: list(c.skills, 3, 24),
+    story: line(c.story, 280),
   };
   if (card.goal && card.goal[1] < 1) card.goal = null;
-  const something = [card.applied, card.interviews, card.offers, card.practice].some((n) => n !== null) || card.score || card.highlight;
+  const something = [card.applied, card.interviews, card.offers, card.practice, card.found, card.docs].some((n) => n !== null) || card.score || card.highlight || card.story;
   return something ? card : null;
 }
 
@@ -72,8 +95,9 @@ async function mac(secret: string, body: string) {
 }
 
 /** Short keys keep links short. */
-const pack = (c: CardData) => ({ n: c.name, p: c.period === 'all' ? 1 : 0, a: c.applied, i: c.interviews, o: c.offers, m: c.practice, s: c.score, h: c.highlight, g: c.goal });
-const unpack = (o: Record<string, unknown>) => cleanCard({ name: o.n, period: o.p === 1 ? 'all' : 'week', applied: o.a, interviews: o.i, offers: o.o, practice: o.m, score: o.s, highlight: o.h, goal: o.g });
+const pack = (c: CardData) => ({ n: c.name, p: c.period === 'all' ? 1 : 0, a: c.applied, i: c.interviews, o: c.offers, m: c.practice, s: c.score, h: c.highlight, g: c.goal, r: c.role, f: c.found, d: c.docs, c: c.companies, k: c.skills, t: c.story });
+const unpack = (o: Record<string, unknown>) =>
+  cleanCard({ name: o.n, period: o.p === 1 ? 'all' : 'week', applied: o.a, interviews: o.i, offers: o.o, practice: o.m, score: o.s, highlight: o.h, goal: o.g, role: o.r, found: o.f, docs: o.d, companies: o.c, skills: o.k, story: o.t });
 
 export async function cardToken(card: CardData, secret: string) {
   const body = b64url(new TextEncoder().encode(JSON.stringify(pack(card))));
@@ -82,7 +106,7 @@ export async function cardToken(card: CardData, secret: string) {
 
 /** The card a link carries, or null if it was changed or isn't a card link. */
 export async function readCardToken(token: string, secret: string): Promise<CardData | null> {
-  const m = /^([A-Za-z0-9_-]{8,1400})\.([A-Za-z0-9_-]{16})$/.exec(token);
+  const m = /^([A-Za-z0-9_-]{8,2400})\.([A-Za-z0-9_-]{16})$/.exec(token);
   if (!m) return null;
   const expected = await mac(secret, m[1]);
   if (expected.length !== m[2].length) return null;

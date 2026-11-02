@@ -17,7 +17,7 @@
     "lh": "node scripts/lighthouse.mjs",
     "test:a11y": "playwright test",
     "perf:scroll": "node scripts/scroll-perf.mjs",
-    "test:api": "node --test tests/react-api.test.ts tests/twin-api.test.ts tests/career-api.test.ts tests/career-ai.test.ts tests/jobs.test.ts tests/tailor.test.ts tests/career-limits.test.ts tests/job-search.test.ts tests/prep-guide.test.ts tests/interview.test.ts",
+    "test:api": "node --test tests/react-api.test.ts tests/twin-api.test.ts tests/career-api.test.ts tests/career-ai.test.ts tests/jobs.test.ts tests/tailor.test.ts tests/career-limits.test.ts tests/job-search.test.ts tests/prep-guide.test.ts tests/interview.test.ts tests/card-story.test.ts",
     "test:unit": "node --test tests/geo.test.ts tests/twin-unit.test.ts tests/voice.test.ts tests/card.test.ts",
     "test:twin": "node tests/twin.eval.ts",
     "test:career-eval": "node tests/career.eval.ts",

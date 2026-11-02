@@ -38,7 +38,7 @@ type Message = {
   role: 'user' | 'coach';
   text: string;
   at: number;
-  kind?: 'profile' | 'note' | 'jobs' | 'match' | 'tailored' | 'letter' | 'guide' | 'iv' | 'ivsetup' | 'ivreview';
+  kind?: 'profile' | 'note' | 'jobs' | 'match' | 'tailored' | 'letter' | 'guide' | 'iv' | 'ivsetup' | 'ivreview' | 'celebrate';
   suggest?: string[];
   jobs?: RankedJob[];
   left?: number;
@@ -60,6 +60,8 @@ type Message = {
   ivVoice?: Delivery;
   /** A mock interview's scorecard (a guide-shaped document): the overall result, for the chat card. */
   scorecard?: { score: number; readiness: Feedback['readiness'] };
+  /** A proud moment (goal reached, first interview, an offer, a better score), with an invitation to share. */
+  celebrate?: { title: string; period: 'week' | 'all' };
 };
 type IvState = { sid: string | null; job: NonNullable<Task['job']> | null; setup: InterviewSetup; status: 'setup' | 'active' | 'review' | 'scoring' | 'done'; voice?: boolean; natural?: boolean };
 type State = { current: string | null };
@@ -255,6 +257,12 @@ async function renderWeek() {
   const applied = stats.find((x) => x.key === 'applied')!.n;
   $<HTMLElement>('[data-week-list]', weekStrip).replaceChildren(...stats.map(statNode));
   $<HTMLElement>('[data-goal]', weekStrip).replaceChildren(goalNode(applied));
+  // The weekly goal reached: the share button warms up (it's the best moment to share).
+  const hot = !!goal && applied >= goal.perWeek;
+  const shareBtn = $<HTMLButtonElement>('[data-share-open]', weekStrip);
+  shareBtn.classList.toggle('is-hot', hot);
+  shareBtn.lastChild!.textContent = hot ? 'Goal reached: share it' : 'Share';
+  renderSharePills();
   const change = $<HTMLElement>('[data-goal-change]', weekStrip);
   change.replaceChildren();
   if (goal) change.append(button(goalEditing ? 'Cancel' : 'Change goal', 'cc-link cc-goal__change', () => ((goalEditing = !goalEditing), renderWeek())));
@@ -275,7 +283,9 @@ function toast(strong: string, rest: string) {
 // carries it. Their name is asked once, pre-filled from the résumé, and kept on this device.
 type CardData = import('../../lib/career/card.ts').CardData;
 type CardFormat = import('../../lib/career/card.ts').CardFormat;
-type CardPrefs = { showName: boolean; name: string; period: 'week' | 'all'; format: CardFormat; off: string[] };
+/** `off`: items they unticked; `on`: opt-in items they ticked (company names, skills). */
+type CardPrefs = { showName: boolean; name: string; period: 'week' | 'all'; format: CardFormat; off: string[]; on?: string[]; story?: string };
+const OPT_IN = ['companies', 'skills'];
 const shareBox = $<HTMLDialogElement>('[data-share]');
 const shareImg = $<HTMLImageElement>('[data-share-img]');
 const shareWait = $<HTMLElement>('[data-share-wait]');
@@ -284,7 +294,10 @@ const shareAsk = $<HTMLElement>('[data-share-ask]');
 const shareName = $<HTMLInputElement>('[data-share-name]');
 let prefs: CardPrefs | null = null;
 let decided = false; // whether they've answered "add your name?"
-let facts: { applied: number; interviews: number; offers: number; practice: number; score: [number, number] | null; highlight: string | null; goal: [number, number] | null } | null = null;
+type Facts = Awaited<ReturnType<typeof progressFacts>>;
+let facts: Facts | null = null;
+let storyText = ''; // Ami's story for this card (they can edit it)
+let storyStyle = Math.floor(Math.random() * 7);
 let shared: { key: string; url: string; caption: string } | null = null;
 let previewUrl = '';
 let previewBlob: Blob | null = null;
@@ -304,20 +317,39 @@ async function progressFacts(period: 'week' | 'all') {
     highlight = well?.bullets[0]?.replace(/\.$/, '').slice(0, 90) ?? null;
   }
   const applied = tracks.filter((t) => t.applied >= since).length;
+  const recent = all.filter((m) => m.at >= since);
+  const savedJobs = new Map((await vault.list<RankedJob>('savedJobs')).map((j) => [j.id, j]));
+  // The companies they're furthest along with: offers, then interviews, then applications.
+  const rank = { offer: 0, interview: 1, applied: 2, rejected: 3 } as const;
+  const companies = [
+    ...new Set(
+      Object.entries(tracker)
+        .filter(([, x]) => x.status !== 'rejected' && x.at >= since)
+        .sort((a, b) => rank[a[1].status] - rank[b[1].status])
+        .map(([id]) => savedJobs.get(id)?.company)
+        .filter((n): n is string => !!n),
+    ),
+  ].slice(0, 3);
+  const p = stored?.profile;
   return {
     applied,
+    role: p?.targetRoles[0] ?? p?.experience[0]?.role ?? null,
+    found: new Set(recent.filter((m) => m.kind === 'jobs' && !m.recalled).flatMap((m) => (m.jobs ?? []).map((j) => j.id))).size,
+    docs: recent.filter((m) => m.kind === 'tailored' || m.kind === 'letter' || (m.kind === 'guide' && !m.scorecard)).length,
+    companies,
+    skills: (p?.skills.flatMap((g) => g.items) ?? []).slice(0, 3),
     interviews: tracks.filter((t) => (t.status === 'interview' || t.status === 'offer') && t.at >= since).length,
     offers: tracks.filter((t) => t.status === 'offer' && t.at >= since).length,
     practice: cards.length,
     score: cards.length >= 2 ? ([cards[0].scorecard!.score, latest!.scorecard!.score] as [number, number]) : null,
     highlight,
-    goal: period === 'week' && goal && applied >= goal.perWeek ? ([applied, goal.perWeek] as [number, number]) : null,
+    goal: period === 'week' && goal ? ([applied, goal.perWeek] as [number, number]) : null,
   };
 }
 
 function cardFromChoices(): CardData {
   const f = facts!;
-  const on = (k: string) => !prefs!.off.includes(k);
+  const on = (k: string) => (OPT_IN.includes(k) ? !!prefs!.on?.includes(k) : !prefs!.off.includes(k));
   return {
     name: prefs!.showName && prefs!.name.trim() ? prefs!.name.trim() : null,
     period: prefs!.period,
@@ -328,6 +360,12 @@ function cardFromChoices(): CardData {
     score: on('score') ? f.score : null,
     highlight: on('highlight') ? f.highlight : null,
     goal: on('goal') ? f.goal : null,
+    role: on('role') ? f.role : null,
+    found: on('found') && f.found ? f.found : null,
+    docs: on('docs') && f.docs ? f.docs : null,
+    companies: on('companies') && f.companies.length ? f.companies : null,
+    skills: on('skills') && f.skills.length ? f.skills : null,
+    story: prefs!.format === 'story' && on('story') && storyText.trim() ? storyText.trim() : null,
   };
 }
 
@@ -355,11 +393,14 @@ function renderShareControls() {
   chipRow($<HTMLElement>('[data-share-period]'), 'share-period', [['week', 'This week'], ['all', 'So far']], prefs!.period, async (v) => {
     prefs!.period = v as CardPrefs['period'];
     facts = await progressFacts(prefs!.period);
+    keepStoryTrue();
     renderShareControls();
     schedulePreview();
   });
   chipRow($<HTMLElement>('[data-share-format]'), 'share-format', [['square', 'Square'], ['story', 'Story'], ['wide', 'Wide']], prefs!.format, (v) => {
     prefs!.format = v as CardFormat;
+    renderShareControls(); // the story option is only for the Story format
+    void ensureStory();
     schedulePreview();
   });
   const items: [string, string, boolean][] = [
@@ -370,7 +411,13 @@ function renderShareControls() {
     ['practice', `Mock interviews (${f.practice})`, f.practice > 0],
     ['score', f.score ? `Practice score (${f.score[0]} → ${f.score[1]})` : 'Practice score', !!f.score],
     ['highlight', f.highlight ? `Top strength (“${f.highlight}”)` : 'Top strength', !!f.highlight],
-    ['goal', 'Weekly goal reached', !!f.goal],
+    ['goal', f.goal ? `Weekly goal (${f.goal[0]} of ${f.goal[1]})` : 'Weekly goal', !!f.goal],
+    ['role', f.role ? `The role I'm going for (${f.role})` : 'Role', !!f.role],
+    ['found', `Jobs Ami found (${f.found})`, f.found > 0],
+    ['docs', `Documents made (${f.docs})`, f.docs > 0],
+    ['companies', `Company names (${f.companies.join(', ')})`, f.companies.length > 0],
+    ['skills', `My top skills (${f.skills.join(', ')})`, f.skills.length > 0],
+    ['story', 'A fun story by Ami', prefs!.format === 'story'],
   ];
   $<HTMLElement>('[data-share-checks]').replaceChildren(
     ...items
@@ -379,13 +426,17 @@ function renderShareControls() {
         const lab = el('label', 'cc-share__check');
         const box = document.createElement('input');
         box.type = 'checkbox';
-        box.checked = key === 'name' ? prefs!.showName : !prefs!.off.includes(key);
+        box.checked = key === 'name' ? prefs!.showName : OPT_IN.includes(key) ? !!prefs!.on?.includes(key) : !prefs!.off.includes(key);
         box.addEventListener('change', () => {
           if (key === 'name') {
             if (box.checked && !prefs!.name.trim()) return askName();
             prefs!.showName = box.checked;
-          } else prefs!.off = box.checked ? prefs!.off.filter((k) => k !== key) : [...prefs!.off, key];
+          } else if (OPT_IN.includes(key)) prefs!.on = box.checked ? [...(prefs!.on ?? []), key] : (prefs!.on ?? []).filter((k) => k !== key);
+          else prefs!.off = box.checked ? prefs!.off.filter((k) => k !== key) : [...prefs!.off, key];
+          // Hiding something the story mentions swaps in a ready-made line (no AI call); "Another one" asks Ami.
+          if (!box.checked) keepStoryTrue();
           renderShareControls();
+          if (key === 'story') void ensureStory();
           schedulePreview();
         });
         lab.append(box, el('span', undefined, label));
@@ -393,6 +444,77 @@ function renderShareControls() {
       }),
   );
 }
+
+const storyBox = $<HTMLElement>('[data-share-story]');
+const storyArea = $<HTMLTextAreaElement>('[data-share-story-text]');
+const storyNote = $<HTMLElement>('[data-share-story-status]');
+let storySeq = 0;
+/** A ready-made fun line from what's on the card, for when Ami can't write one (or a story mentions something hidden). */
+function readyStory(c: CardData, n = storyStyle) {
+  const who = c.companies?.[0] ?? 'recruiters';
+  const apps = c.applied !== null ? `${c.applied} application${c.applied === 1 ? '' : 's'}` : 'a few applications';
+  const lines = [
+    `Dear ${who}: ${apps} in and I'm only warming up. Your next great hire is on the way.`,
+    `Breaking news: local job seeker sends ${apps}, refuses to slow down. More at eleven.`,
+    `Forecast for my job search: ${apps}, a strong chance of interviews, and zero chance of giving up.`,
+    `And they're off! ${apps} already, and the finish line is in sight.`,
+    `${c.role ? `Future ${c.role}` : 'Future dream hire'}, reporting for duty: ${apps} and counting.`,
+  ];
+  return lines[Math.abs(n) % lines.length];
+}
+
+/** The story stays only while it's still true: no hidden company, no number that isn't on the card. */
+function keepStoryTrue() {
+  if (!storyText || !facts) return;
+  const c = { ...cardFromChoices(), story: null };
+  const hidden = (facts.companies ?? []).filter((n) => !c.companies?.includes(n));
+  const numbers = new Set([c.applied, c.interviews, c.offers, c.practice, c.found, c.docs, ...(c.score ?? []), ...(c.goal ?? [])].filter((x) => x !== null).map(String));
+  const stale = hidden.some((n) => storyText.includes(n)) || (storyText.match(/\d+(?:\.\d+)?/g) ?? []).some((x) => !numbers.has(x));
+  if (!stale) return;
+  storyText = readyStory(c);
+  storyArea.value = storyText;
+  prefs!.story = storyText;
+}
+
+/** The story box: only on the Story format, always filled (their saved story, or Ami's, or a ready-made line). */
+async function ensureStory(fresh = false) {
+  const wanted = prefs!.format === 'story' && !prefs!.off.includes('story');
+  storyBox.hidden = !wanted;
+  if (!wanted || (storyText && !fresh)) return;
+  if (!fresh && prefs!.story) {
+    storyText = prefs!.story;
+    storyArea.value = storyText;
+    keepStoryTrue();
+    storyNote.textContent = 'Edit it, or tap "Another one".';
+    return schedulePreview();
+  }
+  const seq = ++storySeq;
+  storyNote.textContent = 'Ami is writing your story…';
+  storyArea.disabled = true;
+  const res = await deviceFetch('/api/career/card-story', jsonBody({ card: { ...cardFromChoices(), story: null }, profile: stored!.profile, style: storyStyle++, day: localDay(), today: localDay() })).catch(() => null);
+  if (seq !== storySeq) return;
+  storyArea.disabled = false;
+  let text = '';
+  if (res?.ok) {
+    text = ((await res.json()) as { story: string }).story;
+    storyNote.textContent = 'Edit it if you like, or tap "Another one". Only facts on your card are used.';
+  } else {
+    const { error } = res ? ((await res.json().catch(() => ({}))) as { error?: string }) : {};
+    text = readyStory({ ...cardFromChoices(), story: null });
+    storyNote.textContent = error === 'limit' ? "Ami's out of new stories for today, so here's one to start with. Edit it as you like." : "Here's one to start with. Edit it as you like, or try \"Another one\" again.";
+  }
+  storyText = text;
+  storyArea.value = text;
+  prefs!.story = text;
+  void vault.put('meta', 'card', { ...prefs, decided });
+  schedulePreview();
+}
+storyArea.addEventListener('input', () => {
+  storyText = storyArea.value.slice(0, 280);
+  prefs!.story = storyText;
+  schedulePreview();
+});
+$<HTMLButtonElement>('[data-share-story-new]').addEventListener('click', () => void ensureStory(true));
 
 function askName() {
   shareAsk.hidden = false;
@@ -463,18 +585,21 @@ function shareSummary() {
   return [c.applied !== null && `${c.applied} applications`, c.interviews !== null && `${c.interviews} interviews`, c.practice && `${c.practice} mock interviews`, c.score && `practice score ${c.score[0]} to ${c.score[1]}`].filter(Boolean).join(', ');
 }
 
-async function openShare() {
+async function openShare(period?: CardPrefs['period']) {
   if (!stored) return;
   const saved = await vault.get<CardPrefs & { decided?: boolean }>('meta', 'card');
   decided = !!saved?.decided;
-  prefs = { showName: false, name: stored.profile.identity.name?.split(' ')[0] ?? '', period: 'week', format: 'square', off: [], ...saved };
+  prefs = { showName: false, name: stored.profile.identity.name?.split(' ')[0] ?? '', period: 'week', format: 'square', off: [], ...saved, ...(period ? { period } : {}) };
   facts = await progressFacts(prefs.period);
+  storyText = ''; // filled from their saved story (or a new one) when the Story format is on
+  storyArea.value = '';
   shareStatus.textContent = '';
   shareAsk.hidden = true;
   shareImg.hidden = true;
   renderShareControls();
   shareBox.showModal();
   schedulePreview();
+  void ensureStory();
   // First share: ask about their name before anything else.
   if (!decided) askName();
 }
@@ -559,6 +684,88 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('[data-share-to]'))
   });
 }
 $<HTMLButtonElement>('[data-share-open]').addEventListener('click', () => void openShare());
+for (const b of document.querySelectorAll<HTMLButtonElement>('[data-share-pill]')) {
+  b.addEventListener('click', () => {
+    if (phone.matches) setSheet(false);
+    void openShare();
+  });
+}
+
+// Small phones: the header holds the mode switch and the share icon, so the theme toggle moves into the menu's top bar
+// (the same button, so it behaves exactly as before), and back when there's room.
+{
+  const toggle = document.querySelector<HTMLElement>('[data-theme-toggle]');
+  const home = toggle?.parentElement;
+  const railTop = $<HTMLElement>('.cc-rail__top');
+  const small = matchMedia('(max-width: 560px)');
+  const place = () => {
+    if (!toggle || !home) return;
+    if (small.matches) railTop.insertBefore(toggle, railTop.lastElementChild);
+    else home.insertBefore(toggle, home.querySelector('.cc-portfolio'));
+  };
+  place();
+  small.addEventListener('change', place);
+}
+
+// ---------- proud moments ----------
+// Sharing happens when people feel good: Ami celebrates a milestone once (at most one a day, an offer always), with a
+// small preview of their card. "Not now" just removes it.
+let anyScorecard = false;
+const sharePills = [...document.querySelectorAll<HTMLButtonElement>('[data-share-pill]')];
+
+/** The share button appears once there's something to share (a tracked application, or a mock interview). */
+function renderSharePills() {
+  const show = !!stored && (Object.keys(tracker).length > 0 || anyScorecard);
+  for (const b of sharePills) b.hidden = !show;
+}
+
+async function celebrate(id: string, title: string, text: string, period: 'week' | 'all', always = false) {
+  const seen = (await vault.get<Record<string, number>>('meta', 'milestones')) ?? {};
+  if (seen[id]) return;
+  if (!always && Object.values(seen).some((at) => localDay(new Date(at)) === localDay())) return;
+  seen[id] = Date.now();
+  await vault.put('meta', 'milestones', seen);
+  await add({ role: 'coach', text, kind: 'celebrate', celebrate: { title, period } });
+}
+
+function celebrateBlock(m: Message) {
+  const box = el('div', 'cc-celebrate');
+  const mini = el('div', 'cc-celebrate__mini');
+  mini.setAttribute('aria-hidden', 'true');
+  const orb = el('span', 'coach-orb coach-orb--sm');
+  orb.append(el('span', 'coach-orb__eyes'));
+  orb.firstElementChild!.append(el('span'), el('span'));
+  const head = el('span', 'cc-celebrate__mini-head');
+  head.append(orb, el('strong', undefined, m.celebrate!.period === 'week' ? 'My job search this week' : 'My job search so far'));
+  const chips = el('span', 'cc-celebrate__chips');
+  mini.append(head, chips);
+  // The mini card shows their real numbers (from this device).
+  void progressFacts(m.celebrate!.period).then((f) => {
+    const list: [string, string, string][] = [
+      [String(f.applied), f.applied === 1 ? 'application' : 'applications', 'peach'],
+      [String(f.interviews), f.interviews === 1 ? 'interview' : 'interviews', 'mint'],
+      ...(f.offers ? ([[String(f.offers), f.offers === 1 ? 'offer' : 'offers', 'butter']] as [string, string, string][]) : []),
+      ...(f.score ? ([[`${f.score[0]}→${f.score[1]}`, 'practice score', 'lilac']] as [string, string, string][]) : []),
+    ];
+    chips.replaceChildren(
+      ...list.map(([n, label, tone]) => {
+        const c = el('span', `cc-celebrate__chip tile--${tone}`);
+        c.append(el('strong', undefined, n), document.createTextNode(` ${label}`));
+        return c;
+      }),
+    );
+  });
+  const copy = el('div', 'cc-celebrate__copy');
+  copy.append(el('p', 'cc-celebrate__title', m.celebrate!.title), el('p', 'cc-celebrate__text', m.text));
+  const btns = el('div', 'cc-celebrate__btns');
+  btns.append(
+    withIcon(button('Share my progress', 'btn btn--primary cc-btn-sm', () => void openShare(m.celebrate!.period)), ICONS.sparkle),
+    button('Not now', 'btn btn--secondary cc-btn-sm', () => void dropMessage(m)),
+  );
+  copy.append(btns);
+  box.append(mini, copy);
+  return box;
+}
 
 async function isBreather(res: Response | null) {
   if (res?.status !== 503) return false;
@@ -950,8 +1157,14 @@ async function setStatus(job: RankedJob, status: Status | '') {
   refreshTrack(job);
   renderNudge();
   await renderWeek();
+  renderSharePills();
+  if (status === 'interview' && prev?.status !== 'interview' && !Object.entries(tracker).some(([id, x]) => id !== job.id && (x.status === 'interview' || x.status === 'offer'))) {
+    void celebrate('first-interview', 'Your first interview!', `${job.company} wants to talk to you. Congratulations, that's a real milestone. Want to share how far you've come?`, 'all');
+  }
+  if (status === 'offer' && prev?.status !== 'offer') void celebrate(`offer:${job.id}`, 'An offer! 🎉', `An offer from ${job.company}. Huge congratulations, you earned this. Want to share the news?`, 'all', true);
   if (status === 'applied' && prev?.status !== 'applied') {
     const n = Object.values(tracker).filter((x) => x.applied >= weekStart()).length;
+    if (goal && n === goal.perWeek) void celebrate(`goal:${weekStart()}`, 'Weekly goal reached', `That's ${n} of ${goal.perWeek} applications this week. Nicely done! Want to share your progress?`, 'week');
     if (goal) toast(n >= goal.perWeek ? 'Weekly goal reached.' : `${n} of ${goal.perWeek} this week.`, n >= goal.perWeek ? 'Great work. I\'ll remind you to follow up in 7 days.' : 'Applied. I\'ll remind you to follow up in 7 days.');
     else toast('Applied.', "I'll remind you to follow up in 7 days. Set a weekly goal on the new-chat screen.");
   }
@@ -2322,6 +2535,13 @@ async function requestScorecard() {
     iv.status = 'done';
     await saveConversation(c);
     await add({ role: 'coach', text: out.feedback.summary.slice(0, 400), kind: 'guide', docId: d.id, flags: out.flags, scorecard: { score: out.feedback.score, readiness: out.feedback.readiness } });
+    anyScorecard = true;
+    renderSharePills();
+    // Better than their first mock interview: worth celebrating.
+    const scores = (await vault.list<Message>('messages')).filter((x) => x.scorecard).sort((a, b) => a.at - b.at);
+    if (scores.length >= 2 && out.feedback.score > scores[0].scorecard!.score) {
+      void celebrate(`score:${d.id}`, 'Your practice is paying off', `Your mock interview score went from ${scores[0].scorecard!.score} to ${out.feedback.score} out of 5. Want to share it?`, 'all');
+    }
     await openDoc(d.id);
     announce(`Your scorecard is ready: ${out.feedback.score} out of 5, ${READINESS[out.feedback.readiness].toLowerCase()}.`);
     setOrb('done');
@@ -2841,6 +3061,10 @@ function messageNode(m: Message) {
   }
   if (m.kind === 'ivreview') {
     li.append(ivReviewBlock());
+    return li;
+  }
+  if (m.kind === 'celebrate') {
+    li.append(celebrateBlock(m));
     return li;
   }
   if (m.kind === 'iv' && m.role === 'user' && m.text === '(skipped)') {
@@ -3651,6 +3875,7 @@ $<HTMLButtonElement>('[data-delete-yes]').addEventListener('click', async () => 
     history.replaceState(null, '', location.pathname);
   }
   goal = (await vault.get<Goal>('meta', 'goal')) ?? null;
+  anyScorecard = (await vault.list<Message>('messages')).some((m) => m.scorecard);
   renderResumeCard();
   conversations = (await vault.list<Conversation>('conversations')).sort((a, b) => b.updatedAt - a.updatedAt);
   if (state.current && !current()) state.current = null;

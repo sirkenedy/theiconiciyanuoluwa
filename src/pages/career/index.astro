@@ -39,7 +39,9 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
       </button>
       <a class="cc-brand" href="/"><Avatar size={32} eager /><span class="cc-brand__name">{firstName}</span></a>
       <ModeSwitch current="coach" firstName={firstName} morph />
+      <button class="cc-icon-btn cc-share-icon" type="button" data-share-pill aria-label="Share my progress" hidden><Icon name="share" size={20} /></button>
       <div class="cc-actions">
+        <button class="btn cc-share-pill" type="button" data-share-pill hidden><Icon name="sparkle" size={16} />Share my progress</button>
         <ThemeToggle />
         <a class="btn btn--secondary cc-portfolio" href="/">Portfolio</a>
       </div>
@@ -149,7 +151,7 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
             <section class="cc-week-strip" aria-labelledby="cc-week-strip-title" data-week-strip hidden>
               <div class="cc-week-strip__head">
                 <h3 id="cc-week-strip-title" class="label cc-week-strip__label">Your week</h3>
-                <span class="cc-week-strip__actions"><span data-goal-change></span><button class="cc-link cc-share-open" type="button" data-share-open>Share my progress</button></span>
+                <span class="cc-week-strip__actions"><span data-goal-change></span><button class="btn cc-share-open" type="button" data-share-open><Icon name="sparkle" size={14} />Share</button></span>
               </div>
               <div class="cc-week-strip__body">
                 <div data-goal></div>
@@ -229,6 +231,13 @@ const USAGE: { key: keyof typeof DAILY_LIMITS; label: string; tone: string }[] =
               </div>
               <fieldset class="cc-ivsetup__set"><legend class="cc-ivsetup__legend">Period</legend><div class="cc-share__chips" data-share-period></div></fieldset>
               <fieldset class="cc-ivsetup__set"><legend class="cc-ivsetup__legend">Show on the card</legend><div class="cc-share__checks" data-share-checks></div></fieldset>
+              <div class="cc-share__story" data-share-story hidden>
+                <label class="cc-field"><span class="cc-field__label">Ami's story</span><textarea class="cc-field__input cc-share__story-text" data-share-story-text maxlength="280" rows="3"></textarea></label>
+                <div class="cc-share__row">
+                  <button class="btn btn--secondary cc-btn-sm" type="button" data-share-story-new><Icon name="sparkle" size={14} />Another one</button>
+                  <span class="cc-share__hint" data-share-story-status role="status"></span>
+                </div>
+              </div>
               <fieldset class="cc-ivsetup__set"><legend class="cc-ivsetup__legend">Format</legend><div class="cc-share__chips" data-share-format></div></fieldset>
               <p class="cc-share__note">Only what you tick goes on the card and in its link. Nothing is stored about you.</p>
             </div>
