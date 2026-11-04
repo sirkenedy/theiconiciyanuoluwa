@@ -56,7 +56,7 @@ Product Manager with 4+ years of experience building and scaling technology solu
 
 ### exp-3
 - role: Product Manager, Platform
-- company: Adebayo Adeleke LLC (Remote)
+- company: SCRIH (Remote)
 - dates: Nov 2023 – Jul 2025
 - stage_label: First product role
 - summary: Owned product vision and strategy for Worksync, a 0→1 internal workspace platform, and a portfolio of client products.

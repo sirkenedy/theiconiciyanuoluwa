@@ -20,7 +20,9 @@ export function initJourney() {
   const track = wrap?.querySelector<HTMLElement>('.track');
   if (!section || !wrap || !track) return;
   const stops = [...track.querySelectorAll<HTMLElement>(':scope > li')];
-  const scrollDriven = () => !prefersReducedMotion();
+  // Phones lay the road down the page (Journey.astro): plain vertical scrolling, nothing to scrub.
+  const tall = matchMedia('(max-width: 760px)');
+  const scrollDriven = () => !prefersReducedMotion() && !tall.matches;
 
   // ---------- geometry: scroll position ↔ track progress ----------
   const geometry = () => {
@@ -67,6 +69,10 @@ export function initJourney() {
 
   const goTo = (i: number, behavior: ScrollBehavior = prefersReducedMotion() ? 'instant' : 'smooth') => {
     const index = Math.max(0, Math.min(stops.length - 1, i));
+    if (tall.matches) {
+      stops[index].scrollIntoView({ block: 'center', behavior });
+      return;
+    }
     if (!scrollDriven()) {
       const li = stops[index];
       wrap.scrollTo({ left: li.offsetLeft + li.offsetWidth / 2 - wrap.clientWidth / 2, behavior });
@@ -115,7 +121,7 @@ export function initJourney() {
     if (g.travel) scrollBy({ top: (-dx * g.span) / g.travel, behavior: 'instant' });
   };
   wrap.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || tall.matches) return;
     // Stops a mouse drag from selecting card text; clicks still fire.
     if (e.pointerType === 'mouse' && !(e.target as Element).closest('summary, a, button')) e.preventDefault();
     start = { x: e.clientX, id: e.pointerId };
@@ -166,7 +172,7 @@ export function initJourney() {
 
   // ---------- keys ----------
   wrap.addEventListener('keydown', (e) => {
-    if (e.target !== wrap) return;
+    if (e.target !== wrap || tall.matches) return;
     const keys: Record<string, () => number> = {
       ArrowRight: () => step(1),
       ArrowLeft: () => step(-1),
@@ -203,12 +209,16 @@ export function initJourney() {
     });
   }
 
+  // ---------- phones: a ball rolls down the road beside the stop being read ----------
+  const lane = wrap.querySelector<HTMLElement>('.lane');
+  if (lane) rollDownTheRoad(wrap, lane, stops, tall);
+
   // ---------- deep link: scroll to a stop and pulse it (used by the AI twin's citations) ----------
   document.addEventListener('journey:focus', (e) => {
     const id = (e as CustomEvent<{ id: string }>).detail?.id;
     const index = stops.findIndex((li) => li.id === id);
     if (index < 0) return;
-    if (scrollDriven()) goTo(index);
+    if (scrollDriven() || tall.matches) goTo(index);
     else {
       section.scrollIntoView({ behavior: prefersReducedMotion() ? 'instant' : 'smooth' });
       goTo(index);
@@ -226,4 +236,51 @@ function closestIndex(values: number[], target: number) {
     if (Math.abs(v - target) < Math.abs(values[best] - target)) best = i;
   });
   return best;
+}
+
+/**
+ * The ball sits on the road level with the reading line (45% down the screen) and turns by the distance it travels, so
+ * it rolls rather than slides. The stop it has reached is marked (.is-here). Runs only while the road is on screen.
+ */
+function rollDownTheRoad(wrap: HTMLElement, lane: HTMLElement, stops: HTMLElement[], tall: MediaQueryList) {
+  const BALL = 34;
+  let here: HTMLElement | null = null;
+  let queued = false;
+  const frame = () => {
+    queued = false;
+    if (!tall.matches || prefersReducedMotion()) return;
+    // Read first, then write.
+    const box = wrap.getBoundingClientRect();
+    const line = innerHeight * 0.45;
+    const y = Math.max(0, Math.min(box.height - BALL, line - box.top - BALL / 2));
+    let at: HTMLElement | null = null;
+    for (const li of stops) if (li.getBoundingClientRect().top - box.top <= y + BALL) at = li;
+    wrap.style.setProperty('--ry', `${y.toFixed(1)}px`);
+    wrap.style.setProperty('--rr', `${((y / (Math.PI * BALL)) * 360).toFixed(1)}deg`);
+    if (at !== here) {
+      here?.classList.remove('is-here');
+      at?.classList.add('is-here');
+      here = at;
+    }
+  };
+  const schedule = () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(frame);
+  };
+  new IntersectionObserver(([e]) => {
+    if (e.isIntersecting) {
+      addEventListener('scroll', schedule, { passive: true });
+      addEventListener('resize', schedule, { passive: true });
+      schedule();
+    } else {
+      removeEventListener('scroll', schedule);
+      removeEventListener('resize', schedule);
+    }
+  }).observe(lane);
+  tall.addEventListener('change', () => {
+    if (!tall.matches) here?.classList.remove('is-here');
+    here = null;
+    schedule();
+  });
 }

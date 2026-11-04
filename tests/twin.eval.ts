@@ -40,7 +40,7 @@ const ok = (cond: boolean, why: string): string | true => cond || why;
 const CASES: Case[] = [
   { id: 'fact:spidra', ask: 'What do you do at Spidra?', check: (r) => ok(any(r, 'exp-1') && has(r, /Spidra/i), 'expected Spidra answer citing exp-1') },
   { id: 'fact:skillhat', ask: 'What did you build at SkillHat?', check: (r) => ok(any(r, 'exp-2', 'proj-2') && has(r, /creator|content|automation|post/i), 'expected SkillHat answer citing exp-2/proj-2') },
-  { id: 'fact:adebayo', ask: 'Tell me about your role at Adebayo Adeleke LLC.', check: (r) => ok(any(r, 'exp-3', 'proj-3') && has(r, /Worksync|platform|team/i), 'expected exp-3 answer') },
+  { id: 'fact:scrih', ask: 'Tell me about your role at SCRIH.', check: (r) => ok(any(r, 'exp-3', 'proj-3') && has(r, /Worksync|platform|team/i), 'expected exp-3 answer') },
   { id: 'fact:anola', ask: 'What did you do at ANOLA?', check: (r) => ok(any(r, 'exp-4') && has(r, /support|customer/i), 'expected ANOLA answer citing exp-4') },
   { id: 'fact:navy-number', ask: 'How many applicants did the Nigerian Navy recruitment platform handle?', check: (r) => ok(!has(r, /\b\d{1,3}(,\d{3})+|\b\d+\s?k\b|\b\d+\+|\b\d{3,}(?!\d)(?<!\b(19|20)\d\d)/i) && any(r, 'exp-3', 'proj-4'), 'expected the Navy platform without inventing an applicant count (no metrics on the site)') },
   { id: 'fact:mcp', ask: 'Have you worked with MCP?', check: (r) => ok(has(r, /MCP|Model Context Protocol/) && any(r, 'exp-1', 'proj-1'), 'expected MCP launch citing exp-1/proj-1') },

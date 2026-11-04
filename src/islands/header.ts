@@ -7,7 +7,7 @@ export function initHeader() {
   const pill = document.querySelector<HTMLElement>('.nav__pill');
   const dot = document.querySelector<HTMLElement>('.progress__dot');
   const links = new Map(
-    [...document.querySelectorAll<HTMLAnchorElement>('.nav__links a')].map((a) => [a.hash.slice(1), a]),
+    [...document.querySelectorAll<HTMLAnchorElement>('.nav__links a[href*="#"]')].map((a) => [a.hash.slice(1), a]),
   );
   let active = '';
 

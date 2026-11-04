@@ -77,10 +77,17 @@
       .fan-c { animation: fanC linear both; animation-timeline: view(); animation-range: entry 0% cover 42%; }
       .fan-r { animation: fanR linear both; animation-timeline: view(); animation-range: entry 0% cover 42%; }
 
-      .journey { view-timeline-name: --journey; }
-      .track-wrap { overflow: hidden; }
-      .track { animation: slide linear both; animation-timeline: --journey; animation-range: cover 18% cover 88%; }
-      .roller { animation: roll linear both; animation-timeline: --journey; animation-range: cover 18% cover 88%; }
+      /* The road moves sideways only where it's laid out sideways: on phones it runs down the page (Journey.astro). */
+      @media (min-width: 761px) {
+        .journey { view-timeline-name: --journey; }
+        .track-wrap { overflow: hidden; }
+        .track { animation: slide linear both; animation-timeline: --journey; animation-range: cover 18% cover 88%; }
+        .roller { animation: roll linear both; animation-timeline: --journey; animation-range: cover 18% cover 88%; }
+      }
+      /* Phones: each card glides in toward the road as it comes up (the ball is in JourneyScrubber.ts). */
+      @media (max-width: 760px) {
+        .stop__card { animation: glideIn linear both; animation-timeline: view(); animation-range: entry 0% cover 28%; }
+      }
 
       .flip { animation: flip linear both; animation-timeline: view(); animation-range: entry 0% cover 45%; }
       .mq-l { animation: mqL linear both; animation-timeline: view(); animation-range: cover 0% cover 100%; }
@@ -111,9 +118,11 @@
     /* :root raises specificity above Header's scoped resting state (scaleX(0)). */
     &:root .progress__fill { transform: scaleX(var(--p, 0)); }
     .progress__rail { transform: translateX(calc(var(--p, 0) * 100%)); }
-    .track-wrap { overflow: hidden; }
-    .track { transform: translateX(calc(var(--jp, 0) * min(0px, -100% + 92vw))); }
-    .roller { transform: rotate(calc(var(--jp, 0) * 1080deg)); }
+    @media (min-width: 761px) {
+      .track-wrap { overflow: hidden; }
+      .track { transform: translateX(calc(var(--jp, 0) * min(0px, -100% + 92vw))); }
+      .roller { transform: rotate(calc(var(--jp, 0) * 1080deg)); }
+    }
     .mq-l { transform: translateX(calc(var(--mq, 0) * -38%)); }
     .mq-r { transform: translateX(calc((1 - var(--mq, 0)) * -38%)); }
   }
@@ -164,6 +173,7 @@
 @keyframes fanC { from { opacity: 0; transform: translateY(260px) scale(0.85); } to { opacity: 1; transform: none; } }
 @keyframes fanR { from { opacity: 0; transform: translate(120px, 200px) rotate(18deg); } to { opacity: 1; transform: none; } }
 @keyframes slide { from { transform: translateX(0); } to { transform: translateX(min(0px, -100% + 92vw)); } }
+@keyframes glideIn { from { opacity: 0; translate: 32px 0; } to { opacity: 1; translate: 0 0; } }
 @keyframes roll { from { transform: rotate(0deg); } to { transform: rotate(1080deg); } }
 @keyframes flip { from { opacity: 0; transform: perspective(900px) translateX(-120px) rotateY(-80deg) rotate(-8deg); } to { opacity: 1; transform: rotate(-3deg); } }
 @keyframes mqL { from { transform: translateX(0); } to { transform: translateX(-38%); } }

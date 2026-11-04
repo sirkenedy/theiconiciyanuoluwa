@@ -23,7 +23,7 @@ const stops = [...experience].reverse().map((exp, i) => ({
 <section id="journey" class="journey cv-auto" aria-labelledby="journey-title">
   <div class="container">
     <SectionLanding id="journey-title" label="02 · My journey" title="The roadmap so far." tone="lilac" land="r" inverse>
-      <p class="journey__hint rise">Keep scrolling — the road moves sideways.</p>
+      <p class="journey__hint rise"><span class="journey__hint--wide">Keep scrolling — the road moves sideways.</span><span class="journey__hint--tall">Scroll down — oldest first.</span></p>
     </SectionLanding>
   </div>
 
@@ -59,6 +59,12 @@ const stops = [...experience].reverse().map((exp, i) => ({
       <ClayObject tone="peach" size={44} shade="26px" />
       <span class="roller__eye"></span>
     </span>
+    <!-- Phones: a ball rolls down the road beside the stop you're reading (src/islands/JourneyScrubber.ts). -->
+    <span class="lane" aria-hidden="true">
+      <span class="lane__ball">
+        <span class="lane__spin"><ClayObject tone="peach" size={34} shade="20px" /><span class="lane__eye"></span></span>
+      </span>
+    </span>
   </div>
 </section>
 
@@ -74,8 +80,11 @@ const stops = [...experience].reverse().map((exp, i) => ({
     margin: 0 0 6px auto;
     color: var(--inverse-muted);
   }
+  .journey__hint--tall { display: none; }
   @media (max-width: 760px) {
     .journey__hint { margin-left: 0; }
+    .journey__hint--wide { display: none; }
+    .journey__hint--tall { display: inline; }
   }
   .track-wrap {
     position: relative;
@@ -223,5 +232,95 @@ const stops = [...experience].reverse().map((exp, i) => ({
     border-radius: 50%;
     background: var(--inverse-bg);
     transform: translate(9px, -6px);
+  }
+
+  /* Phones: the road runs down the page, so every card is read in full as you scroll (no sideways travel to miss). */
+  @media (max-width: 760px) {
+    .track-wrap {
+      margin-top: var(--s-10);
+      padding-bottom: 0;
+      overflow: visible;
+      touch-action: auto;
+      cursor: auto;
+    }
+    :global(.js) .track-wrap { touch-action: auto; cursor: auto; }
+    .track {
+      flex-direction: column;
+      gap: var(--s-6);
+      width: auto;
+      min-width: 0;
+      padding: 0 var(--gutter);
+    }
+    .track::before {
+      left: calc(var(--gutter) + 26px);
+      right: auto;
+      top: 0;
+      bottom: 0;
+      width: 6px;
+      height: auto;
+      background: repeating-linear-gradient(180deg, var(--butter) 0 22px, transparent 22px 38px);
+    }
+    .stop {
+      flex-direction: row;
+      align-items: flex-start;
+      gap: var(--s-4);
+      width: auto;
+    }
+    .stop:nth-child(even) { margin-top: 0; }
+    .stop { z-index: 2; } /* above the rolling ball: it passes behind each year */
+    .stop__year {
+      flex: none;
+      width: 58px;
+      height: 58px;
+      font-size: 15px;
+    }
+    .stop__card {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      padding: var(--s-5);
+    }
+    .roller { display: none; }
+  }
+  .lane { display: none; }
+  @media (max-width: 760px) and (prefers-reduced-motion: no-preference) {
+    .lane {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: calc(var(--gutter) + 29px - 17px);
+      display: block;
+      width: 34px;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .lane__ball {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform: translateY(var(--ry, 0px));
+    }
+    .lane__spin {
+      display: grid;
+      place-items: center;
+      transform: rotate(var(--rr, 0deg));
+    }
+    .lane__spin > :global(.clay) { grid-area: 1 / 1; }
+    .lane__eye {
+      grid-area: 1 / 1;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--inverse-bg);
+      transform: translate(7px, -5px);
+    }
+    /* The stop the ball has reached: its year pops, its card leans in. */
+    .stop__year,
+    .stop__card { transition: transform var(--dur-3) var(--ease-spring); }
+    .stop:global(.is-here) .stop__year { transform: scale(1.14); }
+    .stop:global(.is-here) .stop__card { transform: translateX(6px); }
+  }
+  @media (max-width: 760px) and (prefers-reduced-motion: reduce) {
+    .track-wrap { scroll-snap-type: none; }
   }
 </style>
